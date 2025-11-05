@@ -112,6 +112,7 @@ export const getExchangeStatusById = async (exchangeId) => {
   }
 }
 
+// Export functions - Fixed: removed undefined executeSwap
 export default {
   generateDepositAddress,
   checkDepositStatus,
