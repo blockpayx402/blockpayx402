@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "start": "node server/index.js",
-    "setup": "node scripts/setup.js"
+    "setup": "node scripts/setup.js",
+    "auto-setup": "node scripts/auto-setup.js",
+    "postinstall": "node scripts/auto-setup.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.87.6",
