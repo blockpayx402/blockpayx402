@@ -6,20 +6,16 @@
   command = "npm run build"
   # Publish directory - where the built files are
   publish = "dist"
-  # Functions directory
+  # Functions directory - Netlify Functions location
   functions = "netlify/functions"
 
 # Redirect rules - handle API routes and SPA routing
+# API routes are handled by Netlify Function (server.js)
 [[redirects]]
-  # Proxy API requests to your backend server
-  # IMPORTANT: Replace with your actual backend server URL
-  # Get your backend URL from Railway/Render/Fly.io after deploying
   from = "/api/*"
-  to = "https://blockpay-api-production.up.railway.app/api/:splat"
+  to = "/.netlify/functions/server/:splat"
   status = 200
   force = true
-  # Alternative: Use environment variable
-  # to = "https://${BACKEND_URL}/api/:splat"
 
 # SPA fallback - redirect all non-API routes to index.html
 [[redirects]]
