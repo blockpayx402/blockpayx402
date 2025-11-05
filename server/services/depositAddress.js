@@ -4,7 +4,7 @@
  */
 
 import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
-import { calculatePlatformFee } from '../config.js'
+import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
  * Generate a deposit address for cross-chain swap
