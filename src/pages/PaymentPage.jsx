@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Wallet, Copy, CheckCircle2, Loader2, Clock, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Wallet, Copy, CheckCircle2, Loader2, Clock, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
+import { generateExchangeLink, getAvailableExchangeCurrencies } from '../services/exchange'
 import { useApp } from '../context/AppContext'
 import { formatDistanceToNow } from 'date-fns'
 import { CHAINS, verifyPayment } from '../services/blockchain'
@@ -355,6 +356,31 @@ const PaymentPage = () => {
                 <Copy className="w-5 h-5" />
                 Copy Address to Send Payment
               </button>
+
+              {/* Exchange Option */}
+              <div className="glass-strong rounded-2xl p-5 bg-blue-500/10 border border-blue-500/30">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                    <RefreshCw className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-blue-400 mb-2 tracking-tight">Don't have {request.currency}?</div>
+                    <p className="text-sm text-white/70 mb-4 tracking-tight">
+                      Exchange your crypto to {request.currency} using ChangeNOW
+                    </p>
+                    <a
+                      href={generateExchangeLink('BTC', request.currency, parseFloat(request.amount), request.recipient)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 rounded-xl font-medium transition-all text-sm tracking-tight"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Exchange to {request.currency}
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </motion.div>
