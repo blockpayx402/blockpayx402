@@ -159,6 +159,21 @@ export const AppProvider = ({ children }) => {
     }
   }, [transactions, paymentRequests, syncToServer])
 
+  // Restart monitoring for pending requests when data is loaded
+  useEffect(() => {
+    if (!isLoading && paymentRequests.length > 0) {
+      paymentRequests.forEach(request => {
+        if (request.status === 'pending' && request.recipient) {
+          const isExpired = request.expiresAt && new Date(request.expiresAt) < new Date()
+          if (!isExpired && !monitoringIntervalsRef.current.has(request.id)) {
+            console.log('🔄 Restarting monitoring for request:', request.id)
+            startPaymentMonitoring(request.id)
+          }
+        }
+      })
+    }
+  }, [isLoading, paymentRequests, startPaymentMonitoring])
+
   // Save wallet to localStorage
   useEffect(() => {
     if (wallet) {
