@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import PaymentRequest from './pages/PaymentRequest'
 import Transactions from './pages/Transactions'
 import PaymentPage from './pages/PaymentPage'
+import Staking from './pages/Staking'
 import Layout from './components/Layout'
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/request" element={<PaymentRequest />} />
             <Route path="/transactions" element={<Transactions />} />
+            <Route path="/staking" element={<Staking />} />
             <Route path="/pay/:requestId" element={<PaymentPage />} />
           </Routes>
         </Layout>

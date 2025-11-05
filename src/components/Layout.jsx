@@ -8,7 +8,8 @@ import {
   History, 
   Menu, 
   X,
-  Zap
+  Zap,
+  TrendingUp
 } from 'lucide-react'
 
 const Layout = ({ children }) => {
@@ -19,6 +20,7 @@ const Layout = ({ children }) => {
     { path: '/', icon: Wallet, label: 'Dashboard' },
     { path: '/request', icon: PlusCircle, label: 'Create Request' },
     { path: '/transactions', icon: History, label: 'Transactions' },
+    { path: '/staking', icon: TrendingUp, label: 'Staking' },
   ]
 
   return (
