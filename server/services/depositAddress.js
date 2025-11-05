@@ -22,6 +22,11 @@ export const generateDepositAddress = async (orderData) => {
     orderId // BlockPay order ID
   } = orderData
 
+  // Check if ChangeNOW API is configured
+  if (!BLOCKPAY_CONFIG.changenow.apiKey || BLOCKPAY_CONFIG.changenow.apiKey === '') {
+    throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file. Get your key from: https://changenow.io/api')
+  }
+
   try {
     // Calculate BlockPay platform fee
     const fee = calculatePlatformFee(amount, fromAsset)
@@ -54,6 +59,16 @@ export const generateDepositAddress = async (orderData) => {
     }
   } catch (error) {
     console.error('Error generating deposit address:', error)
+    
+    // Provide helpful error messages
+    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      throw new Error('Invalid ChangeNOW API key. Please check your CHANGENOW_API_KEY in .env file.')
+    } else if (error.message.includes('404') || error.message.includes('not found')) {
+      throw new Error('Exchange pair not available. Please check if the currency pair is supported by ChangeNOW.')
+    } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
+      throw new Error('Cannot connect to ChangeNOW API. Please check your internet connection and try again.')
+    }
+    
     throw new Error(`Failed to generate deposit address: ${error.message}`)
   }
 }

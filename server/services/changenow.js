@@ -5,6 +5,11 @@
 
 import { BLOCKPAY_CONFIG, getChangeNowHeaders } from '../config.js'
 
+// Validate API key on import
+if (!BLOCKPAY_CONFIG.changenow.apiKey && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️  WARNING: ChangeNOW API key not configured. Set CHANGENOW_API_KEY in .env file.')
+}
+
 /**
  * Currency mapping for ChangeNOW
  */

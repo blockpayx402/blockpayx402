@@ -2,7 +2,8 @@ import express from 'express'
 import cors from 'cors'
 import { dbHelpers } from './database.js'
 import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from './services/depositAddress.js'
-import { calculatePlatformFee } from './config.js'
+import { calculatePlatformFee, BLOCKPAY_CONFIG } from './config.js'
+import { checkSetup, generateSetupInstructions } from './utils/setup.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -174,6 +175,20 @@ app.post('/api/sync', (req, res) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// Setup status endpoint
+app.get('/api/setup', (req, res) => {
+  try {
+    const setupStatus = checkSetup()
+    res.json({
+      ...setupStatus,
+      instructions: generateSetupInstructions(setupStatus)
+    })
+  } catch (error) {
+    console.error('Error checking setup:', error)
+    res.status(500).json({ error: 'Failed to check setup status' })
+  }
 })
 
 // Create order (generate deposit address for cross-chain swap)
@@ -373,10 +388,48 @@ app.post('/api/webhooks/changenow', express.raw({ type: 'application/json' }), a
 })
 
 app.listen(PORT, () => {
+  console.log(`\n${'='.repeat(60)}`)
   console.log(`🚀 BlockPay Server running on http://localhost:${PORT}`)
+  console.log(`${'='.repeat(60)}\n`)
+  
+  // Check setup status
+  const setupStatus = checkSetup()
+  
   console.log(`💾 Database: SQLite`)
-  console.log(`⏰ Payment requests expire after 1 hour`)
+  console.log(`⏰ Payment requests expire after ${BLOCKPAY_CONFIG.paymentRequest.expirationHours} hour(s)`)
   console.log(`🔄 Cross-chain swap orders supported`)
   console.log(`💰 Platform fee: ${calculatePlatformFee(100, 'USD').percent}%`)
-  console.log(`🔗 ChangeNOW API: ${process.env.CHANGENOW_API_KEY ? 'Configured' : '⚠️  NOT CONFIGURED - Set CHANGENOW_API_KEY'}`)
+  console.log(`   └─ Minimum: $${BLOCKPAY_CONFIG.fees.minFeeUSD}`)
+  console.log(`   └─ Maximum: ${BLOCKPAY_CONFIG.fees.maxFeeUSD > 0 ? '$' + BLOCKPAY_CONFIG.fees.maxFeeUSD : 'No limit'}`)
+  
+  console.log(`\n📋 Setup Status:`)
+  if (setupStatus.ready) {
+    console.log(`   ✅ BlockPay is ready for production!`)
+  } else {
+    console.log(`   ⚠️  Setup incomplete - Some configuration is missing`)
+    setupStatus.issues.forEach(issue => {
+      console.log(`   ❌ ${issue.message}`)
+      console.log(`      Fix: ${issue.fix}`)
+    })
+  }
+  
+  if (setupStatus.warnings.length > 0) {
+    console.log(`\n⚠️  Warnings:`)
+    setupStatus.warnings.forEach(warning => {
+      console.log(`   • ${warning.message}`)
+    })
+  }
+  
+  console.log(`\n🔗 Configuration:`)
+  console.log(`   ChangeNOW API: ${BLOCKPAY_CONFIG.changenow.apiKey ? '✅ Configured' : '❌ NOT CONFIGURED'}`)
+  console.log(`   Fee Recipient: ${BLOCKPAY_CONFIG.fees.feeRecipientAddress && BLOCKPAY_CONFIG.fees.feeRecipientAddress !== '0x0000000000000000000000000000000000000000' ? '✅ Configured' : '❌ NOT CONFIGURED'}`)
+  
+  if (!setupStatus.ready) {
+    console.log(`\n📖 Setup Guide: Check SETUP_GUIDE.md for detailed instructions`)
+    console.log(`   Or visit: http://localhost:${PORT}/api/setup for setup status\n`)
+  } else {
+    console.log(`\n✅ Ready to accept payments!\n`)
+  }
+  
+  console.log(`${'='.repeat(60)}\n`)
 })
