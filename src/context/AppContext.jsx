@@ -36,13 +36,16 @@ export const AppProvider = ({ children }) => {
               transactionsAPI.getAll()
             ])
             
-            setPaymentRequests(Array.isArray(serverRequests) ? serverRequests : [])
-            setTransactions(Array.isArray(serverTransactions) ? serverTransactions : [])
+            const requests = Array.isArray(serverRequests) ? serverRequests : []
+            const transactions = Array.isArray(serverTransactions) ? serverTransactions : []
+            
+            setPaymentRequests(requests)
+            setTransactions(transactions)
             
             // Debug log
-            console.log('Loaded from server:', {
-              requests: Array.isArray(serverRequests) ? serverRequests.length : 0,
-              transactions: Array.isArray(serverTransactions) ? serverTransactions.length : 0
+            console.log('✅ Loaded from server:', {
+              requests: requests.length,
+              transactions: transactions.length
             })
             
             // Also save to localStorage as backup
@@ -52,6 +55,9 @@ export const AppProvider = ({ children }) => {
             if (serverTransactions) {
               localStorage.setItem('blockPayment_transactions', JSON.stringify(serverTransactions))
             }
+            
+            // Note: Monitoring will be restarted after startPaymentMonitoring is defined
+            // This is handled in a separate useEffect below
           } catch (error) {
             console.error('Error loading from server, falling back to localStorage:', error)
             loadFromLocalStorage()
@@ -348,20 +354,29 @@ export const AppProvider = ({ children }) => {
   const startPaymentMonitoring = useCallback((requestId) => {
     // Clear any existing interval for this request
     if (monitoringIntervalsRef.current.has(requestId)) {
+      console.log('⚠️  Clearing existing monitoring for request:', requestId)
       clearInterval(monitoringIntervalsRef.current.get(requestId))
     }
 
+    console.log('🔄 Starting payment monitoring for request:', requestId)
+
     // Get the request creation timestamp to only check transactions after request was created
     const requestCreationTime = new Date().getTime()
+    let checkCount = 0
+    let lastErrorCount = 0
 
     // Check payment every 20 seconds (production-ready interval)
     const interval = setInterval(async () => {
       try {
+        checkCount++
+        console.log(`🔍 [Check #${checkCount}] Verifying payment for request: ${requestId}`)
+        
         // Get latest state from React state
         setPaymentRequests(currentRequests => {
           const updatedRequest = currentRequests.find(r => r.id === requestId)
           
           if (!updatedRequest) {
+            console.log('⚠️  Request not found, stopping monitoring:', requestId)
             clearInterval(interval)
             monitoringIntervalsRef.current.delete(requestId)
             return currentRequests
@@ -370,6 +385,7 @@ export const AppProvider = ({ children }) => {
           // Check if request is expired or already completed
           const isExpired = updatedRequest.expiresAt && new Date(updatedRequest.expiresAt) < new Date()
           if (isExpired || updatedRequest.status === 'completed') {
+            console.log(`✅ Request ${updatedRequest.status === 'completed' ? 'completed' : 'expired'}, stopping monitoring:`, requestId)
             clearInterval(interval)
             monitoringIntervalsRef.current.delete(requestId)
             if (isExpired && updatedRequest.status === 'pending') {
@@ -389,6 +405,14 @@ export const AppProvider = ({ children }) => {
               ? new Date(updatedRequest.createdAt).getTime() 
               : requestCreationTime
             
+            console.log(`🔎 Checking blockchain for payment:`, {
+              chain,
+              recipient: updatedRequest.recipient,
+              amount: updatedRequest.amount,
+              currency: updatedRequest.currency,
+              sinceTimestamp: new Date(requestTimestamp).toISOString()
+            })
+            
             verifyPayment(
               chain,
               updatedRequest.recipient,
@@ -397,18 +421,22 @@ export const AppProvider = ({ children }) => {
               requestTimestamp
             ).then(async (result) => {
               if (result?.verified && result.txHash) {
-                console.log('Payment verified on blockchain!', {
+                console.log('✅ Payment verified on blockchain!', {
                   requestId,
                   txHash: result.txHash,
                   from: result.from,
                   amount: result.amount
                 })
 
+                // Stop monitoring immediately
+                clearInterval(interval)
+                monitoringIntervalsRef.current.delete(requestId)
+
                 // Update payment request status
                 await updatePaymentRequestStatus(requestId, 'completed')
                 
                 // Save transaction with actual blockchain data
-                await addTransaction({
+                const savedTx = await addTransaction({
                   requestId: requestId,
                   amount: result.amount?.toString() || updatedRequest.amount,
                   currency: updatedRequest.currency,
@@ -421,39 +449,60 @@ export const AppProvider = ({ children }) => {
                   timestamp: result.timestamp || result.blockTime || new Date().toISOString(),
                 })
                 
-                clearInterval(interval)
-                monitoringIntervalsRef.current.delete(requestId)
+                console.log('✅ Transaction saved:', savedTx.id)
                 toast.success(`Payment verified! Transaction: ${result.txHash.slice(0, 8)}...`)
               } else {
-                // Update last checked time
+                // Update last checked time and save to server
+                const lastChecked = new Date().toISOString()
                 setPaymentRequests(prev =>
                   prev.map(req =>
                     req.id === requestId
-                      ? { ...req, lastChecked: new Date().toISOString() }
+                      ? { ...req, lastChecked }
                       : req
                   )
                 )
+                
+                // Save lastChecked to server
+                paymentRequestsAPI.update(requestId, { lastChecked }).catch(err => {
+                  console.error('Error updating lastChecked on server:', err)
+                })
+                
+                // Log periodic status (every 10 checks = ~3.3 minutes)
+                if (checkCount % 10 === 0) {
+                  console.log(`⏳ Still monitoring payment for request ${requestId} (check #${checkCount})`)
+                }
+                
+                lastErrorCount = 0 // Reset error count on successful check
               }
             }).catch(error => {
-              console.error('Payment verification error:', error)
-              // Don't spam errors, just log
+              lastErrorCount++
+              console.error(`❌ Payment verification error (attempt ${lastErrorCount}):`, error.message || error)
+              
+              // If too many consecutive errors, log warning
+              if (lastErrorCount >= 5) {
+                console.warn(`⚠️  Multiple verification errors for request ${requestId}, but continuing to monitor...`)
+              }
             })
           }).catch(error => {
-            console.error('Error importing blockchain service:', error)
+            console.error('❌ Error importing blockchain service:', error)
+            lastErrorCount++
           })
 
           return currentRequests
         })
       } catch (error) {
-        console.error('Error in payment monitoring:', error)
+        console.error('❌ Error in payment monitoring:', error)
+        lastErrorCount++
       }
     }, 20000) // Check every 20 seconds (production-ready)
 
     monitoringIntervalsRef.current.set(requestId, interval)
+    console.log('✅ Monitoring started for request:', requestId)
 
     // Clean up after 1 hour (when request expires)
     setTimeout(() => {
       if (monitoringIntervalsRef.current.has(requestId)) {
+        console.log('⏰ Request expired, cleaning up monitoring:', requestId)
         clearInterval(monitoringIntervalsRef.current.get(requestId))
         monitoringIntervalsRef.current.delete(requestId)
       }

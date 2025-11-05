@@ -78,17 +78,22 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
     }
 
     const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl, {
-      timeout: 15000,
+      timeout: 20000, // Increased timeout for reliability
     })
 
     const requiredAmount = parseFloat(amount) || 0
-    const tolerance = 0.0001 // Allow small tolerance for rounding
+    const tolerance = Math.max(0.0001, requiredAmount * 0.01) // 1% tolerance or 0.0001, whichever is larger
 
     if (currency === 'native' || !currency) {
       // Check native token transactions
       // Get recent block number (last 1000 blocks = ~3-4 hours on Ethereum)
-      const currentBlock = await provider.getBlockNumber()
+      const currentBlock = await provider.getBlockNumber().catch(err => {
+        console.error('Error getting block number:', err)
+        throw new Error('Failed to connect to blockchain RPC')
+      })
       const startBlock = Math.max(0, currentBlock - 1000)
+      
+      console.log(`🔍 Checking blocks ${startBlock} to ${currentBlock} for ${recipientAddress}`)
       
       // Check last 100 blocks for recent transactions
       for (let blockNum = currentBlock; blockNum >= startBlock && blockNum > 0; blockNum -= 10) {
