@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Wallet, Copy, CheckCircle2, Loader2, Clock, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Wallet, Copy, CheckCircle2, Loader2, Clock, AlertCircle, RefreshCw, ExternalLink, ArrowRight } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
 import { generateExchangeLink, getAvailableExchangeCurrencies } from '../services/exchange'
@@ -332,54 +332,80 @@ const PaymentPage = () => {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Instant Exchange Payment - Primary Method */}
+              {(request.enableExchange !== false) && (
+                <div className="glass-strong rounded-2xl p-6 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30">
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0">
+                      <RefreshCw className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-blue-400 mb-1 tracking-tight text-lg">Instant Cross-Chain Payment</div>
+                      <p className="text-sm text-white/70 mb-4 tracking-tight">
+                        Pay with any cryptocurrency! It will automatically exchange to <span className="font-semibold text-white">{request.currency}</span> and send directly to the recipient.
+                      </p>
+                      
+                      {/* Payment Currency Options */}
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        {['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'MATIC'].map((fromCurrency) => {
+                          if (fromCurrency === request.currency) return null
+                          const exchangeUrl = generateExchangeLink(
+                            fromCurrency, 
+                            request.currency, 
+                            parseFloat(request.amount), 
+                            request.recipient
+                          )
+                          return (
+                            <a
+                              key={fromCurrency}
+                              href={exchangeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-4 py-3 glass-strong border border-white/10 hover:border-blue-500/50 text-white/80 hover:text-white rounded-xl font-medium transition-all text-sm text-center flex items-center justify-center gap-2"
+                            >
+                              <span className="font-semibold">{fromCurrency}</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                              <span className="text-primary-400">{request.currency}</span>
+                            </a>
+                          )
+                        })}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-white/50">
+                        <CheckCircle2 className="w-4 h-4 text-green-400" />
+                        <span>Instant exchange • Direct to recipient • No extra steps</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Traditional Payment Method */}
               <div className="glass-strong rounded-2xl p-5 bg-primary-500/10 border border-primary-500/30">
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-4 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
                     <Wallet className="w-5 h-5 text-primary-400" />
                   </div>
                   <div className="text-sm flex-1">
-                    <div className="font-semibold text-primary-400 mb-3 tracking-tight">How to Pay</div>
+                    <div className="font-semibold text-primary-400 mb-3 tracking-tight">Direct Payment (Alternative)</div>
+                    <p className="text-xs text-white/60 mb-3 tracking-tight">
+                      If you already have {request.currency}, send directly:
+                    </p>
                     <ol className="list-decimal list-inside space-y-2 text-white/70 text-[15px] leading-relaxed">
                       <li className="tracking-tight">Copy the recipient address below</li>
-                      <li className="tracking-tight">Open your wallet app (MetaMask, Trust Wallet, etc.)</li>
-                      <li className="tracking-tight">Send <span className="font-semibold text-white">{request.amount} {request.currency}</span> to the copied address</li>
-                      <li className="tracking-tight">Confirm the transaction in your wallet</li>
+                      <li className="tracking-tight">Open your wallet app</li>
+                      <li className="tracking-tight">Send <span className="font-semibold text-white">{request.amount} {request.currency}</span> to the address</li>
                     </ol>
                   </div>
                 </div>
-              </div>
-              
-              <button
-                onClick={handleCopyAddress}
-                className="w-full px-6 py-4 glass-strong border border-primary-500/30 text-primary-400 hover:bg-primary-500/10 rounded-2xl font-medium transition-all flex items-center justify-center gap-2.5 tracking-tight"
-              >
-                <Copy className="w-5 h-5" />
-                Copy Address to Send Payment
-              </button>
-
-              {/* Exchange Option */}
-              <div className="glass-strong rounded-2xl p-5 bg-blue-500/10 border border-blue-500/30">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                    <RefreshCw className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-semibold text-blue-400 mb-2 tracking-tight">Don't have {request.currency}?</div>
-                    <p className="text-sm text-white/70 mb-4 tracking-tight">
-                      Exchange your crypto to {request.currency} using ChangeNOW
-                    </p>
-                    <a
-                      href={generateExchangeLink('BTC', request.currency, parseFloat(request.amount), request.recipient)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30 rounded-xl font-medium transition-all text-sm tracking-tight"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Exchange to {request.currency}
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </div>
+                
+                <button
+                  onClick={handleCopyAddress}
+                  className="w-full px-6 py-3 glass-strong border border-primary-500/30 text-primary-400 hover:bg-primary-500/10 rounded-xl font-medium transition-all flex items-center justify-center gap-2.5 tracking-tight"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy {request.currency} Address
+                </button>
               </div>
             </div>
           )}
@@ -393,14 +419,24 @@ const PaymentPage = () => {
           className="glass rounded-3xl p-8 border border-white/[0.08]"
         >
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-semibold mb-2 gradient-text tracking-tight">Scan to Pay</h2>
-            <p className="text-sm text-white/60 tracking-tight">Scan this QR code with your wallet</p>
+            <h2 className="text-2xl font-semibold mb-2 gradient-text tracking-tight">
+              {(request.enableExchange !== false) ? 'Instant Payment QR' : 'Scan to Pay'}
+            </h2>
+            <p className="text-sm text-white/60 tracking-tight">
+              {(request.enableExchange !== false) 
+                ? 'Scan to pay with any cryptocurrency - instant exchange!' 
+                : 'Scan this QR code with your wallet'}
+            </p>
           </div>
 
           <div className="glass-strong rounded-2xl p-6 flex items-center justify-center mb-6 border border-white/[0.12]">
             <div className="w-64 h-64 bg-white rounded-2xl p-4 flex items-center justify-center shadow-soft-lg">
               <QRCode 
-                value={paymentUrl} 
+                value={
+                  (request.enableExchange !== false) 
+                    ? generateExchangeLink('BTC', request.currency, parseFloat(request.amount), request.recipient)
+                    : paymentUrl
+                } 
                 size={224}
                 level="H"
                 includeMargin={false}

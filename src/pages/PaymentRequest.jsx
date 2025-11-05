@@ -13,9 +13,10 @@ const PaymentRequest = () => {
   const [formData, setFormData] = useState({
     amount: '',
     chain: 'ethereum',
-    currency: 'ETH',
+    currency: 'ETH', // Currency seller wants to receive
     description: '',
-    recipient: ''
+    recipient: '',
+    enableExchange: true, // Enable automatic exchange via ChangeNOW
   })
   const [requestCreated, setRequestCreated] = useState(false)
   const [createdRequest, setCreatedRequest] = useState(null)
@@ -246,6 +247,27 @@ const PaymentRequest = () => {
                 ? 'Enter your Solana wallet address (e.g., 44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta)'
                 : 'Enter your wallet address where you want to receive payments'}
             </p>
+          </div>
+
+          <div className="glass-strong rounded-2xl p-5 border border-blue-500/30 bg-blue-500/10">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="enableExchange"
+                checked={formData.enableExchange}
+                onChange={(e) => setFormData({ ...formData, enableExchange: e.target.checked })}
+                className="mt-1 w-5 h-5 rounded border-white/20 bg-white/5 text-primary-500 focus:ring-primary-500/50"
+              />
+              <div className="flex-1">
+                <label htmlFor="enableExchange" className="block text-sm font-semibold text-blue-400 mb-2 tracking-tight cursor-pointer">
+                  Enable Instant Cross-Chain Exchange
+                </label>
+                <p className="text-xs text-white/70 leading-relaxed tracking-tight">
+                  Buyers can pay in any currency (BTC, BNB, ETH, etc.) and it will automatically exchange to {formData.currency} and send directly to your address. 
+                  Powered by ChangeNOW for instant cross-chain payments.
+                </p>
+              </div>
+            </div>
           </div>
 
           <motion.button
