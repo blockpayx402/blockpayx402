@@ -2,6 +2,8 @@
 
 A premium, non-custodial cryptocurrency payment platform built with React. Create and manage payment requests with a beautiful, modern UI inspired by Webflow's best designs.
 
+🌐 **Live Site:** [http://blockpay.cloud/](http://blockpay.cloud/)
+
 ## 🎯 What It Does
 
 Block Payment allows you to:
@@ -107,6 +109,16 @@ npm run build
 ```bash
 npm start
 ```
+
+### Live Deployment
+
+The application is live at: **http://blockpay.cloud/**
+
+For production deployment:
+1. Set `VITE_API_URL=https://blockpay.cloud/api` in your environment variables
+2. Ensure CORS is configured to allow requests from `blockpay.cloud`
+3. Build the frontend: `npm run build`
+4. Serve the backend API on the same domain or subdomain
 
 ## Project Structure
 
