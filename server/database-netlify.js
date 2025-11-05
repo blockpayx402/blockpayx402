@@ -11,37 +11,95 @@ let memoryDB = {
 }
 
 // Try to load from environment (Netlify Functions can use /tmp for persistence)
-const loadFromEnv = async () => {
+const loadFromEnv = () => {
   try {
     // In Netlify Functions, we can use /tmp for file storage
-    const fs = await import('fs')
-    const path = await import('path')
+    const fs = require('fs')
+    const path = require('path')
     const tmpPath = path.join('/tmp', 'blockpay-db.json')
+    const backupPath = path.join('/tmp', 'blockpay-db-backup.json')
     
+    // Try primary file first
     if (fs.existsSync(tmpPath)) {
-      const data = fs.readFileSync(tmpPath, 'utf-8')
-      memoryDB = JSON.parse(data)
+      try {
+        const data = fs.readFileSync(tmpPath, 'utf-8')
+        memoryDB = JSON.parse(data)
+        console.log('✅ Loaded database from /tmp:', {
+          requests: memoryDB.payment_requests?.length || 0,
+          transactions: memoryDB.transactions?.length || 0,
+          orders: memoryDB.orders?.length || 0
+        })
+        return
+      } catch (error) {
+        console.error('Error loading primary database, trying backup:', error)
+      }
     }
+    
+    // Try backup file
+    if (fs.existsSync(backupPath)) {
+      try {
+        const data = fs.readFileSync(backupPath, 'utf-8')
+        memoryDB = JSON.parse(data)
+        console.log('✅ Loaded database from backup')
+        // Restore primary file
+        fs.writeFileSync(tmpPath, data, 'utf8')
+        return
+      } catch (error) {
+        console.error('Error loading backup database:', error)
+      }
+    }
+    
+    console.log('ℹ️  No existing database found, starting fresh')
   } catch (error) {
-    // If /tmp doesn't work, use in-memory only
-    console.log('Using in-memory database')
+    // If require doesn't work, try dynamic import
+    import('fs').then(fs => {
+      import('path').then(path => {
+        const tmpPath = path.join('/tmp', 'blockpay-db.json')
+        if (fs.existsSync(tmpPath)) {
+          try {
+            const data = fs.readFileSync(tmpPath, 'utf-8')
+            memoryDB = JSON.parse(data)
+          } catch (parseError) {
+            console.error('Error parsing database:', parseError)
+          }
+        }
+      })
+    }).catch(() => {
+      console.log('Using in-memory database (no file system access)')
+    })
   }
 }
 
-// Save to /tmp
-const saveToEnv = async () => {
+// Save to /tmp - Synchronous for reliability
+const saveToEnv = () => {
   try {
-    const fs = await import('fs')
-    const path = await import('path')
+    const fs = require('fs')
+    const path = require('path')
     const tmpPath = path.join('/tmp', 'blockpay-db.json')
-    fs.writeFileSync(tmpPath, JSON.stringify(memoryDB))
+    // Write with atomic operation - write to temp file first, then rename
+    const tmpFile = tmpPath + '.tmp'
+    fs.writeFileSync(tmpFile, JSON.stringify(memoryDB, null, 2), 'utf8')
+    fs.renameSync(tmpFile, tmpPath)
+    // Also create backup
+    const backupPath = path.join('/tmp', 'blockpay-db-backup.json')
+    fs.writeFileSync(backupPath, JSON.stringify(memoryDB, null, 2), 'utf8')
   } catch (error) {
-    // Ignore if /tmp not available
+    // Try async fallback
+    try {
+      import('fs').then(fs => {
+        import('path').then(path => {
+          const tmpPath = path.join('/tmp', 'blockpay-db.json')
+          fs.writeFileSync(tmpPath, JSON.stringify(memoryDB, null, 2), 'utf8')
+        })
+      })
+    } catch (asyncError) {
+      console.error('Failed to save database:', asyncError)
+    }
   }
 }
 
-// Initialize on import (async)
-loadFromEnv().catch(() => {})
+// Initialize on import (synchronous for reliability)
+loadFromEnv()
 
 // Helper functions matching dbHelpers interface
 export const dbHelpers = {
@@ -61,8 +119,14 @@ export const dbHelpers = {
       lastChecked: requestData.lastChecked || requestData.last_checked || null,
     }
     
+    // Check if request already exists
+    const existing = memoryDB.payment_requests.find(r => r.id === request.id)
+    if (existing) {
+      return existing
+    }
+    
     memoryDB.payment_requests.push(request)
-    saveToEnv().catch(() => {})
+    saveToEnv()
     return request
   },
 
@@ -80,7 +144,7 @@ export const dbHelpers = {
       request.status = status
       request.updatedAt = new Date().toISOString()
       if (lastChecked) request.lastChecked = lastChecked
-      saveToEnv().catch(() => {})
+      saveToEnv()
     }
     return request
   },
@@ -96,7 +160,7 @@ export const dbHelpers = {
     memoryDB.payment_requests = memoryDB.payment_requests.filter(
       req => !req.expiresAt || new Date(req.expiresAt) > now
     )
-    saveToEnv().catch(() => {})
+    saveToEnv()
     return before - memoryDB.payment_requests.length
   },
 
@@ -116,8 +180,31 @@ export const dbHelpers = {
       timestamp: transactionData.timestamp || new Date().toISOString(),
     }
     
+    // Check if transaction already exists (prevent duplicates)
+    const existing = memoryDB.transactions.find(tx => 
+      (tx.txHash && transaction.txHash && tx.txHash === transaction.txHash) ||
+      (tx.id === transaction.id)
+    )
+    
+    if (existing) {
+      console.log('Transaction already exists, updating:', transaction.id)
+      // Update existing transaction
+      Object.assign(existing, transaction)
+      saveToEnv()
+      return existing
+    }
+    
     memoryDB.transactions.push(transaction)
-    saveToEnv().catch(() => {})
+    // Save immediately and synchronously
+    saveToEnv()
+    console.log('✅ Transaction saved to server:', {
+      id: transaction.id,
+      requestId: transaction.requestId,
+      txHash: transaction.txHash,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      totalTransactions: memoryDB.transactions.length
+    })
     return transaction
   },
 
@@ -127,6 +214,16 @@ export const dbHelpers = {
 
   getTransactionsByRequestId: (requestId) => {
     return memoryDB.transactions.filter(tx => tx.requestId === requestId)
+  },
+
+  getTransactionById: (id) => {
+    return memoryDB.transactions.find(tx => tx.id === id) || null
+  },
+
+  // Ensure data is persisted - call this after critical operations
+  ensurePersisted: () => {
+    saveToEnv()
+    return true
   },
 
   // Orders
@@ -151,8 +248,14 @@ export const dbHelpers = {
       amountAfterFee: orderData.amountAfterFee || null,
     }
     
+    // Check if order already exists
+    const existing = memoryDB.orders.find(o => o.id === order.id)
+    if (existing) {
+      return existing
+    }
+    
     memoryDB.orders.push(order)
-    saveToEnv().catch(() => {})
+    saveToEnv()
     return order
   },
 
@@ -172,7 +275,7 @@ export const dbHelpers = {
       if (depositTxHash) order.depositTxHash = depositTxHash
       if (swapTxHash) order.swapTxHash = swapTxHash
       if (exchangeId) order.exchangeId = exchangeId
-      saveToEnv().catch(() => {})
+      saveToEnv()
     }
     return order
   },
