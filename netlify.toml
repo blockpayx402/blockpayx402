@@ -1,0 +1,43 @@
+# Netlify Configuration for BlockPay
+# This file configures Netlify to serve your app and proxy API requests
+
+[build]
+  # Build command - builds the frontend
+  command = "npm run build"
+  # Publish directory - where the built files are
+  publish = "dist"
+
+# Redirect rules - handle API routes and SPA routing
+[[redirects]]
+  # Proxy API requests to your backend server
+  # IMPORTANT: Replace with your actual backend server URL
+  # Get your backend URL from Railway/Render/Fly.io after deploying
+  from = "/api/*"
+  to = "https://blockpay-api-production.up.railway.app/api/:splat"
+  status = 200
+  force = true
+  # Alternative: Use environment variable
+  # to = "https://${BACKEND_URL}/api/:splat"
+
+# SPA fallback - redirect all non-API routes to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+

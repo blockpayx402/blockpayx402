@@ -9,6 +9,18 @@ import { checkGitSecurity, validateApiKeySecurity } from './utils/security.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// Serve static files if in production (for combined deployment)
+if (process.env.NODE_ENV === 'production') {
+  import('path').then(({ default: path }) => {
+    const distPath = path.join(process.cwd(), 'dist')
+    try {
+      app.use(express.static(distPath))
+    } catch (error) {
+      // dist folder doesn't exist, that's okay
+    }
+  }).catch(() => {})
+}
+
 // Middleware
 app.use(cors({
   origin: [
