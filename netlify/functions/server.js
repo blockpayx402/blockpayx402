@@ -153,7 +153,7 @@ app.get('/api/transactions', (req, res) => {
 })
 
 // Create a new transaction
-app.post('/api/transactions', (req, res) => {
+app.post('/api/transactions', async (req, res) => {
   try {
     const transactionData = {
       ...req.body,
@@ -161,11 +161,27 @@ app.post('/api/transactions', (req, res) => {
       timestamp: req.body.timestamp || new Date().toISOString(),
     }
     
+    // Save transaction to server
     const newTransaction = dbHelpers.createTransaction(transactionData)
+    
+    // Ensure it's persisted (wait for save to complete)
+    await dbHelpers.ensurePersisted()
+    
+    // Verify it was saved
+    const saved = dbHelpers.getTransactionById(newTransaction.id)
+    if (!saved) {
+      console.error('Transaction not found after creation, retrying...')
+      // Retry once
+      const retryTransaction = dbHelpers.createTransaction(transactionData)
+      await dbHelpers.ensurePersisted()
+      res.json(retryTransaction)
+      return
+    }
+    
     res.json(newTransaction)
   } catch (error) {
     console.error('Error creating transaction:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    res.status(500).json({ error: 'Internal server error', details: error.message })
   }
 })
 
