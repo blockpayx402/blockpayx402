@@ -4,6 +4,7 @@ import { dbHelpers } from './database.js'
 import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from './services/depositAddress.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from './config.js'
 import { checkSetup, generateSetupInstructions } from './utils/setup.js'
+import { checkGitSecurity, validateApiKeySecurity } from './utils/security.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -392,6 +393,20 @@ app.listen(PORT, () => {
   console.log(`🚀 BlockPay Server running on http://localhost:${PORT}`)
   console.log(`${'='.repeat(60)}\n`)
   
+  // Security checks
+  const gitSecurity = checkGitSecurity()
+  if (!gitSecurity.secure) {
+    console.log(`\n🔒 SECURITY CHECK:`)
+    console.log(`   ${gitSecurity.warning}\n`)
+  }
+  
+  const apiKeyWarnings = validateApiKeySecurity()
+  if (apiKeyWarnings.length > 0) {
+    console.log(`\n🔒 SECURITY WARNINGS:`)
+    apiKeyWarnings.forEach(warning => console.log(`   ${warning}`))
+    console.log()
+  }
+  
   // Check setup status
   const setupStatus = checkSetup()
   
@@ -428,7 +443,10 @@ app.listen(PORT, () => {
     console.log(`\n📖 Setup Guide: Check SETUP_GUIDE.md for detailed instructions`)
     console.log(`   Or visit: http://localhost:${PORT}/api/setup for setup status\n`)
   } else {
-    console.log(`\n✅ Ready to accept payments!\n`)
+    console.log(`\n✅ Ready to accept payments!`)
+    if (gitSecurity.secure) {
+      console.log(`🔒 Security: API key is properly secured\n`)
+    }
   }
   
   console.log(`${'='.repeat(60)}\n`)

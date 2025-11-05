@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (SECURITY: Never commit!)
+.env
+.env.local
+.env.production
+.env.development
+*.env
+*.env.*
+
 # Server data
 server/data/*.json
 server/data/*.db
