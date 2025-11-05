@@ -11,6 +11,7 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "start": "node server/index.js",
     "setup": "node scripts/setup.js",
+    "setup:netlify": "node scripts/setup-netlify-env.js",
     "auto-setup": "node scripts/auto-setup.js",
     "postinstall": "node scripts/auto-setup.js",
     "deploy": "npm run build && npm start"
