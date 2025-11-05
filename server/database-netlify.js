@@ -11,7 +11,7 @@ let memoryDB = {
 }
 
 // Try to load from environment (Netlify Functions can use /tmp for persistence)
-const loadFromEnv = () => {
+const loadFromEnv = async () => {
   try {
     // In Netlify Functions, we can use /tmp for file storage
     const fs = await import('fs')
@@ -29,7 +29,7 @@ const loadFromEnv = () => {
 }
 
 // Save to /tmp
-const saveToEnv = () => {
+const saveToEnv = async () => {
   try {
     const fs = await import('fs')
     const path = await import('path')
@@ -40,8 +40,8 @@ const saveToEnv = () => {
   }
 }
 
-// Initialize on import
-loadFromEnv()
+// Initialize on import (async)
+loadFromEnv().catch(() => {})
 
 // Helper functions matching dbHelpers interface
 export const dbHelpers = {
@@ -62,7 +62,7 @@ export const dbHelpers = {
     }
     
     memoryDB.payment_requests.push(request)
-    saveToEnv()
+    saveToEnv().catch(() => {})
     return request
   },
 
@@ -80,7 +80,7 @@ export const dbHelpers = {
       request.status = status
       request.updatedAt = new Date().toISOString()
       if (lastChecked) request.lastChecked = lastChecked
-      saveToEnv()
+      saveToEnv().catch(() => {})
     }
     return request
   },
@@ -96,7 +96,7 @@ export const dbHelpers = {
     memoryDB.payment_requests = memoryDB.payment_requests.filter(
       req => !req.expiresAt || new Date(req.expiresAt) > now
     )
-    saveToEnv()
+    saveToEnv().catch(() => {})
     return before - memoryDB.payment_requests.length
   },
 
@@ -117,7 +117,7 @@ export const dbHelpers = {
     }
     
     memoryDB.transactions.push(transaction)
-    saveToEnv()
+    saveToEnv().catch(() => {})
     return transaction
   },
 
@@ -152,7 +152,7 @@ export const dbHelpers = {
     }
     
     memoryDB.orders.push(order)
-    saveToEnv()
+    saveToEnv().catch(() => {})
     return order
   },
 
@@ -172,7 +172,7 @@ export const dbHelpers = {
       if (depositTxHash) order.depositTxHash = depositTxHash
       if (swapTxHash) order.swapTxHash = swapTxHash
       if (exchangeId) order.exchangeId = exchangeId
-      saveToEnv()
+      saveToEnv().catch(() => {})
     }
     return order
   },
