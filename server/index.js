@@ -1,7 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import { dbHelpers } from './database.js'
-import { generateDepositAddress } from './services/depositAddress.js'
+import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from './services/depositAddress.js'
+import { calculatePlatformFee } from './config.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -192,49 +193,92 @@ app.post('/api/create-order', async (req, res) => {
       return res.status(404).json({ error: 'Payment request not found' })
     }
 
-    // Generate deposit address
+    // Calculate platform fee
+    const fee = calculatePlatformFee(parseFloat(amount), fromAsset)
+
+    // Generate order ID first
+    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
+
+    // Generate deposit address via ChangeNOW
     const depositInfo = await generateDepositAddress({
       fromChain,
       fromAsset,
       toChain: request.chain,
       toAsset: request.currency,
-      amount,
+      amount: parseFloat(amount),
       recipientAddress: request.recipient,
-      refundAddress
+      refundAddress,
+      orderId
     })
 
     // Create order in database
     const order = dbHelpers.createOrder({
+      id: orderId,
       requestId: request.id,
       fromChain,
       fromAsset,
       toChain: request.chain,
       toAsset: request.currency,
-      amount,
+      amount: amount.toString(),
       depositAddress: depositInfo.depositAddress,
       refundAddress,
-      expectedAmount: request.amount,
-      status: 'awaiting_deposit'
+      expectedAmount: depositInfo.estimatedAmount?.toString() || request.amount,
+      status: 'awaiting_deposit',
+      exchangeId: depositInfo.exchangeId,
+      platformFeeAmount: fee.amount.toString(),
+      platformFeePercent: fee.percent.toString(),
+      amountAfterFee: depositInfo.amountAfterFee?.toString() || amount.toString()
     })
 
     res.json({
       ...order,
       depositAddress: depositInfo.depositAddress,
-      orderId: order.id
+      orderId: order.id,
+      platformFee: fee,
+      estimatedAmount: depositInfo.estimatedAmount,
+      exchangeRate: depositInfo.exchangeRate,
+      validUntil: depositInfo.validUntil
     })
   } catch (error) {
     console.error('Error creating order:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    res.status(500).json({ error: error.message || 'Failed to create order. Please check your ChangeNOW API key.' })
   }
 })
 
-// Get order status
-app.get('/api/status/:orderId', (req, res) => {
+// Get order status (with real-time sync from ChangeNOW)
+app.get('/api/status/:orderId', async (req, res) => {
   try {
     const order = dbHelpers.getOrderById(req.params.orderId)
     
     if (!order) {
       return res.status(404).json({ error: 'Order not found' })
+    }
+    
+    // If order has exchange ID, sync status from ChangeNOW
+    if (order.exchangeId) {
+      try {
+        const exchangeStatus = await getExchangeStatusById(order.exchangeId)
+        
+        // Update order status if changed
+        if (exchangeStatus.status !== order.status) {
+          dbHelpers.updateOrderStatus(
+            order.id,
+            exchangeStatus.status,
+            exchangeStatus.depositTxHash,
+            exchangeStatus.swapTxHash,
+            order.exchangeId
+          )
+          
+          // Refresh order data
+          const updatedOrder = dbHelpers.getOrderById(order.id)
+          order.status = updatedOrder.status
+          order.depositTxHash = updatedOrder.depositTxHash
+          order.swapTxHash = updatedOrder.swapTxHash
+        }
+      } catch (error) {
+        console.error('Error syncing status from ChangeNOW:', error)
+        // Continue with cached status if sync fails
+      }
     }
     
     // Get payment request details
@@ -278,9 +322,61 @@ app.post('/api/cleanup', (req, res) => {
   }
 })
 
+// ChangeNOW Webhook Handler (for real-time status updates)
+app.post('/api/webhooks/changenow', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    // Verify webhook signature if configured
+    const signature = req.headers['x-changenow-signature']
+    // TODO: Verify signature with BLOCKPAY_CONFIG.webhook.secret
+    
+    const webhookData = JSON.parse(req.body.toString())
+    
+    // Extract exchange ID and status
+    const { id: exchangeId, status } = webhookData
+    
+    // Find order by exchange ID
+    const orders = dbHelpers.getOrdersByRequestId('*') // Get all orders
+    const order = orders.find(o => o.exchangeId === exchangeId)
+    
+    if (order) {
+      // Map ChangeNOW status to BlockPay status
+      const statusMap = {
+        'waiting': 'awaiting_deposit',
+        'confirming': 'awaiting_deposit',
+        'exchanging': 'processing',
+        'sending': 'processing',
+        'finished': 'completed',
+        'failed': 'failed',
+        'refunded': 'failed',
+        'expired': 'failed',
+      }
+      
+      const blockpayStatus = statusMap[status] || 'awaiting_deposit'
+      
+      // Update order status
+      dbHelpers.updateOrderStatus(
+        order.id,
+        blockpayStatus,
+        webhookData.payinHash,
+        webhookData.payoutHash,
+        exchangeId
+      )
+      
+      console.log(`Order ${order.id} status updated to ${blockpayStatus} via webhook`)
+    }
+    
+    res.json({ received: true })
+  } catch (error) {
+    console.error('Error processing webhook:', error)
+    res.status(500).json({ error: 'Webhook processing failed' })
+  }
+})
+
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`)
+  console.log(`🚀 BlockPay Server running on http://localhost:${PORT}`)
   console.log(`💾 Database: SQLite`)
   console.log(`⏰ Payment requests expire after 1 hour`)
   console.log(`🔄 Cross-chain swap orders supported`)
+  console.log(`💰 Platform fee: ${calculatePlatformFee(100, 'USD').percent}%`)
+  console.log(`🔗 ChangeNOW API: ${process.env.CHANGENOW_API_KEY ? 'Configured' : '⚠️  NOT CONFIGURED - Set CHANGENOW_API_KEY'}`)
 })

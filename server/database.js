@@ -72,6 +72,10 @@ db.exec(`
     updated_at TEXT,
     deposit_tx_hash TEXT,
     swap_tx_hash TEXT,
+    exchange_id TEXT,
+    platform_fee_amount TEXT,
+    platform_fee_percent TEXT,
+    amount_after_fee TEXT,
     FOREIGN KEY (request_id) REFERENCES payment_requests(id) ON DELETE CASCADE
   );
 
@@ -140,8 +144,9 @@ const statements = {
     INSERT INTO orders (
       id, request_id, from_chain, from_asset, to_chain, to_asset, 
       amount, deposit_address, refund_address, status, expected_amount,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, updated_at, exchange_id, platform_fee_amount, 
+      platform_fee_percent, amount_after_fee
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   
   getOrderById: db.prepare(`
@@ -154,7 +159,7 @@ const statements = {
   
   updateOrderStatus: db.prepare(`
     UPDATE orders 
-    SET status = ?, updated_at = ?, deposit_tx_hash = ?, swap_tx_hash = ?
+    SET status = ?, updated_at = ?, deposit_tx_hash = ?, swap_tx_hash = ?, exchange_id = ?
     WHERE id = ?
   `),
   
@@ -381,6 +386,10 @@ export const dbHelpers = {
       expectedAmount: orderData.expectedAmount || null,
       createdAt: orderData.createdAt || new Date().toISOString(),
       updatedAt: orderData.updatedAt || new Date().toISOString(),
+      exchangeId: orderData.exchangeId || null,
+      platformFeeAmount: orderData.platformFeeAmount || null,
+      platformFeePercent: orderData.platformFeePercent || null,
+      amountAfterFee: orderData.amountAfterFee || null,
     }
     
     try {
@@ -397,7 +406,11 @@ export const dbHelpers = {
         order.status,
         order.expectedAmount,
         order.createdAt,
-        order.updatedAt
+        order.updatedAt,
+        order.exchangeId,
+        order.platformFeeAmount,
+        order.platformFeePercent,
+        order.amountAfterFee
       )
       
       return order
@@ -429,6 +442,10 @@ export const dbHelpers = {
       updatedAt: row.updated_at,
       depositTxHash: row.deposit_tx_hash,
       swapTxHash: row.swap_tx_hash,
+      exchangeId: row.exchange_id,
+      platformFeeAmount: row.platform_fee_amount,
+      platformFeePercent: row.platform_fee_percent,
+      amountAfterFee: row.amount_after_fee,
     }
   },
   
@@ -455,9 +472,9 @@ export const dbHelpers = {
     }
   },
   
-  updateOrderStatus: (orderId, status, depositTxHash = null, swapTxHash = null) => {
+  updateOrderStatus: (orderId, status, depositTxHash = null, swapTxHash = null, exchangeId = null) => {
     const updatedAt = new Date().toISOString()
-    statements.updateOrderStatus.run(status, updatedAt, depositTxHash, swapTxHash, orderId)
+    statements.updateOrderStatus.run(status, updatedAt, depositTxHash, swapTxHash, exchangeId, orderId)
     return dbHelpers.getOrderById(orderId)
   },
   

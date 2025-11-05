@@ -1,19 +1,14 @@
 /**
- * Deposit Address Generation Service
- * Generates temporary deposit addresses for cross-chain swaps
- * 
- * In production, this would integrate with:
- * - ChangeNOW API for deposit addresses
- * - Or your own wallet infrastructure
- * - Or a DEX aggregator API
+ * BlockPay Deposit Address Generation Service
+ * Production-ready integration with ChangeNOW for cross-chain swaps
  */
 
-// For now, we'll use ChangeNOW-style approach
-// In production, integrate with actual swap service that provides deposit addresses
+import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
+import { calculatePlatformFee } from '../config.js'
 
 /**
  * Generate a deposit address for cross-chain swap
- * This creates a temporary address that will receive funds, swap, and forward
+ * This creates a temporary address via ChangeNOW that will receive funds, swap, and forward
  */
 export const generateDepositAddress = async (orderData) => {
   const {
@@ -23,106 +18,82 @@ export const generateDepositAddress = async (orderData) => {
     toAsset,
     amount,
     recipientAddress,
-    refundAddress
+    refundAddress,
+    orderId // BlockPay order ID
   } = orderData
 
-  // In production, this would:
-  // 1. Call ChangeNOW API or similar service
-  // 2. Get a deposit address from their system
-  // 3. Set up webhook/callback for payment detection
-  // 4. Return deposit address and order ID
+  try {
+    // Calculate BlockPay platform fee
+    const fee = calculatePlatformFee(amount, fromAsset)
+    
+    // Adjust amount to account for platform fee
+    // The fee will be deducted from the final amount received by the seller
+    const amountAfterFee = amount - fee.amount
 
-  // For now, we'll generate a ChangeNOW exchange link
-  // The actual deposit address would come from ChangeNOW's API
-  // Example: POST to ChangeNOW API to create an order, get deposit address
-
-  // Mock deposit address generation
-  // In production, replace with actual API call:
-  /*
-  const changenowResponse = await fetch('https://api.changenow.io/v2/exchange', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.CHANGENOW_API_KEY
-    },
-    body: JSON.stringify({
-      fromCurrency: fromAsset.toLowerCase(),
-      toCurrency: toAsset.toLowerCase(),
-      fromNetwork: fromChain,
-      toNetwork: toChain,
-      address: recipientAddress,
-      amount: amount,
-      refundAddress: refundAddress,
-      flow: 'standard'
+    // Create exchange transaction via ChangeNOW API
+    const exchangeData = await createExchangeTransaction({
+      fromChain,
+      fromAsset,
+      toChain,
+      toAsset,
+      amount: amountAfterFee, // Amount after BlockPay fee
+      recipientAddress,
+      refundAddress,
+      orderId,
     })
-  })
-  const order = await changenowResponse.json()
-  return {
-    depositAddress: order.payinAddress,
-    orderId: order.id,
-    exchangeId: order.id
-  }
-  */
 
-  // Temporary: Generate a mock deposit address
-  // Format: For EVM chains, generate 0x address
-  // For Solana, generate base58 address
-  let depositAddress = ''
-  
-  if (fromChain === 'solana') {
-    // Solana address format (base58, 32-44 chars)
-    const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-    depositAddress = Array.from({ length: 44 }, () => 
-      chars[Math.floor(Math.random() * chars.length)]
-    ).join('')
-  } else {
-    // EVM address format (0x + 40 hex chars)
-    depositAddress = '0x' + Array.from({ length: 40 }, () => 
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('')
-  }
-
-  // Generate order ID
-  const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
-
-  return {
-    depositAddress,
-    orderId,
-    // In production, this would be the actual exchange order ID
-    exchangeOrderId: null
+    return {
+      depositAddress: exchangeData.depositAddress,
+      orderId: orderId,
+      exchangeId: exchangeData.exchangeId,
+      estimatedAmount: exchangeData.estimatedAmount,
+      exchangeRate: exchangeData.exchangeRate,
+      validUntil: exchangeData.validUntil,
+      platformFee: fee,
+      amountAfterFee,
+    }
+  } catch (error) {
+    console.error('Error generating deposit address:', error)
+    throw new Error(`Failed to generate deposit address: ${error.message}`)
   }
 }
 
 /**
- * Check if deposit address has received funds
- * In production, this would:
- * - Monitor blockchain for incoming transactions
- * - Or use webhook from exchange service
- * - Or poll exchange API for order status
+ * Check deposit status via ChangeNOW API
+ * This checks the actual status of the exchange transaction
  */
-export const checkDepositStatus = async (depositAddress, fromChain) => {
-  // In production, check blockchain for incoming transactions
-  // For now, return mock status
-  return {
-    received: false,
-    amount: null,
-    txHash: null
+export const checkDepositStatus = async (exchangeId) => {
+  try {
+    const status = await getExchangeStatus(exchangeId)
+    return {
+      received: status.status !== 'awaiting_deposit',
+      amount: status.fromAmount,
+      txHash: status.depositTxHash,
+      swapTxHash: status.swapTxHash,
+      status: status.status,
+      toAmount: status.toAmount,
+      exchangeRate: status.exchangeRate,
+    }
+  } catch (error) {
+    console.error('Error checking deposit status:', error)
+    return {
+      received: false,
+      amount: null,
+      txHash: null,
+      status: 'awaiting_deposit',
+    }
   }
 }
 
 /**
- * Execute swap and forward to recipient
- * In production, this would:
- * - Call exchange API to execute swap
- * - Or use smart contract to swap
- * - Forward swapped tokens to recipient
+ * Get exchange status by exchange ID
  */
-export const executeSwap = async (orderData) => {
-  // In production, integrate with swap service
-  // For now, return mock
-  return {
-    success: false,
-    swapTxHash: null
+export const getExchangeStatusById = async (exchangeId) => {
+  try {
+    return await getExchangeStatus(exchangeId)
+  } catch (error) {
+    console.error('Error getting exchange status:', error)
+    throw error
   }
 }
 
