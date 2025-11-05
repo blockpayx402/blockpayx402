@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (window.location.hostname === 'blockpay.cloud' 
+  (window.location.hostname === 'blockpay.cloud' || window.location.hostname.includes('blockpay.cloud')
     ? 'https://blockpay.cloud/api' 
     : 'http://localhost:3001/api')
 

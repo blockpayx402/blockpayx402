@@ -59,6 +59,13 @@ export const BLOCKPAY_CONFIG = {
   // Environment
   env: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
+  
+  // Site Configuration
+  site: {
+    domain: 'blockpay.cloud',
+    url: 'https://blockpay.cloud',
+    apiUrl: 'https://blockpay.cloud/api',
+  },
 }
 
 /**
