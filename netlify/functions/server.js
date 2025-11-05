@@ -15,7 +15,16 @@ import { checkGitSecurity, validateApiKeySecurity } from '../../server/utils/sec
 
 const app = express()
 
-// Middleware
+// Middleware - handle both /api and /.netlify/functions/server paths
+app.use((req, res, next) => {
+  // If request comes from Netlify Function redirect, preserve original path
+  if (req.url.startsWith('/.netlify/functions/server')) {
+    req.url = req.url.replace('/.netlify/functions/server', '')
+  }
+  next()
+})
+
+// CORS middleware
 app.use(cors({
   origin: [
     'http://localhost:5173', 
