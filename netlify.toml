@@ -6,6 +6,8 @@
   command = "npm run build"
   # Publish directory - where the built files are
   publish = "dist"
+  # Functions directory
+  functions = "netlify/functions"
 
 # Redirect rules - handle API routes and SPA routing
 [[redirects]]
