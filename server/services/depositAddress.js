@@ -115,6 +115,6 @@ export const getExchangeStatusById = async (exchangeId) => {
 export default {
   generateDepositAddress,
   checkDepositStatus,
-  executeSwap
+  getExchangeStatusById
 }
 

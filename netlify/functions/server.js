@@ -354,5 +354,8 @@ app.post('/api/cleanup', (req, res) => {
 })
 
 // Export as Netlify Function
-export const handler = serverless(app)
+// Configure serverless-http to handle base path correctly
+export const handler = serverless(app, {
+  binary: ['image/*', 'application/octet-stream']
+})
 
