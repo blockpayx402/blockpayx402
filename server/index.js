@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import { dbHelpers } from './database.js'
+import { generateDepositAddress } from './services/depositAddress.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -174,6 +175,98 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+// Create order (generate deposit address for cross-chain swap)
+app.post('/api/create-order', async (req, res) => {
+  try {
+    const {
+      requestId,
+      fromChain,
+      fromAsset,
+      amount,
+      refundAddress
+    } = req.body
+
+    // Get the payment request
+    const request = dbHelpers.getRequestById(requestId)
+    if (!request) {
+      return res.status(404).json({ error: 'Payment request not found' })
+    }
+
+    // Generate deposit address
+    const depositInfo = await generateDepositAddress({
+      fromChain,
+      fromAsset,
+      toChain: request.chain,
+      toAsset: request.currency,
+      amount,
+      recipientAddress: request.recipient,
+      refundAddress
+    })
+
+    // Create order in database
+    const order = dbHelpers.createOrder({
+      requestId: request.id,
+      fromChain,
+      fromAsset,
+      toChain: request.chain,
+      toAsset: request.currency,
+      amount,
+      depositAddress: depositInfo.depositAddress,
+      refundAddress,
+      expectedAmount: request.amount,
+      status: 'awaiting_deposit'
+    })
+
+    res.json({
+      ...order,
+      depositAddress: depositInfo.depositAddress,
+      orderId: order.id
+    })
+  } catch (error) {
+    console.error('Error creating order:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Get order status
+app.get('/api/status/:orderId', (req, res) => {
+  try {
+    const order = dbHelpers.getOrderById(req.params.orderId)
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' })
+    }
+    
+    // Get payment request details
+    const request = dbHelpers.getRequestById(order.requestId)
+    
+    res.json({
+      ...order,
+      request: request ? {
+        id: request.id,
+        recipient: request.recipient,
+        toChain: request.chain,
+        toAsset: request.currency,
+        description: request.description
+      } : null
+    })
+  } catch (error) {
+    console.error('Error fetching order status:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Get orders by request ID
+app.get('/api/orders/:requestId', (req, res) => {
+  try {
+    const orders = dbHelpers.getOrdersByRequestId(req.params.requestId)
+    res.json(orders)
+  } catch (error) {
+    console.error('Error fetching orders:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 // Cleanup expired requests endpoint (for manual cleanup if needed)
 app.post('/api/cleanup', (req, res) => {
   try {
@@ -189,4 +282,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`)
   console.log(`💾 Database: SQLite`)
   console.log(`⏰ Payment requests expire after 1 hour`)
+  console.log(`🔄 Cross-chain swap orders supported`)
 })

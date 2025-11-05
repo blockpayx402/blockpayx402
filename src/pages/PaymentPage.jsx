@@ -8,6 +8,7 @@ import { generateExchangeLink, getAvailableExchangeCurrencies } from '../service
 import { useApp } from '../context/AppContext'
 import { formatDistanceToNow } from 'date-fns'
 import { CHAINS, verifyPayment } from '../services/blockchain'
+import DepositAddressPayment from '../components/DepositAddressPayment'
 
 const PaymentPage = () => {
   const { requestId } = useParams()
@@ -334,50 +335,7 @@ const PaymentPage = () => {
             <div className="space-y-4">
               {/* Instant Exchange Payment - Primary Method */}
               {(request.enableExchange !== false) && (
-                <div className="glass-strong rounded-2xl p-6 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30">
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0">
-                      <RefreshCw className="w-6 h-6 text-blue-400" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-semibold text-blue-400 mb-1 tracking-tight text-lg">Instant Cross-Chain Payment</div>
-                      <p className="text-sm text-white/70 mb-4 tracking-tight">
-                        Pay with any cryptocurrency! It will automatically exchange to <span className="font-semibold text-white">{request.currency}</span> and send directly to the recipient.
-                      </p>
-                      
-                      {/* Payment Currency Options */}
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        {['BTC', 'ETH', 'BNB', 'SOL', 'USDT', 'MATIC'].map((fromCurrency) => {
-                          if (fromCurrency === request.currency) return null
-                          const exchangeUrl = generateExchangeLink(
-                            fromCurrency, 
-                            request.currency, 
-                            parseFloat(request.amount), 
-                            request.recipient
-                          )
-                          return (
-                            <a
-                              key={fromCurrency}
-                              href={exchangeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-4 py-3 glass-strong border border-white/10 hover:border-blue-500/50 text-white/80 hover:text-white rounded-xl font-medium transition-all text-sm text-center flex items-center justify-center gap-2"
-                            >
-                              <span className="font-semibold">{fromCurrency}</span>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                              <span className="text-primary-400">{request.currency}</span>
-                            </a>
-                          )
-                        })}
-                      </div>
-
-                      <div className="flex items-center gap-2 text-xs text-white/50">
-                        <CheckCircle2 className="w-4 h-4 text-green-400" />
-                        <span>Instant exchange • Direct to recipient • No extra steps</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <DepositAddressPayment request={request} />
               )}
 
               {/* Traditional Payment Method */}

@@ -113,6 +113,39 @@ export const syncAPI = {
   },
 }
 
+// Orders API - For cross-chain swap orders
+export const ordersAPI = {
+  create: async (orderData) => {
+    try {
+      const response = await api.post('/create-order', orderData)
+      return response.data
+    } catch (error) {
+      console.error('Error creating order:', error)
+      throw error
+    }
+  },
+
+  getStatus: async (orderId) => {
+    try {
+      const response = await api.get(`/status/${orderId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching order status:', error)
+      throw error
+    }
+  },
+
+  getByRequestId: async (requestId) => {
+    try {
+      const response = await api.get(`/orders/${requestId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching orders:', error)
+      return []
+    }
+  },
+}
+
 // Health check
 export const healthCheck = async () => {
   try {

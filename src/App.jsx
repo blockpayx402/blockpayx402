@@ -6,6 +6,7 @@ import PaymentRequest from './pages/PaymentRequest'
 import Transactions from './pages/Transactions'
 import PaymentPage from './pages/PaymentPage'
 import Staking from './pages/Staking'
+import OrderStatus from './pages/OrderStatus'
 import Layout from './components/Layout'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/staking" element={<Staking />} />
             <Route path="/pay/:requestId" element={<PaymentPage />} />
+            <Route path="/status/:orderId" element={<OrderStatus />} />
           </Routes>
         </Layout>
         <Toaster 
