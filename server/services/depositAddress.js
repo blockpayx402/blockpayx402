@@ -1,15 +1,17 @@
 /**
  * BlockPay Deposit Address Generation Service
  * Deposit address generation service
- * Supports ChangeNOW for cross-chain swaps
+ * Supports SimpleSwap for cross-chain swaps
  */
 
-import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
+// Use SimpleSwap instead of ChangeNOW
+import { createExchangeTransaction, getExchangeStatus } from './simpleswap.js'
+// import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
  * Generate a deposit address for cross-chain swap
- * This creates a temporary address via ChangeNOW that will receive funds, swap, and forward
+ * This creates a temporary address via SimpleSwap that will receive funds, swap, and forward
  */
 export const generateDepositAddress = async (orderData) => {
   const {

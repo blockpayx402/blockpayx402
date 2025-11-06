@@ -18,6 +18,12 @@ export const BLOCKPAY_CONFIG = {
     defaultAffiliateFee: 0.004, // 0.4%
   },
   
+  // SimpleSwap API Configuration
+  simpleswap: {
+    apiKey: process.env.SIMPLESWAP_API_KEY || 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgVVOdMRtgXdgA6TMkdoBRnDh+GJUXODvNuQrxR4fury6hRANCAAShaUFlbXt5RR3p+f9iYtJfRSoxpn3IzPyNw6iYusN2oh6qUwiSpR5hkGtDJHcuZj63pohFC4UYfzWldvY6yUFU',
+    apiUrl: 'https://api.simpleswap.io',
+  },
+  
   // BlockPay Fee Configuration
   fees: {
     // Platform fee percentage (e.g., 0.01 = 1%)
