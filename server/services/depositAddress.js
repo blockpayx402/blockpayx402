@@ -31,18 +31,32 @@ export const generateDepositAddress = async (orderData) => {
     // Calculate BlockPay platform fee (with chain-specific recipient)
     const fee = calculatePlatformFee(amount, fromAsset, fromChain)
     
+    // Ensure fee doesn't exceed amount (safety check)
+    const safeFeeAmount = Math.min(fee.amount, amount * 0.99)
+    const safeFee = { ...fee, amount: safeFeeAmount }
+    
     // Adjust amount to account for platform fee
     // The fee will be deducted from the final amount received by the seller
-    const amountAfterFee = amount - fee.amount
+    let amountAfterFee = amount - safeFeeAmount
+    
+    // Ensure amount after fee is positive (at least 1% of original amount)
+    if (amountAfterFee <= 0) {
+      // If fee would make amount negative, use a percentage-based fee instead
+      const percentageFee = amount * 0.01 // 1% fee
+      amountAfterFee = amount - percentageFee
+      // Update fee to match
+      safeFee.amount = percentageFee
+      safeFee.percent = 0.01
+    }
 
     // Try with multiple amount adjustments and retries for better reliability
     // ChangeNOW can be sensitive to exact amounts, so we try several variations
     const attemptAmounts = [
-      amountAfterFee,
-      Math.max(0, Number((amountAfterFee * 0.998).toFixed(8))), // -0.2%
-      Math.max(0, Number((amountAfterFee * 0.995).toFixed(8))), // -0.5%
-      Math.max(0, Number((amountAfterFee * 0.99).toFixed(8))),  // -1%
-      Math.max(0, Number((amountAfterFee * 0.98).toFixed(8))),  // -2%
+      Math.max(amount * 0.01, amountAfterFee), // Ensure at least 1% of original amount
+      Math.max(amount * 0.01, Number((amountAfterFee * 0.998).toFixed(8))), // -0.2%
+      Math.max(amount * 0.01, Number((amountAfterFee * 0.995).toFixed(8))), // -0.5%
+      Math.max(amount * 0.01, Number((amountAfterFee * 0.99).toFixed(8))),  // -1%
+      Math.max(amount * 0.01, Number((amountAfterFee * 0.98).toFixed(8))),  // -2%
     ]
 
     let exchangeData = null
@@ -131,7 +145,7 @@ export const generateDepositAddress = async (orderData) => {
       estimatedAmount: exchangeData.estimatedAmount,
       exchangeRate: exchangeData.exchangeRate,
       validUntil: exchangeData.validUntil,
-      platformFee: fee,
+      platformFee: safeFee,
       amountAfterFee,
     }
   } catch (error) {

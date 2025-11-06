@@ -91,15 +91,18 @@ export const calculatePlatformFee = (amount, currency = 'USD', chain = 'ethereum
   // Calculate fee
   let feeAmount = amount * feePercent
   
-  // Apply minimum fee
+  // Apply minimum fee (but don't exceed the amount itself)
   if (feeAmount < config.minFeeUSD) {
-    feeAmount = config.minFeeUSD
+    feeAmount = Math.min(config.minFeeUSD, amount * 0.5) // Cap at 50% of amount to prevent negative
   }
   
   // Apply maximum fee if set
   if (config.maxFeeUSD > 0 && feeAmount > config.maxFeeUSD) {
     feeAmount = config.maxFeeUSD
   }
+  
+  // CRITICAL: Ensure fee never exceeds the amount (prevents negative amounts)
+  feeAmount = Math.min(feeAmount, amount * 0.99) // Cap at 99% of amount
   
   // Get chain-specific fee recipient
   const recipientAddress = config.feeRecipients[chain] || config.feeRecipientAddress
