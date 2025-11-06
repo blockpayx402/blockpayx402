@@ -4,8 +4,7 @@ import { ArrowLeft, RefreshCw, Loader2, ArrowUpDown, CheckCircle2, Copy, Externa
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
-import { ordersAPI } from '../services/api'
-import { CHAINS } from '../services/blockchain'
+import { ordersAPI, relayAPI } from '../services/api'
 import { useApp } from '../context/AppContext'
 
 const Swapper = () => {
@@ -13,14 +12,14 @@ const Swapper = () => {
   const { wallet, connectWallet, disconnectWallet } = useApp()
   
   // Swap direction: from -> to
-  const [fromChain, setFromChain] = useState('bnb')
-  const [fromAsset, setFromAsset] = useState('BNB')
+  const [fromChain, setFromChain] = useState(null)
+  const [fromAsset, setFromAsset] = useState(null)
   const [fromAmount, setFromAmount] = useState('')
   const [walletBalance, setWalletBalance] = useState('0.0')
   const [balanceLoading, setBalanceLoading] = useState(false)
   
-  const [toChain, setToChain] = useState('bnb')
-  const [toAsset, setToAsset] = useState('USDT')
+  const [toChain, setToChain] = useState(null)
+  const [toAsset, setToAsset] = useState(null)
   const [toAmount, setToAmount] = useState('')
   
   const [recipientAddress, setRecipientAddress] = useState('')
@@ -31,12 +30,90 @@ const Swapper = () => {
   const [order, setOrder] = useState(null)
   const debounceTimer = useRef(null)
 
-  const availableChains = [
-    { value: 'ethereum', label: 'Ethereum', chainId: '0x1', assets: ['ETH', 'USDT', 'USDC'] },
-    { value: 'bnb', label: 'BNB Chain', chainId: '0x38', assets: ['BNB', 'USDT', 'BUSD'] },
-    { value: 'polygon', label: 'Polygon', chainId: '0x89', assets: ['MATIC', 'USDT', 'USDC'] },
-    { value: 'solana', label: 'Solana', chainId: null, assets: ['SOL', 'USDC'] },
-  ]
+  // Dynamic chains and tokens from Relay
+  const [availableChains, setAvailableChains] = useState([])
+  const [chainsLoading, setChainsLoading] = useState(true)
+  const [fromChainTokens, setFromChainTokens] = useState([])
+  const [toChainTokens, setToChainTokens] = useState([])
+  const [tokensLoading, setTokensLoading] = useState(false)
+
+  // Fetch all chains from Relay on mount
+  useEffect(() => {
+    const fetchChains = async () => {
+      setChainsLoading(true)
+      try {
+        const chains = await relayAPI.getChains()
+        setAvailableChains(chains)
+        
+        // Set default chains if available
+        if (chains.length > 0) {
+          const defaultFrom = chains.find(c => c.value === 'ethereum' || c.value === '1') || chains[0]
+          const defaultTo = chains.find(c => c.value === 'bnb' || c.value === '56') || chains[0]
+          setFromChain(defaultFrom.value)
+          setToChain(defaultTo.value)
+        }
+      } catch (error) {
+        console.error('Error fetching chains:', error)
+        toast.error('Failed to load chains. Please refresh the page.')
+      } finally {
+        setChainsLoading(false)
+      }
+    }
+    
+    fetchChains()
+  }, [])
+
+  // Fetch tokens when chain changes
+  useEffect(() => {
+    const fetchTokens = async () => {
+      if (!fromChain) return
+      
+      setTokensLoading(true)
+      try {
+        const chain = availableChains.find(c => c.value === fromChain)
+        if (chain) {
+          const tokens = await relayAPI.getTokens(chain.chainId)
+          setFromChainTokens(tokens)
+          
+          // Set default token if available
+          if (tokens.length > 0 && !fromAsset) {
+            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.isNative) || tokens[0]
+            setFromAsset(defaultToken.symbol)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching from chain tokens:', error)
+      } finally {
+        setTokensLoading(false)
+      }
+    }
+    
+    fetchTokens()
+  }, [fromChain, availableChains])
+
+  useEffect(() => {
+    const fetchTokens = async () => {
+      if (!toChain) return
+      
+      try {
+        const chain = availableChains.find(c => c.value === toChain)
+        if (chain) {
+          const tokens = await relayAPI.getTokens(chain.chainId)
+          setToChainTokens(tokens)
+          
+          // Set default token if available
+          if (tokens.length > 0 && !toAsset) {
+            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.isNative) || tokens[0]
+            setToAsset(defaultToken.symbol)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching to chain tokens:', error)
+      }
+    }
+    
+    fetchTokens()
+  }, [toChain, availableChains])
 
   const fromChainConfig = availableChains.find(c => c.value === fromChain)
   const toChainConfig = availableChains.find(c => c.value === toChain)
@@ -59,11 +136,14 @@ const Swapper = () => {
           const detectedChain = chainIdMap[chainId] || 'ethereum'
           
           // Auto-set from chain if wallet is on a supported chain
-          if (availableChains.find(c => c.value === detectedChain)) {
-            setFromChain(detectedChain)
-            const chain = availableChains.find(c => c.value === detectedChain)
-            const preferredAsset = chain?.assets[0] || 'ETH'
-            setFromAsset(preferredAsset)
+          const matchingChain = availableChains.find(c => 
+            c.value === detectedChain || 
+            c.chainId?.toString() === chainId ||
+            c.chainId?.toString() === parseInt(chainId, 16).toString()
+          )
+          
+          if (matchingChain) {
+            setFromChain(matchingChain.value)
           }
         } catch (error) {
           console.error('Error detecting chain:', error)
@@ -72,10 +152,12 @@ const Swapper = () => {
       detectChain()
     } else if (wallet?.connected && wallet?.chain === 'solana') {
       // Auto-set to Solana if Solana wallet connected
-      setFromChain('solana')
-      setFromAsset('SOL')
+      const solanaChain = availableChains.find(c => c.value === 'solana' || c.symbol === 'SOL')
+      if (solanaChain) {
+        setFromChain(solanaChain.value)
+      }
     }
-  }, [wallet?.connected, wallet?.chain])
+  }, [wallet?.connected, wallet?.chain, availableChains])
 
   // Auto-fill recipient address from wallet
   useEffect(() => {
@@ -166,7 +248,7 @@ const Swapper = () => {
 
     const calculateRate = async () => {
       // Don't calculate if same currency on same chain (direct transfer, not swap)
-      if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
+      if (fromChain === toChain && fromAsset?.toUpperCase() === toAsset?.toUpperCase()) {
         setToAmount(fromAmount)
         return
       }
@@ -231,8 +313,8 @@ const Swapper = () => {
     }
 
     // Validate recipient address for destination chain
-    const isEVM = toChain !== 'solana'
-    const isSolana = toChain === 'solana'
+    const isEVM = toChainConfig && toChainConfig.chainId !== 792703809
+    const isSolana = toChainConfig && toChainConfig.chainId === 792703809
     
     if (isEVM && !recipientAddress.startsWith('0x')) {
       toast.error('Invalid EVM address. Must start with 0x')
@@ -403,198 +485,178 @@ const Swapper = () => {
           )}
         </div>
 
-        <div className="space-y-4">
-          {/* You Send */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You send</label>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
-                  <select
-                    value={fromChain}
-                    onChange={(e) => {
-                      setFromChain(e.target.value)
-                      const chain = availableChains.find(c => c.value === e.target.value)
-                      const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
-                      setFromAsset(preferredAsset)
-                    }}
-                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
-                  >
-                    {availableChains.map(chain => (
-                      <option key={chain.value} value={chain.value} className="bg-black text-white">
-                        {chain.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
-                  <select
-                    value={fromAsset}
-                    onChange={(e) => setFromAsset(e.target.value)}
-                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
-                  >
-                    {fromChainConfig?.assets.map(asset => (
-                      <option key={asset} value={asset} className="bg-black text-white">
-                        {asset}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs text-white/60 tracking-tight">Amount</label>
-                  {wallet?.connected && walletBalance && parseFloat(walletBalance) > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/50">Available: {walletBalance} {fromAsset}</span>
-                      <button
-                        onClick={handleMaxAmount}
-                        className="px-2 py-1 glass-strong rounded-lg border border-white/10 hover:border-purple-500/50 text-xs text-white/70 hover:text-white transition-all flex items-center gap-1"
-                      >
-                        <Maximize2 className="w-3 h-3" />
-                        MAX
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={fromAmount}
-                  onChange={(e) => setFromAmount(e.target.value)}
-                  placeholder="0.0"
-                  className="w-full px-4 py-3 glass-strong rounded-xl border border-purple-500/30 focus:border-purple-500/50 focus:outline-none transition-all bg-purple-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
-                />
-              </div>
-            </div>
+        {chainsLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+            <span className="ml-3 text-white/70">Loading chains...</span>
           </div>
+        ) : (
+          <div className="space-y-4">
+            {/* You Send */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You send</label>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
+                    <select
+                      value={fromChain || ''}
+                      onChange={(e) => {
+                        setFromChain(e.target.value)
+                        setFromAsset(null) // Reset asset when chain changes
+                      }}
+                      className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                    >
+                      <option value="">Select chain...</option>
+                      {availableChains.map(chain => (
+                        <option key={chain.value} value={chain.value} className="bg-black text-white">
+                          {chain.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-          {/* Switch Button */}
-          <div className="flex items-center justify-center py-2">
-            <button
-              onClick={handleSwitch}
-              className="p-3 glass-strong rounded-xl border border-white/10 hover:border-purple-500/50 transition-all"
-            >
-              <ArrowUpDown className="w-5 h-5 text-white/70" />
-            </button>
-          </div>
-
-          {/* Floating rate indicator */}
-          <div className="flex items-center justify-center gap-2 py-2">
-            <div className="flex items-center gap-2 text-xs text-white/60">
-              <RefreshCw className="w-4 h-4" />
-              <span>Floating rate</span>
-            </div>
-          </div>
-
-          {/* You Get */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You get</label>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
-                  <select
-                    value={toChain}
-                    onChange={(e) => {
-                      setToChain(e.target.value)
-                      const chain = availableChains.find(c => c.value === e.target.value)
-                      const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
-                      setToAsset(preferredAsset)
-                    }}
-                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-green-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
-                  >
-                    {availableChains.map(chain => (
-                      <option key={chain.value} value={chain.value} className="bg-black text-white">
-                        {chain.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div>
+                    <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
+                    <select
+                      value={fromAsset || ''}
+                      onChange={(e) => setFromAsset(e.target.value)}
+                      disabled={!fromChain || tokensLoading}
+                      className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm disabled:opacity-50"
+                    >
+                      <option value="">Select currency...</option>
+                      {fromChainTokens.map(token => (
+                        <option key={token.symbol} value={token.symbol} className="bg-black text-white">
+                          {token.symbol} {token.isNative ? '(Native)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
-                  <select
-                    value={toAsset}
-                    onChange={(e) => setToAsset(e.target.value)}
-                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-green-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
-                  >
-                    {toChainConfig?.assets.map(asset => (
-                      <option key={asset} value={asset} className="bg-black text-white">
-                        {asset}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Estimated amount</label>
-                <div className="relative">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs text-white/60 tracking-tight">Amount</label>
+                    {wallet?.connected && walletBalance && parseFloat(walletBalance) > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-white/50">Available: {walletBalance} {fromAsset}</span>
+                        <button
+                          onClick={handleMaxAmount}
+                          className="px-2 py-1 glass-strong rounded-lg border border-white/10 hover:border-purple-500/50 text-xs text-white/70 hover:text-white transition-all flex items-center gap-1"
+                        >
+                          <Maximize2 className="w-3 h-3" />
+                          MAX
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <input
-                    type="text"
-                    value={toAmount || ''}
-                    readOnly
-                    placeholder={calculating ? "Calculating..." : "0.0"}
-                    className="w-full px-4 py-3 glass-strong rounded-xl border border-green-500/30 focus:border-green-500/50 focus:outline-none transition-all bg-green-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
+                    type="number"
+                    step="0.000001"
+                    value={fromAmount}
+                    onChange={(e) => setFromAmount(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full px-4 py-3 glass-strong rounded-xl border border-purple-500/30 focus:border-purple-500/50 focus:outline-none transition-all bg-purple-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
                   />
-                  {calculating && (
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <Loader2 className="w-5 h-5 animate-spin text-green-400" />
-                    </div>
-                  )}
                 </div>
-                {calculating && (
-                  <p className="text-xs text-green-400 mt-2 flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Calculating exchange rate...
-                  </p>
-                )}
               </div>
             </div>
-          </div>
 
-          {/* Recipient Address */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-white/80 tracking-tight">
-                Recipient Address
-              </label>
-              {wallet?.connected && (
-                <button
-                  onClick={() => setRecipientAddress(wallet.address)}
-                  className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                >
-                  Use Wallet
-                </button>
-              )}
+            {/* Switch Button */}
+            <div className="flex items-center justify-center py-2">
+              <button
+                onClick={handleSwitch}
+                className="p-3 glass-strong rounded-xl border border-white/10 hover:border-purple-500/50 transition-all"
+              >
+                <ArrowUpDown className="w-5 h-5 text-white/70" />
+              </button>
             </div>
-            <input
-              type="text"
-              value={recipientAddress}
-              onChange={(e) => setRecipientAddress(e.target.value)}
-              placeholder={toChain === 'solana' ? 'Enter Solana address...' : '0x...'}
-              className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
-            />
-            <p className="text-xs text-white/50 mt-2 tracking-tight">
-              Address where you want to receive {toAsset} on {toChainConfig?.label}
-            </p>
-          </div>
 
-          {/* Refund Address (Optional) */}
-          {showRefund && (
+            {/* Floating rate indicator */}
+            <div className="flex items-center justify-center gap-2 py-2">
+              <div className="flex items-center gap-2 text-xs text-white/60">
+                <RefreshCw className="w-4 h-4" />
+                <span>Floating rate</span>
+              </div>
+            </div>
+
+            {/* You Get */}
+            <div>
+              <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You get</label>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
+                    <select
+                      value={toChain || ''}
+                      onChange={(e) => {
+                        setToChain(e.target.value)
+                        setToAsset(null) // Reset asset when chain changes
+                      }}
+                      className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-green-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                    >
+                      <option value="">Select chain...</option>
+                      {availableChains.map(chain => (
+                        <option key={chain.value} value={chain.value} className="bg-black text-white">
+                          {chain.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
+                    <select
+                      value={toAsset || ''}
+                      onChange={(e) => setToAsset(e.target.value)}
+                      disabled={!toChain || tokensLoading}
+                      className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-green-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm disabled:opacity-50"
+                    >
+                      <option value="">Select currency...</option>
+                      {toChainTokens.map(token => (
+                        <option key={token.symbol} value={token.symbol} className="bg-black text-white">
+                          {token.symbol} {token.isNative ? '(Native)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Estimated amount</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={toAmount || ''}
+                      readOnly
+                      placeholder={calculating ? "Calculating..." : "0.0"}
+                      className="w-full px-4 py-3 glass-strong rounded-xl border border-green-500/30 focus:border-green-500/50 focus:outline-none transition-all bg-green-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
+                    />
+                    {calculating && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        <Loader2 className="w-5 h-5 animate-spin text-green-400" />
+                      </div>
+                    )}
+                  </div>
+                  {calculating && (
+                    <p className="text-xs text-green-400 mt-2 flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Calculating exchange rate...
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Recipient Address */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-white/80 tracking-tight">
-                  Refund Address (Optional)
+                  Recipient Address
                 </label>
                 {wallet?.connected && (
                   <button
-                    onClick={() => setRefundAddress(wallet.address)}
+                    onClick={() => setRecipientAddress(wallet.address)}
                     className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
                   >
                     Use Wallet
@@ -603,49 +665,78 @@ const Swapper = () => {
               </div>
               <input
                 type="text"
-                value={refundAddress}
-                onChange={(e) => setRefundAddress(e.target.value)}
-                placeholder={fromChain === 'solana' ? 'Your refund address...' : '0x...'}
+                value={recipientAddress}
+                onChange={(e) => setRecipientAddress(e.target.value)}
+                placeholder={toChainConfig && toChainConfig.chainId === 792703809 ? 'Enter Solana address...' : '0x...'}
                 className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
               />
               <p className="text-xs text-white/50 mt-2 tracking-tight">
-                Address to refund if swap fails
+                Address where you want to receive {toAsset || 'tokens'} on {toChainConfig?.label || 'destination chain'}
               </p>
             </div>
-          )}
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowRefund(!showRefund)}
-              className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white transition-all text-sm"
-            >
-              {showRefund ? 'Hide' : 'Add'} Refund Address
-            </button>
-          </div>
-
-          <button
-            onClick={handleSwap}
-            disabled={loading || calculating || !fromAmount || !toAmount || !recipientAddress || parseFloat(fromAmount) <= 0}
-            className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium text-white hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Creating Swap...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-5 h-5" />
-                Create Swap
-              </>
+            {/* Refund Address (Optional) */}
+            {showRefund && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-white/80 tracking-tight">
+                    Refund Address (Optional)
+                  </label>
+                  {wallet?.connected && (
+                    <button
+                      onClick={() => setRefundAddress(wallet.address)}
+                      className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      Use Wallet
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={refundAddress}
+                  onChange={(e) => setRefundAddress(e.target.value)}
+                  placeholder={fromChainConfig && fromChainConfig.chainId === 792703809 ? 'Your refund address...' : '0x...'}
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
+                />
+                <p className="text-xs text-white/50 mt-2 tracking-tight">
+                  Address to refund if swap fails
+                </p>
+              </div>
             )}
-          </button>
 
-          <div className="flex items-center gap-2 text-xs text-white/50">
-            <CheckCircle2 className="w-4 h-4 text-green-400" />
-            <span>Powered by Relay Link • All chains & tokens supported • Direct to recipient</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowRefund(!showRefund)}
+                className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white transition-all text-sm"
+              >
+                {showRefund ? 'Hide' : 'Add'} Refund Address
+              </button>
+            </div>
+
+            <button
+              onClick={handleSwap}
+              disabled={loading || calculating || !fromAmount || !toAmount || !recipientAddress || !fromChain || !fromAsset || !toChain || !toAsset || parseFloat(fromAmount) <= 0}
+              className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium text-white hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Creating Swap...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-5 h-5" />
+                  Create Swap
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-2 text-xs text-white/50">
+              <CheckCircle2 className="w-4 h-4 text-green-400" />
+              <span>Powered by Relay Link • All chains & tokens supported • Direct to recipient</span>
+            </div>
           </div>
-        </div>
+        )}
       </motion.div>
     </div>
   )
