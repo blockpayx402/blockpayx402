@@ -500,6 +500,9 @@ const Swapper = () => {
   }
 
   if (order) {
+    // Check if this is a direct swap (no deposit address)
+    const isDirectSwap = order.isDirectSwap || !order.depositAddress
+    
     return (
       <div className="max-w-4xl mx-auto">
         <Link to="/swap" className="inline-flex items-center gap-2 text-dark-400 hover:text-white mb-8">
@@ -512,144 +515,137 @@ const Swapper = () => {
           animate={{ opacity: 1, scale: 1 }}
           className="glass-strong rounded-2xl p-6 bg-gradient-to-br from-green-500/20 to-blue-500/20 border border-green-500/30"
         >
-          {(() => {
-            const isDirectSwap = order.isDirectSwap || !order.depositAddress
-            return (
-              <>
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-green-500/20 border border-green-500/30 flex items-center justify-center">
-                    <CheckCircle2 className="w-8 h-8 text-green-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-green-400 mb-2 tracking-tight">Swap Order Created!</h3>
-                  <p className="text-sm text-white/70 tracking-tight">
-                    {isDirectSwap 
-                      ? 'This is a same-chain swap. Execute it directly through your wallet.' 
-                      : `Send ${fromAsset} to the deposit address below`}
-                  </p>
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-green-500/20 border border-green-500/30 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-green-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-green-400 mb-2 tracking-tight">Swap Order Created!</h3>
+            <p className="text-sm text-white/70 tracking-tight">
+              {isDirectSwap 
+                ? 'This is a same-chain swap. Execute it directly through your wallet.' 
+                : `Send ${fromAsset} to the deposit address below`}
+            </p>
+          </div>
+
+          {!isDirectSwap && order.depositAddress && (
+            <>
+              <div className="glass-strong rounded-2xl p-6 flex items-center justify-center mb-6 border border-white/[0.12]">
+                <div className="w-64 h-64 bg-white rounded-2xl p-4 flex items-center justify-center shadow-soft-lg">
+                  <QRCode 
+                    value={order.depositAddress} 
+                    size={224}
+                    level="H"
+                    includeMargin={false}
+                  />
                 </div>
+              </div>
 
-                {!isDirectSwap && order.depositAddress && (
-                  <>
-                    <div className="glass-strong rounded-2xl p-6 flex items-center justify-center mb-6 border border-white/[0.12]">
-                      <div className="w-64 h-64 bg-white rounded-2xl p-4 flex items-center justify-center shadow-soft-lg">
-                        <QRCode 
-                          value={order.depositAddress} 
-                          size={224}
-                          level="H"
-                          includeMargin={false}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm text-white/60 tracking-tight">Deposit Address</span>
-                          <button
-                            onClick={() => copyToClipboard(order.depositAddress)}
-                            className="text-primary-400 hover:text-primary-300 flex items-center gap-2 transition-colors p-2 glass-strong rounded-lg border border-primary-500/30 hover:bg-primary-500/10"
-                          >
-                            <Copy className="w-4 h-4" />
-                            <span className="text-xs tracking-tight">Copy</span>
-                          </button>
-                        </div>
-                        <p className="font-mono text-sm break-all text-white/90 tracking-tight">{order.depositAddress}</p>
-                      </div>
-                  </>
-                )}
-                
-                {isDirectSwap && (
-                  <div className="space-y-4 mb-6">
-                    <div className="glass-strong rounded-xl p-4 border border-yellow-500/30 bg-yellow-500/10">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-yellow-400 mb-1">Direct Swap Required</p>
-                          <p className="text-xs text-white/70">
-                            {order.message || 'This is a same-chain swap. Please execute it through a DEX like Uniswap, PancakeSwap, or 1inch using your wallet.'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {order.fromTokenAddress && order.toTokenAddress && (
-                      <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
-                        <p className="text-xs text-white/60 mb-2">Swap Details</p>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-white/70">From Token:</span>
-                            <span className="font-mono text-white/90 text-xs">{order.fromTokenAddress.substring(0, 20)}...</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-white/70">To Token:</span>
-                            <span className="font-mono text-white/90 text-xs">{order.toTokenAddress.substring(0, 20)}...</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-white/70">Amount:</span>
-                            <span className="text-white/90">{fromAmount} {fromAsset}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
+              <div className="space-y-4">
                 <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
-                  <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-white/60">Sending</span>
-                    <span className="font-medium">{fromAmount} {fromAsset} on {fromChainConfig?.label}</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-white/60 tracking-tight">Deposit Address</span>
+                    <button
+                      onClick={() => copyToClipboard(order.depositAddress)}
+                      className="text-primary-400 hover:text-primary-300 flex items-center gap-2 transition-colors p-2 glass-strong rounded-lg border border-primary-500/30 hover:bg-primary-500/10"
+                    >
+                      <Copy className="w-4 h-4" />
+                      <span className="text-xs tracking-tight">Copy</span>
+                    </button>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-white/60">Receiving</span>
-                    <span className="font-medium text-primary-400">{toAmount} {toAsset} on {toChainConfig?.label}</span>
+                  <p className="font-mono text-sm break-all text-white/90 tracking-tight">{order.depositAddress}</p>
+                </div>
+            </>
+          )}
+          
+          {isDirectSwap && (
+            <div className="space-y-4 mb-6">
+              <div className="glass-strong rounded-xl p-4 border border-yellow-500/30 bg-yellow-500/10">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-yellow-400 mb-1">Direct Swap Required</p>
+                    <p className="text-xs text-white/70">
+                      {order.message || 'This is a same-chain swap. Please execute it through a DEX like Uniswap, PancakeSwap, or 1inch using your wallet.'}
+                    </p>
                   </div>
                 </div>
-
-                {!isDirectSwap && (
-                  <div className="flex items-center gap-2 text-xs text-white/50 mb-4">
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    <span>Auto-swap enabled • Direct to recipient</span>
-                  </div>
-                )}
-
-                {!isDirectSwap && (
-                  <button
-                    onClick={() => navigate(`/status/${order.id}`)}
-                    className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Track Swap Status
-                  </button>
-                )}
-                
-                {isDirectSwap && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-white/70 text-center">
-                      For same-chain swaps, please use a DEX aggregator:
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <a
-                        href={`https://app.uniswap.org/#/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}&chainId=${order.chainId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
-                      >
-                        Uniswap
-                      </a>
-                      <a
-                        href={`https://pancakeswap.finance/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
-                      >
-                        PancakeSwap
-                      </a>
+              </div>
+              
+              {order.fromTokenAddress && order.toTokenAddress && (
+                <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
+                  <p className="text-xs text-white/60 mb-2">Swap Details</p>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-white/70">From Token:</span>
+                      <span className="font-mono text-white/90 text-xs">{order.fromTokenAddress.substring(0, 20)}...</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/70">To Token:</span>
+                      <span className="font-mono text-white/90 text-xs">{order.toTokenAddress.substring(0, 20)}...</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/70">Amount:</span>
+                      <span className="text-white/90">{fromAmount} {fromAsset}</span>
                     </div>
                   </div>
-                )}
-              </>
-            )
-          })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-white/60">Sending</span>
+              <span className="font-medium">{fromAmount} {fromAsset} on {fromChainConfig?.label}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-white/60">Receiving</span>
+              <span className="font-medium text-primary-400">{toAmount} {toAsset} on {toChainConfig?.label}</span>
+            </div>
+          </div>
+
+          {!isDirectSwap && (
+            <div className="flex items-center gap-2 text-xs text-white/50 mb-4 mt-4">
+              <CheckCircle2 className="w-4 h-4 text-green-400" />
+              <span>Auto-swap enabled • Direct to recipient</span>
+            </div>
+          )}
+
+          {!isDirectSwap && (
+            <button
+              onClick={() => navigate(`/status/${order.id}`)}
+              className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Track Swap Status
+            </button>
+          )}
+          
+          {isDirectSwap && (
+            <div className="space-y-3 mt-4">
+              <p className="text-sm text-white/70 text-center">
+                For same-chain swaps, please use a DEX aggregator:
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={`https://app.uniswap.org/#/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}&chainId=${order.chainId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
+                >
+                  Uniswap
+                </a>
+                <a
+                  href={`https://pancakeswap.finance/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
+                >
+                  PancakeSwap
+                </a>
+              </div>
+            </div>
+          )}
         </motion.div>
       </div>
     )
