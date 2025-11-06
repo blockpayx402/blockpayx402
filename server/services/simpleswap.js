@@ -122,8 +122,14 @@ const getSimpleSwapCurrency = (currency, chain = null) => {
   if (chainLower && NETWORK_MAP[chainLower]) {
     const network = NETWORK_MAP[chainLower]
     
-    // For tokens on any network, use currency_network format
-    // SimpleSwap requires network specification for tokens
+    // Special handling for BSC tokens
+    // SimpleSwap uses just the currency code for USDT/BUSD on BSC (not "usdt_bsc")
+    if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
+      return upperCurrency.toLowerCase()
+    }
+    
+    // For other networks, use currency_network format
+    // Format: currency_network (e.g., usdc_eth, usdc_sol)
     return `${upperCurrency.toLowerCase()}_${network}`
   }
   
@@ -209,8 +215,10 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
-    // SimpleSwap API v1 endpoint: /create_exchange with api_key as query parameter
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
+    
+    // Try v3 first, fallback to v1
+    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/create_exchange`
+    let useV3 = true
     
     // Normalize amount
     const payloadAmount = normalizeAmount(normalizedAmount)
@@ -242,18 +250,28 @@ export const createExchangeTransaction = async (orderData) => {
       }
     }
     
-    // Prepare payload for SimpleSwap API v1
-    // Based on SimpleSwap API documentation format
-    const payload = {
-      fixed: false, // Use floating rate
-      currency_from: fromCurrency,
-      currency_to: toCurrency,
-      amount: payloadAmount, // Already a string from normalizeAmount
-      address_to: recipientAddress.trim(),
-      // Only include extra_id_to if needed (some currencies require it)
-      // Don't include if empty to avoid 400 errors
-      ...(validRefundAddress && { user_refund_address: validRefundAddress }), // Refund address
-      // Don't include user_refund_extra_id unless needed
+    // Prepare payload - v3 uses different format than v1
+    let payload
+    if (useV3) {
+      // SimpleSwap API v3 format
+      payload = {
+        fixed: false,
+        currency_from: fromCurrency,
+        currency_to: toCurrency,
+        amount: payloadAmount,
+        address_to: recipientAddress.trim(),
+        ...(validRefundAddress && { user_refund_address: validRefundAddress }),
+      }
+    } else {
+      // SimpleSwap API v1 format
+      payload = {
+        fixed: false,
+        currency_from: fromCurrency,
+        currency_to: toCurrency,
+        amount: payloadAmount,
+        address_to: recipientAddress.trim(),
+        ...(validRefundAddress && { user_refund_address: validRefundAddress }),
+      }
     }
     
     console.log('[SimpleSwap createExchangeTransaction] Request payload:', {
@@ -287,8 +305,13 @@ export const createExchangeTransaction = async (orderData) => {
           'Content-Type': 'application/json',
         }
         
-        // SimpleSwap API v1 uses query parameter for auth, not headers
-        // api_key is already in the URL
+        // SimpleSwap API v3 uses Authorization header, v1 uses query parameter
+        if (useV3) {
+          headers['Authorization'] = `Bearer ${apiKey}`
+        } else {
+          // v1: api_key in query parameter
+          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
+        }
         
         response = await fetchWithTimeout(apiUrl, {
           method: 'POST',
@@ -302,6 +325,15 @@ export const createExchangeTransaction = async (orderData) => {
         const text = await response.text()
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
+        
+        // If v3 returns 404 or 401, try v1
+        if (useV3 && (status === 404 || status === 401) && attempt === 0) {
+          log('info', 'v3 not available, falling back to v1', { status, error: parsed.error || parsed.message })
+          useV3 = false
+          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
+          delete headers['Authorization']
+          continue
+        }
         
         const isTransient = status >= 500
         const isRetryable = isTransient && attempt < MAX_RETRIES - 1
@@ -412,14 +444,22 @@ export const getExchangeStatus = async (exchangeId) => {
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
     }
 
-    // SimpleSwap API v1 endpoint: /get_exchange with api_key as query parameter
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_exchange?api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(exchangeId.trim())}`
+    // Try v3 first, fallback to v1
+    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/get_exchange?id=${encodeURIComponent(exchangeId.trim())}`
+    let useV3 = true
     
-    log('info', 'Getting transaction status', { exchangeId })
+    log('info', 'Getting transaction status', { exchangeId, useV3 })
     
-    // SimpleSwap API v1 uses query parameter for auth, not headers
+    // SimpleSwap API v3 uses Authorization header, v1 uses query parameter
     const headers = {
       'Content-Type': 'application/json',
+    }
+    
+    if (useV3) {
+      headers['Authorization'] = `Bearer ${apiKey}`
+    } else {
+      // v1: api_key in query parameter
+      apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_exchange?api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(exchangeId.trim())}`
     }
     
     const response = await fetchWithTimeout(apiUrl, {
@@ -528,8 +568,9 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       amount: normalizedAmount
     })
     
-    // SimpleSwap API v1 endpoint: /get_estimated with api_key as query parameter
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
+    // Try v3 first, fallback to v1
+    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/get_estimated?fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
+    let useV3 = true
     
     log('info', 'Getting exchange rate', {
       from: `${fromAsset}(${fromChain})`,
@@ -544,9 +585,16 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // SimpleSwap API v1 uses query parameter for auth, not headers
+        // SimpleSwap API v3 uses Authorization header, v1 uses query parameter
         const headers = {
           'Content-Type': 'application/json',
+        }
+        
+        if (useV3) {
+          headers['Authorization'] = `Bearer ${apiKey}`
+        } else {
+          // v1: api_key in query parameter
+          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
         }
         
         response = await fetchWithTimeout(apiUrl, {
