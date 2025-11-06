@@ -3,11 +3,13 @@
 
 [build]
   # Build command - builds the frontend
-  command = "npm run build"
+  command = "npm ci && npm run build"
   # Publish directory - where the built files are
   publish = "dist"
   # Functions directory - Netlify Functions location
   functions = "netlify/functions"
+  # Node version for Netlify
+  environment = { NODE_VERSION = "20" }
 
 # Redirect rules - handle API routes and SPA routing
 # API routes are handled by Netlify Function (server.js)
