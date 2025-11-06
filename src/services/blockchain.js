@@ -260,12 +260,28 @@ export const verifyEVMTransaction = async (chain, recipientAddress, amount, curr
       return { verified: false, error: 'Unsupported chain' }
     }
 
-    if (!validateAddressSync(recipientAddress, chain)) {
+    // Normalize address before validation
+    const normalizedAddress = recipientAddress ? recipientAddress.trim().toLowerCase() : ''
+    
+    console.log('🔍 Validating address:', {
+      original: recipientAddress,
+      normalized: normalizedAddress,
+      chain,
+      length: normalizedAddress.length,
+      isString: typeof recipientAddress === 'string'
+    })
+
+    if (!validateAddressSync(normalizedAddress, chain)) {
+      console.error('❌ Address validation failed:', {
+        address: normalizedAddress,
+        chain,
+        original: recipientAddress
+      })
       return { verified: false, error: 'Invalid address format' }
     }
 
-    // Check recent transactions
-    return await checkRecentEVMTransactions(chain, recipientAddress, amount, currency, sinceTimestamp)
+    // Use normalized address for verification
+    return await checkRecentEVMTransactions(chain, normalizedAddress, amount, currency, sinceTimestamp)
   } catch (error) {
     console.error(`Error verifying ${chain} transaction:`, error)
     return { verified: false, error: error.message || 'Verification failed' }
@@ -438,8 +454,24 @@ export const validateAddressSync = (address, chain) => {
     return validateAddress(address, chain)
   }
   // For EVM chains, synchronous validation
-  if (!address || typeof address !== 'string') return false
+  if (!address || typeof address !== 'string') {
+    console.log('❌ Address validation failed: not a string', { address, type: typeof address })
+    return false
+  }
   const trimmedAddress = address.trim()
-  return /^0x[a-fA-F0-9]{40}$/i.test(trimmedAddress)
+  // Normalize to lowercase for comparison (EVM addresses are case-insensitive)
+  const normalizedAddress = trimmedAddress.toLowerCase()
+  const isValid = /^0x[a-fA-F0-9]{40}$/i.test(trimmedAddress)
+  
+  if (!isValid) {
+    console.log('❌ Address validation failed: invalid format', {
+      address: trimmedAddress,
+      length: trimmedAddress.length,
+      startsWith0x: trimmedAddress.startsWith('0x'),
+      hexPattern: /^0x[a-fA-F0-9]{40}$/i.test(trimmedAddress)
+    })
+  }
+  
+  return isValid
 }
 

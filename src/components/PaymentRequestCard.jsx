@@ -83,9 +83,20 @@ const PaymentRequestCard = ({ request, onClick }) => {
         currency: request.currency
       })
       
+      // Normalize recipient address before verification
+      const normalizedRecipient = request.recipient ? request.recipient.trim() : ''
+      
+      console.log('🔍 Manual verification - Normalizing recipient:', {
+        original: request.recipient,
+        normalized: normalizedRecipient,
+        chain,
+        amount: request.amount,
+        currency: request.currency
+      })
+      
       const result = await verifyPayment(
         chain,
-        request.recipient,
+        normalizedRecipient,
         request.amount,
         isNativeCurrency ? 'native' : request.currency,
         requestTimestamp
