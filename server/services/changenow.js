@@ -245,6 +245,18 @@ export const createExchangeTransaction = async (orderData) => {
     // Use normalized amount for payload
     const payloadAmount = normalizeAmount(normalizedAmount)
     
+    // Validate recipient address for destination chain
+    const recipientValidation = validateAddress(recipientAddress.trim(), toChain)
+    if (!recipientValidation.valid) {
+      log('error', 'Recipient address invalid for destination chain', {
+        recipientAddress: recipientAddress.substring(0, 10) + '...',
+        toChain,
+        toAsset,
+        error: recipientValidation.error
+      })
+      throw new Error(`Invalid recipient address for ${toAsset} on ${toChain}: ${recipientValidation.error}`)
+    }
+    
     // Validate refund address if provided - it must be valid for the source chain
     let validRefundAddress = null
     if (refundAddress) {
@@ -261,15 +273,25 @@ export const createExchangeTransaction = async (orderData) => {
       }
     }
     
+    // Normalize addresses (trim and ensure proper format)
+    const normalizedRecipientAddress = recipientAddress.trim()
+    
     const payload = {
       from: fromCurrency,
       to: toCurrency,
-      address: recipientAddress.trim(),
+      address: normalizedRecipientAddress,
       amount: payloadAmount,
       ...(validRefundAddress && { refundAddress: validRefundAddress }),
       // Only include extraId if the currency supports it (Solana doesn't support extraId)
       ...(orderId && toCurrency !== 'sol' && toCurrency !== 'SOL' && { extraId: orderId }),
     }
+    
+    log('info', 'Transaction payload prepared', {
+      from: `${fromAsset}(${fromChain})`,
+      to: `${toAsset}(${toChain})`,
+      recipientAddressPrefix: normalizedRecipientAddress.substring(0, 10) + '...',
+      hasRefundAddress: !!validRefundAddress
+    })
 
     log('info', 'Creating exchange transaction', {
       from: `${fromAsset}(${fromChain})`,
