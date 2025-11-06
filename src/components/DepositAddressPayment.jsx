@@ -328,7 +328,7 @@ const DepositAddressPayment = ({ request }) => {
 
         <button
           onClick={handleGenerateDepositAddress}
-          disabled={loading || calculating || (inputMode === 'send' ? (!amount || parseFloat(amount) <= 0) : (!calculatedAmount || parseFloat(calculatedAmount) <= 0))}
+          disabled={loading || calculating || !calculatedAmount || parseFloat(calculatedAmount) <= 0}
           className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl font-medium text-white hover:from-blue-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
