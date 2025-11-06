@@ -1,14 +1,14 @@
 /**
  * BlockPay Deposit Address Generation Service
- * Production-ready integration with ChangeNOW for cross-chain swaps
+ * Production-ready integration with Relay Link for cross-chain swaps
  */
 
-import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
+import { createRelayTransaction, getRelayStatus } from './relay.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
  * Generate a deposit address for cross-chain swap
- * This creates a temporary address via ChangeNOW that will receive funds, swap, and forward
+ * This creates a temporary address via Relay Link that will receive funds, swap, and forward
  */
 export const generateDepositAddress = async (orderData) => {
   const {
@@ -19,17 +19,9 @@ export const generateDepositAddress = async (orderData) => {
     amount,
     recipientAddress,
     refundAddress,
-    orderId // BlockPay order ID
+    orderId, // BlockPay order ID
+    userAddress, // User's wallet address (optional)
   } = orderData
-
-  // Check if ChangeNOW API is configured - read directly from environment
-  const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
-  if (!apiKey || apiKey === '') {
-    console.error('[Deposit Address] API key is missing!')
-    console.error('[Deposit Address] process.env.CHANGENOW_API_KEY exists:', !!process.env.CHANGENOW_API_KEY)
-    console.error('[Deposit Address] process.env.CHANGENOW_API_KEY length:', process.env.CHANGENOW_API_KEY?.length || 0)
-    throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in Netlify environment variables. Get your key from: https://changenow.io/api')
-  }
 
   try {
     // Calculate BlockPay platform fee (with chain-specific recipient)
@@ -39,8 +31,8 @@ export const generateDepositAddress = async (orderData) => {
     // The fee will be deducted from the final amount received by the seller
     const amountAfterFee = amount - fee.amount
 
-    // Create exchange transaction via ChangeNOW API
-    const exchangeData = await createExchangeTransaction({
+    // Create exchange transaction via Relay Link API
+    const exchangeData = await createRelayTransaction({
       fromChain,
       fromAsset,
       toChain,
@@ -49,6 +41,7 @@ export const generateDepositAddress = async (orderData) => {
       recipientAddress,
       refundAddress,
       orderId,
+      userAddress,
     })
 
     return {
@@ -66,11 +59,13 @@ export const generateDepositAddress = async (orderData) => {
     
     // Provide helpful error messages
     if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-      throw new Error('Invalid ChangeNOW API key. Please check your CHANGENOW_API_KEY in .env file.')
-    } else if (error.message.includes('404') || error.message.includes('not found')) {
-      throw new Error('Exchange pair not available. Please check if the currency pair is supported by ChangeNOW.')
+      throw new Error('Invalid Relay Link API request. Please check your configuration.')
+    } else if (error.message.includes('404') || error.message.includes('not found') || error.message.includes('not available')) {
+      throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
     } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
-      throw new Error('Cannot connect to ChangeNOW API. Please check your internet connection and try again.')
+      throw new Error('Cannot connect to Relay Link API. Please check your internet connection and try again.')
+    } else if (error.message.includes('Unsupported chain')) {
+      throw new Error(`Unsupported blockchain: ${fromChain} or ${toChain}. Please use supported chains (Ethereum, BNB Chain, Polygon, Solana).`)
     }
     
     throw new Error(`Failed to generate deposit address: ${error.message}`)
@@ -78,12 +73,12 @@ export const generateDepositAddress = async (orderData) => {
 }
 
 /**
- * Check deposit status via ChangeNOW API
+ * Check deposit status via Relay Link API
  * This checks the actual status of the exchange transaction
  */
 export const checkDepositStatus = async (exchangeId) => {
   try {
-    const status = await getExchangeStatus(exchangeId)
+    const status = await getRelayStatus(exchangeId)
     return {
       received: status.status !== 'awaiting_deposit',
       amount: status.fromAmount,
@@ -109,7 +104,7 @@ export const checkDepositStatus = async (exchangeId) => {
  */
 export const getExchangeStatusById = async (exchangeId) => {
   try {
-    return await getExchangeStatus(exchangeId)
+    return await getRelayStatus(exchangeId)
   } catch (error) {
     console.error('Error getting exchange status:', error)
     throw error

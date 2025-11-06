@@ -9,7 +9,7 @@ import cors from 'cors'
 // Use Netlify-compatible database (in-memory with /tmp persistence)
 import { dbHelpers } from '../../server/database-netlify.js'
 import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from '../../server/services/depositAddress.js'
-import { getExchangeRate } from '../../server/services/changenow.js'
+import { getExchangeRate } from '../../server/services/relay.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG, getChangeNowHeaders } from '../../server/config.js'
 import { checkSetup, generateSetupInstructions } from '../../server/utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from '../../server/utils/security.js'
