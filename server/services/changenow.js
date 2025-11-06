@@ -14,26 +14,12 @@ if (!BLOCKPAY_CONFIG.changenow.apiKey && process.env.NODE_ENV === 'production') 
  * Currency mapping for ChangeNOW
  */
 const CURRENCY_MAP = {
-  // Ethereum
+  // Native currencies
   'ETH': 'eth',
-  'USDT': 'usdt',
-  'USDC': 'usdc',
-  'DAI': 'dai',
-  
-  // BNB Chain
   'BNB': 'bnb',
-  'BUSD': 'busd',
-  
-  // Polygon
   'MATIC': 'matic',
-  
-  // Solana
   'SOL': 'sol',
-  
-  // Bitcoin
   'BTC': 'btc',
-  
-  // Other popular
   'LTC': 'ltc',
   'XRP': 'xrp',
   'DOGE': 'doge',
@@ -51,12 +37,29 @@ const NETWORK_MAP = {
 }
 
 /**
- * Get ChangeNOW currency code
+ * Get ChangeNOW currency code with network specification
+ * For tokens, includes network: e.g., "usdc_eth", "usdc_bsc", "usdc_sol"
+ * For native currencies, returns just the currency code
  */
-const getChangeNowCurrency = (currency) => {
+const getChangeNowCurrency = (currency, chain = null) => {
   if (!currency) return 'eth'
   const upperCurrency = currency.toUpperCase()
-  return CURRENCY_MAP[upperCurrency] || currency.toLowerCase()
+  const chainLower = chain ? chain.toLowerCase() : null
+  
+  // Native currencies don't need network suffix
+  if (CURRENCY_MAP[upperCurrency]) {
+    return CURRENCY_MAP[upperCurrency]
+  }
+  
+  // For tokens, include network if specified
+  if (chainLower && NETWORK_MAP[chainLower]) {
+    const network = NETWORK_MAP[chainLower]
+    // Format: currency_network (e.g., usdc_eth, usdc_bsc, usdc_sol)
+    return `${upperCurrency.toLowerCase()}_${network}`
+  }
+  
+  // Fallback: just currency code
+  return upperCurrency.toLowerCase()
 }
 
 /**
@@ -91,8 +94,9 @@ export const createExchangeTransaction = async (orderData) => {
     }
 
     // Use v1 API format: POST /v1/transactions/{api_key}
-    const fromCurrency = getChangeNowCurrency(fromAsset)
-    const toCurrency = getChangeNowCurrency(toAsset)
+    // Include network in currency code for tokens (e.g., usdc_eth, usdc_sol)
+    const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
+    const toCurrency = getChangeNowCurrency(toAsset, toChain)
     const apiUrl = `https://api.changenow.io/v1/transactions/${apiKey}`
     
     const payload = {
@@ -256,8 +260,9 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     console.log(`[ChangeNOW] API key source: ${process.env.CHANGENOW_API_KEY ? 'process.env' : 'BLOCKPAY_CONFIG'}`)
 
     // Use v1 API format: /v1/exchange-amount/{amount}/{from}_{to}?api_key={key}
-    const fromCurrency = getChangeNowCurrency(fromAsset)
-    const toCurrency = getChangeNowCurrency(toAsset)
+    // Include network in currency code for tokens (e.g., usdc_eth, usdc_sol)
+    const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
+    const toCurrency = getChangeNowCurrency(toAsset, toChain)
     const url = `https://api.changenow.io/v1/exchange-amount/${amount}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
     
     console.log(`[ChangeNOW] Getting exchange rate (v1): ${url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
