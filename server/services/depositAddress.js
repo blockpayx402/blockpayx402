@@ -27,7 +27,8 @@ export const generateDepositAddress = async (orderData) => {
   } = orderData
 
   try {
-    // Check if it's the same currency on the same chain - no exchange needed
+    // Only block if it's the EXACT same currency on the same chain
+    // Allow same-chain swaps for different currencies (e.g., USDT -> BNB on BSC)
     if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
       throw new Error(`Cannot create exchange for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.`)
     }
