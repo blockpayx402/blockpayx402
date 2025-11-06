@@ -21,7 +21,7 @@ export const BLOCKPAY_CONFIG = {
   // SimpleSwap API Configuration
   simpleswap: {
     apiKey: process.env.SIMPLESWAP_API_KEY || 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgVVOdMRtgXdgA6TMkdoBRnDh+GJUXODvNuQrxR4fury6hRANCAAShaUFlbXt5RR3p+f9iYtJfRSoxpn3IzPyNw6iYusN2oh6qUwiSpR5hkGtDJHcuZj63pohFC4UYfzWldvY6yUFU',
-    apiUrl: 'https://api.simpleswap.io/v1', // API v1 base URL
+    apiUrl: 'https://api.simpleswap.io', // Base URL - endpoints use /v1/ prefix
   },
   
   // BlockPay Fee Configuration
