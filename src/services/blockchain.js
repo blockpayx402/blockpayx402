@@ -80,15 +80,29 @@ export const TOKENS = {
 
 // Check recent transactions for EVM chains
 export const checkRecentEVMTransactions = async (chain, recipientAddress, amount, currency = 'native', sinceTimestamp = null) => {
-  try {
-    const chainConfig = CHAINS[chain]
-    if (!chainConfig) {
-      return { verified: false, error: 'Unsupported chain' }
-    }
+  const chainConfig = CHAINS[chain]
+  if (!chainConfig) {
+    return { verified: false, error: 'Unsupported chain' }
+  }
 
-    // Create provider - ethers.js v6 constructor: JsonRpcProvider(url, network?, options?)
-    // Use default options - network will be detected from RPC
-    const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl)
+  // Try multiple RPC endpoints if available (for rate limit handling)
+  const rpcUrls = chainConfig.rpcUrls || [chainConfig.rpcUrl]
+  let lastError = null
+  
+  for (let attempt = 0; attempt < rpcUrls.length; attempt++) {
+    try {
+      const rpcUrl = rpcUrls[attempt]
+      console.log(`🔗 Attempting RPC endpoint ${attempt + 1}/${rpcUrls.length}: ${rpcUrl.substring(0, 30)}...`)
+      
+      // Wait before retrying (exponential backoff)
+      if (attempt > 0) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000) // Max 5 seconds
+        console.log(`⏳ Waiting ${delay}ms before retry...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+      
+      // Create provider - ethers.js v6 constructor: JsonRpcProvider(url, network?, options?)
+      const provider = new ethers.JsonRpcProvider(rpcUrl)
 
     const requiredAmount = parseFloat(amount) || 0
     const tolerance = Math.max(0.0001, requiredAmount * 0.01) // 1% tolerance or 0.0001, whichever is larger
@@ -172,33 +186,45 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
         // Get recent Transfer events to this address
         // Calculate precise block range based on request creation time to avoid rate limits
         const currentBlock = await provider.getBlockNumber()
-        const currentBlockData = await provider.getBlock(currentBlock).catch(() => null)
         
-        let startBlock = Math.max(0, currentBlock - 1000) // Default fallback
+        let startBlock = Math.max(0, currentBlock - 500) // Very conservative default
         
-        if (sinceTimestamp && currentBlockData) {
+        if (sinceTimestamp) {
           // Calculate approximate block number when request was created
           // BNB Chain: ~3 seconds per block, Ethereum: ~12 seconds per block
           const avgBlockTime = chain === 'bnb' ? 3 : 12 // seconds
           const timeDiff = Date.now() - sinceTimestamp // milliseconds
           const blocksAgo = Math.ceil((timeDiff / 1000) / avgBlockTime)
-          // Add 10% buffer for safety
-          const bufferBlocks = Math.ceil(blocksAgo * 0.1)
-          startBlock = Math.max(0, currentBlock - blocksAgo - bufferBlocks)
+          // Add 20% buffer for safety, but cap at reasonable limits
+          const bufferBlocks = Math.min(Math.ceil(blocksAgo * 0.2), 100) // Max 100 block buffer
+          const calculatedBlocks = blocksAgo + bufferBlocks
+          
+          // Cap the range to avoid rate limits - max 2000 blocks
+          const maxBlocks = chain === 'bnb' ? 1500 : 1000
+          const blocksToCheck = Math.min(calculatedBlocks, maxBlocks)
+          
+          startBlock = Math.max(0, currentBlock - blocksToCheck)
           
           console.log(`📅 Calculated block range:`, {
             requestCreated: new Date(sinceTimestamp).toISOString(),
             timeDiffMinutes: Math.floor(timeDiff / 60000),
             blocksAgo,
             bufferBlocks,
+            blocksToCheck,
             startBlock,
             currentBlock,
-            blockRange: currentBlock - startBlock
+            blockRange: currentBlock - startBlock,
+            maxAllowed: maxBlocks
           })
         } else {
-          // Fallback: use smaller fixed range
-          const blocksToCheck = chain === 'bnb' ? 1000 : 500 // Much smaller to avoid rate limits
+          // Fallback: use very small fixed range to avoid rate limits
+          const blocksToCheck = chain === 'bnb' ? 500 : 300 // Very conservative
           startBlock = Math.max(0, currentBlock - blocksToCheck)
+          console.log(`⚠️  No timestamp provided, using conservative range:`, {
+            blocksToCheck,
+            startBlock,
+            currentBlock
+          })
         }
       
       console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
@@ -276,11 +302,37 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
               token: token.symbol
             }
           }
+          }
         }
       }
-    }
 
-    return { verified: false, reason: 'No matching transaction found' }
+      return { verified: false, reason: 'No matching transaction found' }
+    } catch (error) {
+      console.error(`❌ Error with RPC endpoint ${attempt + 1}:`, error.message || error)
+      lastError = error
+      
+      // Check if it's a rate limit error
+      const isRateLimit = error.message?.includes('rate limit') || 
+                         error.message?.includes('rate limit') ||
+                         error.code === 'BAD_DATA' ||
+                         error.message?.includes('rate limit')
+      
+      if (isRateLimit && attempt < rpcUrls.length - 1) {
+        console.log(`⚠️  Rate limit hit on endpoint ${attempt + 1}, trying next RPC endpoint...`)
+        // Wait longer before trying next endpoint
+        await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)))
+        continue
+      }
+      
+      // If this is the last endpoint, throw the error
+      if (attempt === rpcUrls.length - 1) {
+        throw error
+      }
+    }
+  }
+  
+  // If we get here, all endpoints failed
+  return { verified: false, error: lastError?.message || 'All RPC endpoints failed or rate limited' }
   } catch (error) {
     console.error(`Error checking ${chain} transactions:`, error)
     return { verified: false, error: error.message || 'Transaction check failed' }
