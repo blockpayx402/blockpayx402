@@ -194,8 +194,8 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
-    // SimpleSwap API v1 endpoint (per documentation: https://api.simpleswap.io/?urls.primaryName=API%20v1)
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v1/create-exchange`
+    // SimpleSwap API v1 endpoint format: /v1/create-exchange (base URL already includes /v1)
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create-exchange`
     
     // Normalize amount
     const payloadAmount = normalizeAmount(normalizedAmount)
@@ -227,14 +227,15 @@ export const createExchangeTransaction = async (orderData) => {
       }
     }
     
-    // Prepare payload for SimpleSwap API
+    // Prepare payload for SimpleSwap API v1
+    // Based on SimpleSwap API documentation format
     const payload = {
       fixed: false, // Use floating rate
       currency_from: fromCurrency,
       currency_to: toCurrency,
       amount: payloadAmount,
       address_to: recipientAddress.trim(),
-      ...(validRefundAddress && { extra_id_to: validRefundAddress }),
+      ...(validRefundAddress && { address_from: validRefundAddress }), // Refund address
       ...(orderId && { extra_id: orderId }),
     }
 
@@ -383,8 +384,8 @@ export const getExchangeStatus = async (exchangeId) => {
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in your .env file.')
     }
 
-    // SimpleSwap API v1 endpoint
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v1/exchange/${exchangeId.trim()}`
+    // SimpleSwap API v1 endpoint format: /v1/exchange/{id}
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/exchange/${exchangeId.trim()}`
     
     log('info', 'Getting transaction status', { exchangeId })
     
@@ -494,8 +495,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
     const normalizedAmount = normalizeAmount(amount)
-    // SimpleSwap API v1 endpoint
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v1/estimate?currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
+    // SimpleSwap API v1 endpoint format: /v1/estimate
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/estimate?currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
     
     log('info', 'Getting exchange rate', {
       from: `${fromAsset}(${fromChain})`,
