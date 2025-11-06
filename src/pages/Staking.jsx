@@ -24,6 +24,8 @@ const Staking = () => {
   const [unstakeAmount, setUnstakeAmount] = useState('')
   const [stakeLoading, setStakeLoading] = useState(false)
   const [unstakeLoading, setUnstakeLoading] = useState(false)
+  const [walletBalance, setWalletBalance] = useState('0.0')
+  const [balanceLoading, setBalanceLoading] = useState(false)
   const [stakingData, setStakingData] = useState({
     totalStaked: 0,
     totalRewards: 0,
@@ -33,6 +35,80 @@ const Staking = () => {
 
   const [stakingPools, setStakingPools] = useState([])
   const [poolsLoading, setPoolsLoading] = useState(true)
+  
+  // Get wallet balance for the selected chain
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      if (!wallet?.connected) {
+        setWalletBalance('0.0')
+        return
+      }
+      
+      // Check if wallet chain matches selected chain
+      const chainMap = {
+        'ethereum': 'evm',
+        'bnb': 'evm',
+        'polygon': 'evm',
+        'solana': 'solana'
+      }
+      
+      const walletChainType = wallet.chain || (wallet.provider === 'phantom' || wallet.provider === 'solflare' ? 'solana' : 'evm')
+      const selectedChainType = chainMap[selectedChain] || 'evm'
+      
+      // Only fetch balance if chains match
+      if (walletChainType !== selectedChainType) {
+        setWalletBalance('0.0')
+        return
+      }
+      
+      setBalanceLoading(true)
+      try {
+        // Use wallet balance from context if available
+        if (wallet.balance) {
+          setWalletBalance(parseFloat(wallet.balance).toFixed(4))
+        } else {
+          // Fallback: fetch balance if not in wallet object
+          if (walletChainType === 'solana' && wallet.address) {
+            const { CHAINS } = await import('../services/blockchain')
+            const rpcUrl = CHAINS.solana?.rpcUrls?.[0] || CHAINS.solana?.rpcUrl
+            
+            if (rpcUrl) {
+              const response = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'getBalance',
+                  params: [wallet.address]
+                })
+              })
+              
+              const data = await response.json()
+              if (data.result) {
+                const sol = data.result.value / 1_000_000_000
+                setWalletBalance(sol.toFixed(4))
+              }
+            }
+          } else if (walletChainType === 'evm' && wallet.address && typeof window.ethereum !== 'undefined') {
+            const balance = await window.ethereum.request({
+              method: 'eth_getBalance',
+              params: [wallet.address, 'latest'],
+            })
+            const balanceInEth = (parseInt(balance, 16) / Math.pow(10, 18)).toFixed(4)
+            setWalletBalance(balanceInEth)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error)
+        setWalletBalance('0.0')
+      } finally {
+        setBalanceLoading(false)
+      }
+    }
+    
+    fetchWalletBalance()
+  }, [wallet, selectedChain])
 
   useEffect(() => {
     let cancelled = false
@@ -136,9 +212,44 @@ const Staking = () => {
   }
 
   const handleMaxStake = () => {
-    // In production, get actual balance from wallet
-    const mockBalance = 10.5
-    setStakeAmount(mockBalance.toString())
+    if (!wallet?.connected) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+    
+    // Check if wallet chain matches selected chain
+    const chainMap = {
+      'ethereum': 'evm',
+      'bnb': 'evm',
+      'polygon': 'evm',
+      'solana': 'solana'
+    }
+    
+    const walletChainType = wallet.chain || (wallet.provider === 'phantom' || wallet.provider === 'solflare' ? 'solana' : 'evm')
+    const selectedChainType = chainMap[selectedChain] || 'evm'
+    
+    if (walletChainType !== selectedChainType) {
+      toast.error(`Please connect a ${selectedChain} wallet to stake ${currentPool.symbol}`)
+      return
+    }
+    
+    const availableBalance = parseFloat(walletBalance) || 0
+    
+    if (availableBalance <= 0) {
+      toast.error('Insufficient balance in wallet')
+      return
+    }
+    
+    // Reserve a small amount for gas/fees (0.01 for EVM, 0.001 for Solana)
+    const reserveAmount = selectedChainType === 'solana' ? 0.001 : 0.01
+    const maxStakeable = Math.max(0, availableBalance - reserveAmount)
+    
+    if (maxStakeable <= 0) {
+      toast.error('Insufficient balance after reserving for fees')
+      return
+    }
+    
+    setStakeAmount(maxStakeable.toFixed(4))
   }
 
   const handleMaxUnstake = () => {
@@ -289,7 +400,14 @@ const Staking = () => {
                     MAX
                   </button>
                 </div>
-                <p className="text-xs text-white/40 mt-2">Minimum: {currentPool.minStake} {currentPool.symbol}</p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-white/40">Minimum: {currentPool.minStake} {currentPool.symbol}</p>
+                  {wallet?.connected && (
+                    <p className="text-xs text-white/60">
+                      Available: {balanceLoading ? '...' : walletBalance} {currentPool.symbol}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="glass-strong rounded-xl p-4 border border-white/10">
@@ -311,9 +429,25 @@ const Staking = () => {
                 </div>
               </div>
 
+              {!wallet?.connected && (
+                <div className="mb-4 p-3 glass-strong rounded-xl border border-yellow-500/20 bg-yellow-500/5">
+                  <p className="text-xs text-yellow-400/80 text-center">
+                    Connect your {selectedChain} wallet to stake
+                  </p>
+                </div>
+              )}
+              
+              {wallet?.connected && parseFloat(walletBalance) <= 0 && (
+                <div className="mb-4 p-3 glass-strong rounded-xl border border-red-500/20 bg-red-500/5">
+                  <p className="text-xs text-red-400/80 text-center">
+                    No {currentPool.symbol} balance available. Please add funds to your wallet.
+                  </p>
+                </div>
+              )}
+              
               <button
                 onClick={handleStake}
-                disabled={stakeLoading || !wallet?.connected}
+                disabled={stakeLoading || !wallet?.connected || parseFloat(walletBalance) <= 0}
                 className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {stakeLoading ? (
