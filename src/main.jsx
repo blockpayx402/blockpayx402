@@ -25,6 +25,21 @@ if (typeof window !== 'undefined') {
       window.process = { env: {}, browser: true }
     }
   })
+
+  // Handle wallet injection gracefully - prevent errors from third-party wallet connectors
+  if (window.ethereum && Object.getOwnPropertyDescriptor(window, 'ethereum')) {
+    // ethereum already exists, prevent redefinition errors
+    try {
+      Object.defineProperty(window, 'ethereum', {
+        value: window.ethereum,
+        writable: true,
+        configurable: true
+      })
+    } catch (e) {
+      // Ignore if already defined correctly
+      console.warn('Wallet injection warning (can be safely ignored):', e.message)
+    }
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

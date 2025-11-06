@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import axios from 'axios'
+import { queueRPCRequest } from './rpcQueue.js'
 
 // Lazy load Solana to avoid import issues
 const getSolanaModules = async () => {
@@ -120,9 +121,11 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
       if (currency === 'native' || !currency) {
         // Check native token transactions
         // Get recent block number (last 1000 blocks = ~3-4 hours on Ethereum)
-        const currentBlock = await provider.getBlockNumber().catch(err => {
-          console.error('Error getting block number:', err)
-          throw new Error('Failed to connect to blockchain RPC')
+        const currentBlock = await queueRPCRequest(chain, async () => {
+          return await provider.getBlockNumber().catch(err => {
+            console.error('Error getting block number:', err)
+            throw new Error('Failed to connect to blockchain RPC')
+          })
         })
         const startBlock = Math.max(0, currentBlock - 1000)
         
@@ -186,7 +189,9 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
 
         // Get recent Transfer events to this address
         // Calculate precise block range based on request creation time to avoid rate limits
-        const currentBlock = await provider.getBlockNumber()
+        const currentBlock = await queueRPCRequest(chain, async () => {
+          return await provider.getBlockNumber()
+        })
         
         let startBlock = Math.max(0, currentBlock - 500) // Very conservative default
         
@@ -254,7 +259,10 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
           blockRange: currentBlock - startBlock
         })
         
-        const events = await tokenContract.queryFilter(filter, startBlock, 'latest')
+        // Queue the RPC request to avoid rate limits
+        const events = await queueRPCRequest(chain, async () => {
+          return await tokenContract.queryFilter(filter, startBlock, 'latest')
+        })
         
         console.log(`📊 Found ${events.length} Transfer events to ${recipientAddress}`)
         

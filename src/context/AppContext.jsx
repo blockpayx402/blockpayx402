@@ -523,7 +523,7 @@ export const AppProvider = ({ children }) => {
         console.error('❌ Error in payment monitoring:', error)
         lastErrorCount++
       }
-    }, 10000) // Check every 10 seconds for faster auto-detection
+      }, 15000) // Check every 15 seconds to reduce rate limit issues
 
     monitoringIntervalsRef.current.set(requestId, interval)
     console.log('✅ Monitoring started for request:', requestId)
