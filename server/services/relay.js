@@ -380,8 +380,9 @@ export const createRelayTransaction = async (orderData) => {
     }
     
     // Format user address - should match origin chain format
-    // If userAddress is not provided or doesn't match origin chain, omit it
+    // Relay Link requires this field, so we must provide a valid address in origin chain format
     let formattedUserAddress = null
+    
     if (userAddress) {
       const userIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(userAddress)
       if (isEVMChain(fromChain) && userIsEVM) {
@@ -389,16 +390,26 @@ export const createRelayTransaction = async (orderData) => {
       } else if (isSolanaChain(fromChain) && !userIsEVM && userAddress.length >= 32 && userAddress.length <= 44) {
         formattedUserAddress = userAddress
       } else {
-        console.warn(`[Relay Link] User address format mismatch for origin chain ${fromChain}. Omitting user field.`)
+        console.warn(`[Relay Link] User address format mismatch for origin chain ${fromChain}. Using fallback.`)
       }
-    } else {
-      // If no userAddress provided, check if recipient matches origin chain format
-      if (isEVMChain(fromChain) && /^0x[a-fA-F0-9]{40}$/i.test(recipientAddress)) {
-        formattedUserAddress = recipientAddress
-      } else if (isSolanaChain(fromChain) && recipientAddress.length >= 32 && recipientAddress.length <= 44) {
-        formattedUserAddress = recipientAddress
+    }
+    
+    // If still no valid user address, use fallback based on origin chain format
+    if (!formattedUserAddress) {
+      if (isEVMChain(fromChain)) {
+        // For EVM chains, use zero address as placeholder (valid EVM format)
+        formattedUserAddress = '0x0000000000000000000000000000000000000000'
+        console.log(`[Relay Link] Using zero address placeholder for EVM origin chain ${fromChain}`)
+      } else if (isSolanaChain(fromChain)) {
+        // For Solana, check if recipient is Solana format
+        if (recipientAddress.length >= 32 && recipientAddress.length <= 44) {
+          formattedUserAddress = recipientAddress
+        } else {
+          // Use Solana system program address as placeholder
+          formattedUserAddress = '11111111111111111111111111111111'
+          console.log(`[Relay Link] Using Solana system program address as placeholder`)
+        }
       }
-      // If recipient doesn't match origin chain format, don't include user field
     }
     
     // Format refund address - should match origin chain
@@ -419,7 +430,7 @@ export const createRelayTransaction = async (orderData) => {
       amount: amountInSmallestUnit,
       tradeType: 'EXACT_INPUT',
       recipient: recipientAddress, // Destination chain format
-      ...(formattedUserAddress && { user: formattedUserAddress }), // Origin chain format preferred
+      user: formattedUserAddress, // Required field - origin chain format
       useDepositAddress: true,
       ...(formattedRefundAddress && { refundTo: formattedRefundAddress }), // Origin chain format
       ...(orderId && { referrer: 'BlockPay' }),
