@@ -127,8 +127,19 @@ const DepositAddressPayment = ({ request }) => {
       }, 1500)
     } catch (error) {
       console.error('Error creating order:', error)
+      // Extract error message from response
       const errorMessage = error.response?.data?.error || error.message || 'Failed to generate deposit address. Please try again.'
-      toast.error(errorMessage)
+      
+      // Show specific error message
+      if (errorMessage.includes('API key')) {
+        toast.error('ChangeNOW API key is not configured. Please contact the administrator to add CHANGENOW_API_KEY to Netlify environment variables.', {
+          duration: 6000
+        })
+      } else {
+        toast.error(errorMessage, {
+          duration: 5000
+        })
+      }
     } finally {
       setLoading(false)
     }

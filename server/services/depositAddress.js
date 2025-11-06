@@ -24,7 +24,7 @@ export const generateDepositAddress = async (orderData) => {
 
   // Check if ChangeNOW API is configured
   if (!BLOCKPAY_CONFIG.changenow.apiKey || BLOCKPAY_CONFIG.changenow.apiKey === '') {
-    throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file. Get your key from: https://changenow.io/api')
+    throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in Netlify environment variables. Get your key from: https://changenow.io/api')
   }
 
   try {
