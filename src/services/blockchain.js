@@ -104,84 +104,85 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
       // Create provider - ethers.js v6 constructor: JsonRpcProvider(url, network?, options?)
       const provider = new ethers.JsonRpcProvider(rpcUrl)
 
-    const requiredAmount = parseFloat(amount) || 0
-    const tolerance = Math.max(0.0001, requiredAmount * 0.01) // 1% tolerance or 0.0001, whichever is larger
+      const requiredAmount = parseFloat(amount) || 0
+      const tolerance = Math.max(0.0001, requiredAmount * 0.01) // 1% tolerance or 0.0001, whichever is larger
     
-    console.log(`💰 Verification parameters:`, {
-      chain,
-      recipientAddress,
-      requiredAmount,
-      currency,
-      tolerance,
-      sinceTimestamp: sinceTimestamp ? new Date(sinceTimestamp).toISOString() : null
-    })
-
-    if (currency === 'native' || !currency) {
-      // Check native token transactions
-      // Get recent block number (last 1000 blocks = ~3-4 hours on Ethereum)
-      const currentBlock = await provider.getBlockNumber().catch(err => {
-        console.error('Error getting block number:', err)
-        throw new Error('Failed to connect to blockchain RPC')
+      console.log(`💰 Verification parameters:`, {
+        chain,
+        recipientAddress,
+        requiredAmount,
+        currency,
+        tolerance,
+        sinceTimestamp: sinceTimestamp ? new Date(sinceTimestamp).toISOString() : null,
+        rpcUrl
       })
-      const startBlock = Math.max(0, currentBlock - 1000)
-      
-      console.log(`🔍 Checking blocks ${startBlock} to ${currentBlock} for ${recipientAddress}`)
-      
-      // Check last 100 blocks for recent transactions
-      for (let blockNum = currentBlock; blockNum >= startBlock && blockNum > 0; blockNum -= 10) {
-        try {
-          const block = await provider.getBlock(blockNum, true)
-          if (!block || !block.transactions) continue
 
-          // Check if block was mined after request creation
-          if (sinceTimestamp && block.timestamp * 1000 < sinceTimestamp) {
-            break // Stop checking older blocks
-          }
+      if (currency === 'native' || !currency) {
+        // Check native token transactions
+        // Get recent block number (last 1000 blocks = ~3-4 hours on Ethereum)
+        const currentBlock = await provider.getBlockNumber().catch(err => {
+          console.error('Error getting block number:', err)
+          throw new Error('Failed to connect to blockchain RPC')
+        })
+        const startBlock = Math.max(0, currentBlock - 1000)
+        
+        console.log(`🔍 Checking blocks ${startBlock} to ${currentBlock} for ${recipientAddress}`)
+        
+        // Check last 100 blocks for recent transactions
+        for (let blockNum = currentBlock; blockNum >= startBlock && blockNum > 0; blockNum -= 10) {
+          try {
+            const block = await provider.getBlock(blockNum, true)
+            if (!block || !block.transactions) continue
 
-          for (const tx of block.transactions) {
-            if (typeof tx === 'string') continue // Skip tx hashes, we need full tx objects
-            
-            // Check if transaction is to our recipient
-            if (tx.to && tx.to.toLowerCase() === recipientAddress.toLowerCase()) {
-              const value = parseFloat(ethers.formatEther(tx.value || 0))
+            // Check if block was mined after request creation
+            if (sinceTimestamp && block.timestamp * 1000 < sinceTimestamp) {
+              break // Stop checking older blocks
+            }
+
+            for (const tx of block.transactions) {
+              if (typeof tx === 'string') continue // Skip tx hashes, we need full tx objects
               
-              // Check if amount matches (within tolerance)
-              if (value >= requiredAmount - tolerance) {
-                // Get transaction receipt to confirm it succeeded
-                const receipt = await provider.getTransactionReceipt(tx.hash).catch(() => null)
-                if (receipt && receipt.status === 1) {
-                  return {
-                    verified: true,
-                    txHash: tx.hash,
-                    amount: value,
-                    from: tx.from,
-                    to: tx.to,
-                    blockNumber: blockNum,
-                    timestamp: block.timestamp * 1000,
-                    chain: chainConfig.name
+              // Check if transaction is to our recipient
+              if (tx.to && tx.to.toLowerCase() === recipientAddress.toLowerCase()) {
+                const value = parseFloat(ethers.formatEther(tx.value || 0))
+                
+                // Check if amount matches (within tolerance)
+                if (value >= requiredAmount - tolerance) {
+                  // Get transaction receipt to confirm it succeeded
+                  const receipt = await provider.getTransactionReceipt(tx.hash).catch(() => null)
+                  if (receipt && receipt.status === 1) {
+                    return {
+                      verified: true,
+                      txHash: tx.hash,
+                      amount: value,
+                      from: tx.from,
+                      to: tx.to,
+                      blockNumber: blockNum,
+                      timestamp: block.timestamp * 1000,
+                      chain: chainConfig.name
+                    }
                   }
                 }
               }
             }
+          } catch (blockError) {
+            // Skip blocks that fail (might be reorged or unavailable)
+            continue
           }
-        } catch (blockError) {
-          // Skip blocks that fail (might be reorged or unavailable)
-          continue
         }
-      }
-    } else {
-      // Check ERC-20 token transfers
-      const token = TOKENS[chain]?.[currency]
-      if (!token) {
-        return { verified: false, error: `Token ${currency} not supported on ${chainConfig.name}` }
-      }
+      } else {
+        // Check ERC-20 token transfers
+        const token = TOKENS[chain]?.[currency]
+        if (!token) {
+          return { verified: false, error: `Token ${currency} not supported on ${chainConfig.name}` }
+        }
 
-      // Use Transfer event logs to find token transfers
-      const tokenContract = new ethers.Contract(
-        token.address,
-        ['event Transfer(address indexed from, address indexed to, uint256 value)'],
-        provider
-      )
+        // Use Transfer event logs to find token transfers
+        const tokenContract = new ethers.Contract(
+          token.address,
+          ['event Transfer(address indexed from, address indexed to, uint256 value)'],
+          provider
+        )
 
         // Get recent Transfer events to this address
         // Calculate precise block range based on request creation time to avoid rate limits
@@ -226,82 +227,96 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
             currentBlock
           })
         }
-      
-      console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
-        tokenAddress: token.address,
-        recipientAddress: recipientAddress.toLowerCase(),
-        currentBlock,
-        startBlock,
-        blockRange: currentBlock - startBlock,
-        requiredAmount,
-        currency
-      })
-      
-      // Use lowercase for address comparison
-      const filter = tokenContract.filters.Transfer(null, recipientAddress.toLowerCase())
-      const events = await tokenContract.queryFilter(filter, startBlock, 'latest')
-      
-      console.log(`📊 Found ${events.length} Transfer events to ${recipientAddress}`)
-      
-      if (events.length === 0) {
-        console.log(`⚠️  No ${currency} transfer events found. Checking if recipient address is correct...`)
-        console.log(`   Token address: ${token.address}`)
-        console.log(`   Recipient: ${recipientAddress}`)
-      }
-
-      for (const event of events) {
-        // Check if event occurred after request creation
-        if (sinceTimestamp && event.blockNumber) {
-          const block = await provider.getBlock(event.blockNumber).catch(() => null)
-          if (block && block.timestamp * 1000 < sinceTimestamp) {
-            continue
-          }
-        }
-
-        const value = parseFloat(ethers.formatUnits(event.args.value, token.decimals))
         
-        // Normalize addresses for comparison (case-insensitive)
-        const eventTo = event.args.to?.toLowerCase()
-        const recipientLower = recipientAddress.toLowerCase()
-        
-        console.log(`🔍 Checking token transfer:`, {
-          value,
+        console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
+          tokenAddress: token.address,
+          recipientAddress: recipientAddress.toLowerCase(),
+          currentBlock,
+          startBlock,
+          blockRange: currentBlock - startBlock,
           requiredAmount,
-          tolerance,
-          matches: value >= requiredAmount - tolerance,
-          eventTo,
-          recipientLower,
-          addressesMatch: eventTo === recipientLower,
-          event: event.transactionHash,
-          blockNumber: event.blockNumber
+          currency,
+          rpcUrl
         })
         
-        // Verify recipient address matches (case-insensitive)
-        if (eventTo !== recipientLower) {
-          console.log(`⚠️  Address mismatch: event.to=${eventTo}, recipient=${recipientLower}`)
-          continue
+        // Use lowercase for address comparison
+        const filter = tokenContract.filters.Transfer(null, recipientAddress.toLowerCase())
+        
+        // Add delay before querying to avoid rate limits
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
         
-        // Check if amount matches (within tolerance)
-        if (value >= requiredAmount - tolerance) {
-          // Get transaction to get hash
-          const tx = await provider.getTransaction(event.transactionHash).catch(() => null)
-          const receipt = await provider.getTransactionReceipt(event.transactionHash).catch(() => null)
-          
-          if (receipt && receipt.status === 1) {
+        console.log(`🔍 Querying with filter:`, {
+          fromBlock: startBlock,
+          toBlock: 'latest',
+          recipient: recipientAddress.toLowerCase(),
+          blockRange: currentBlock - startBlock
+        })
+        
+        const events = await tokenContract.queryFilter(filter, startBlock, 'latest')
+        
+        console.log(`📊 Found ${events.length} Transfer events to ${recipientAddress}`)
+        
+        if (events.length === 0) {
+          console.log(`⚠️  No ${currency} transfer events found. Checking if recipient address is correct...`)
+          console.log(`   Token address: ${token.address}`)
+          console.log(`   Recipient: ${recipientAddress}`)
+        }
+
+        for (const event of events) {
+          // Check if event occurred after request creation
+          if (sinceTimestamp && event.blockNumber) {
             const block = await provider.getBlock(event.blockNumber).catch(() => null)
-            return {
-              verified: true,
-              txHash: event.transactionHash,
-              amount: value,
-              from: event.args.from,
-              to: event.args.to,
-              blockNumber: event.blockNumber,
-              timestamp: block ? block.timestamp * 1000 : Date.now(),
-              chain: chainConfig.name,
-              token: token.symbol
+            if (block && block.timestamp * 1000 < sinceTimestamp) {
+              continue
             }
           }
+
+          const value = parseFloat(ethers.formatUnits(event.args.value, token.decimals))
+          
+          // Normalize addresses for comparison (case-insensitive)
+          const eventTo = event.args.to?.toLowerCase()
+          const recipientLower = recipientAddress.toLowerCase()
+          
+          console.log(`🔍 Checking token transfer:`, {
+            value,
+            requiredAmount,
+            tolerance,
+            matches: value >= requiredAmount - tolerance,
+            eventTo,
+            recipientLower,
+            addressesMatch: eventTo === recipientLower,
+            event: event.transactionHash,
+            blockNumber: event.blockNumber
+          })
+          
+          // Verify recipient address matches (case-insensitive)
+          if (eventTo !== recipientLower) {
+            console.log(`⚠️  Address mismatch: event.to=${eventTo}, recipient=${recipientLower}`)
+            continue
+          }
+          
+          // Check if amount matches (within tolerance)
+          if (value >= requiredAmount - tolerance) {
+            // Get transaction to get hash
+            const tx = await provider.getTransaction(event.transactionHash).catch(() => null)
+            const receipt = await provider.getTransactionReceipt(event.transactionHash).catch(() => null)
+            
+            if (receipt && receipt.status === 1) {
+              const block = await provider.getBlock(event.blockNumber).catch(() => null)
+              return {
+                verified: true,
+                txHash: event.transactionHash,
+                amount: value,
+                from: event.args.from,
+                to: event.args.to,
+                blockNumber: event.blockNumber,
+                timestamp: block ? block.timestamp * 1000 : Date.now(),
+                chain: chainConfig.name,
+                token: token.symbol
+              }
+            }
           }
         }
       }
@@ -333,10 +348,6 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
   
   // If we get here, all endpoints failed
   return { verified: false, error: lastError?.message || 'All RPC endpoints failed or rate limited' }
-  } catch (error) {
-    console.error(`Error checking ${chain} transactions:`, error)
-    return { verified: false, error: error.message || 'Transaction check failed' }
-  }
 }
 
 // Ethereum/BSC/Polygon verification - checks transaction history
