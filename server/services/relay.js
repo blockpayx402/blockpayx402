@@ -53,6 +53,79 @@ const getRelayChainId = (chain) => {
 }
 
 /**
+ * Token decimals mapping
+ */
+const TOKEN_DECIMALS = {
+  // Native currencies
+  'ETH': 18,
+  'BNB': 18,
+  'MATIC': 18,
+  'SOL': 9,
+  
+  // Ethereum tokens
+  'USDT_ethereum': 6,
+  'USDC_ethereum': 6,
+  'DAI_ethereum': 18,
+  
+  // BNB Chain tokens
+  'USDT_bnb': 18,
+  'USDC_bnb': 18,
+  'BUSD_bnb': 18,
+  
+  // Polygon tokens
+  'USDT_polygon': 6,
+  'USDC_polygon': 6,
+  
+  // Solana tokens
+  'USDT_solana': 6,
+  'USDC_solana': 6,
+}
+
+/**
+ * Get token decimals for a given asset and chain
+ */
+const getTokenDecimals = (asset, chain) => {
+  const assetUpper = asset.toUpperCase()
+  
+  // Check for native currency
+  if (assetUpper === 'ETH' && chain === 'ethereum') return 18
+  if (assetUpper === 'BNB' && chain === 'bnb') return 18
+  if (assetUpper === 'MATIC' && chain === 'polygon') return 18
+  if (assetUpper === 'SOL' && chain === 'solana') return 9
+  
+  // Check for token
+  const key = `${assetUpper}_${chain}`
+  return TOKEN_DECIMALS[key] || 18 // Default to 18 if unknown
+}
+
+/**
+ * Convert amount to smallest unit (wei, satoshi, etc.) as a string with only digits
+ * @param {number|string} amount - Amount in human-readable format (e.g., 1.5)
+ * @param {string} asset - Token symbol (e.g., 'USDT', 'ETH')
+ * @param {string} chain - Chain name (e.g., 'ethereum', 'bnb')
+ * @returns {string} - Amount in smallest unit as string with only digits
+ */
+const convertToSmallestUnit = (amount, asset, chain) => {
+  const decimals = getTokenDecimals(asset, chain)
+  const amountNum = typeof amount === 'string' ? parseFloat(amount) : amount
+  
+  // Multiply by 10^decimals and convert to BigInt to avoid floating point issues
+  const multiplier = BigInt(10 ** decimals)
+  const amountParts = amountNum.toString().split('.')
+  const wholePart = BigInt(amountParts[0] || '0')
+  const fractionalPart = amountParts[1] || ''
+  
+  // Pad fractional part to match decimals
+  const paddedFractional = fractionalPart.padEnd(decimals, '0').slice(0, decimals)
+  const fractionalBigInt = BigInt(paddedFractional || '0')
+  
+  // Calculate: (wholePart * 10^decimals) + fractionalBigInt
+  const result = (wholePart * multiplier) + fractionalBigInt
+  
+  return result.toString()
+}
+
+/**
  * Get Relay currency address
  */
 const getRelayCurrencyAddress = (asset, chain) => {
@@ -118,12 +191,15 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     
     const apiUrl = 'https://api.relay.link/quote'
     
+    // Convert amount to smallest unit (wei, lamports, etc.) as string with only digits
+    const amountInSmallestUnit = convertToSmallestUnit(amount, fromAsset, fromChain)
+    
     const payload = {
       originChainId,
       destinationChainId,
       originCurrency,
       destinationCurrency,
-      amount: amount.toString(),
+      amount: amountInSmallestUnit,
       tradeType: 'EXACT_INPUT',
       recipient: '0x0000000000000000000000000000000000000000', // Placeholder, will be set in actual transaction
       user: '0x0000000000000000000000000000000000000000', // Placeholder
@@ -167,22 +243,28 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     // Extract estimated amount from Relay response
     // Relay response structure: { steps: [...], destinationAmount: "...", ... }
     // The response format may vary - check multiple possible fields
-    const estimatedAmount = data.destinationAmount || 
+    const rawEstimatedAmount = data.destinationAmount || 
                            data.quote?.destinationAmount || 
                            data.steps?.[data.steps.length - 1]?.destinationAmount ||
                            null
     
-    if (!estimatedAmount) {
+    if (!rawEstimatedAmount) {
       console.error('[Relay Link] Invalid response structure:', JSON.stringify(data, null, 2))
       throw new Error('Invalid response from Relay Link API: missing destinationAmount')
     }
     
+    // Convert estimated amount back from smallest unit to human-readable format
+    const toDecimals = getTokenDecimals(toAsset, toChain)
+    const estimatedAmountBigInt = BigInt(rawEstimatedAmount.toString())
+    const divisor = BigInt(10 ** toDecimals)
+    const estimatedAmountHuman = (Number(estimatedAmountBigInt) / Number(divisor)).toString()
+    
     // Calculate rate if available
     const rate = data.rate || 
-                 (estimatedAmount && amount ? (parseFloat(estimatedAmount) / parseFloat(amount)).toString() : null)
+                 (estimatedAmountHuman && amount ? (parseFloat(estimatedAmountHuman) / parseFloat(amount)).toString() : null)
     
     return {
-      estimatedAmount: estimatedAmount.toString(),
+      estimatedAmount: estimatedAmountHuman, // Return in human-readable format
       rate: rate,
       minAmount: data.minAmount || null,
       maxAmount: data.maxAmount || null,
@@ -224,12 +306,15 @@ export const createRelayTransaction = async (orderData) => {
     
     const apiUrl = 'https://api.relay.link/quote'
     
+    // Convert amount to smallest unit (wei, lamports, etc.) as string with only digits
+    const amountInSmallestUnit = convertToSmallestUnit(amount, fromAsset, fromChain)
+    
     const payload = {
       originChainId,
       destinationChainId,
       originCurrency,
       destinationCurrency,
-      amount: amount.toString(),
+      amount: amountInSmallestUnit,
       tradeType: 'EXACT_INPUT',
       recipient: recipientAddress,
       user: userAddress || recipientAddress,
