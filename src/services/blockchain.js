@@ -161,21 +161,32 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
       )
 
       // Get recent Transfer events to this address
+      // Check more blocks for BNB Chain (faster blocks = more blocks needed)
       const currentBlock = await provider.getBlockNumber()
-      const startBlock = Math.max(0, currentBlock - 1000)
+      const blocksToCheck = chain === 'bnb' ? 5000 : 1000 // BNB has faster blocks, check more
+      const startBlock = Math.max(0, currentBlock - blocksToCheck)
       
       console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
         tokenAddress: token.address,
-        recipientAddress,
+        recipientAddress: recipientAddress.toLowerCase(),
         currentBlock,
         startBlock,
-        blockRange: currentBlock - startBlock
+        blockRange: currentBlock - startBlock,
+        requiredAmount,
+        currency
       })
       
-      const filter = tokenContract.filters.Transfer(null, recipientAddress)
+      // Use lowercase for address comparison
+      const filter = tokenContract.filters.Transfer(null, recipientAddress.toLowerCase())
       const events = await tokenContract.queryFilter(filter, startBlock, 'latest')
       
       console.log(`📊 Found ${events.length} Transfer events to ${recipientAddress}`)
+      
+      if (events.length === 0) {
+        console.log(`⚠️  No ${currency} transfer events found. Checking if recipient address is correct...`)
+        console.log(`   Token address: ${token.address}`)
+        console.log(`   Recipient: ${recipientAddress}`)
+      }
 
       for (const event of events) {
         // Check if event occurred after request creation
