@@ -406,24 +406,46 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
       recipient: placeholderAddress,
     })
     
-    console.log('[Relay] Quote response:', JSON.stringify(quote).substring(0, 300))
+    console.log('[Relay] Quote response:', JSON.stringify(quote, null, 2))
     
     // Extract destination amount from quote
     // Relay SDK quote format may vary, so we handle multiple possible fields
-    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount || quote.estimatedAmount || quote.amountOut
+    // Check various possible locations for the output amount
+    const destinationAmount = quote.destinationAmount || 
+                              quote.toAmount || 
+                              quote.outputAmount || 
+                              quote.estimatedAmount || 
+                              quote.amountOut ||
+                              quote.amountOutMin ||
+                              quote.expectedOutput ||
+                              quote.output ||
+                              quote.receiveAmount ||
+                              (quote.route && quote.route.amountOut) ||
+                              (quote.route && quote.route.outputAmount) ||
+                              (quote.routes && quote.routes[0] && quote.routes[0].amountOut) ||
+                              (quote.routes && quote.routes[0] && quote.routes[0].outputAmount)
     
-    if (!destinationAmount) {
-      console.error('[Relay] No destination amount in quote:', quote)
-      throw new Error('Invalid response from Relay SDK: missing destination amount')
+    console.log('[Relay] Extracted destination amount:', destinationAmount)
+    console.log('[Relay] Quote keys:', Object.keys(quote))
+    
+    if (!destinationAmount && destinationAmount !== 0) {
+      console.error('[Relay] No destination amount in quote. Full quote:', JSON.stringify(quote, null, 2))
+      throw new Error('Invalid response from Relay SDK: missing destination amount. Quote structure may have changed.')
     }
     
     // Convert back from smallest unit
     const destDecimals = destinationToken.decimals || 18
     // destinationAmount might already be in human-readable format or smallest unit
     // Check if it's a string (likely smallest unit) or number (might be human-readable)
-    const estimatedAmount = typeof destinationAmount === 'string' 
-      ? parseFloat(destinationAmount) / Math.pow(10, destDecimals)
+    // If it's a very large number, it's likely in smallest unit
+    const amountValue = typeof destinationAmount === 'string' 
+      ? parseFloat(destinationAmount) 
       : parseFloat(destinationAmount)
+    
+    // If amount is very large (> 1e10), assume it's in smallest unit and convert
+    const estimatedAmount = amountValue > 1e10 
+      ? amountValue / Math.pow(10, destDecimals)
+      : amountValue
     
     return {
       estimatedAmount: estimatedAmount,
