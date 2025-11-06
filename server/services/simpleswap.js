@@ -194,8 +194,8 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
-    // SimpleSwap API v1 endpoint: https://api.simpleswap.io/v1/create-exchange
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v1/create-exchange`
+    // SimpleSwap API v1 endpoint: /create_exchange with api_key as query parameter
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
     
     // Normalize amount
     const payloadAmount = normalizeAmount(normalizedAmount)
@@ -235,8 +235,9 @@ export const createExchangeTransaction = async (orderData) => {
       currency_to: toCurrency,
       amount: payloadAmount,
       address_to: recipientAddress.trim(),
-      ...(validRefundAddress && { address_from: validRefundAddress }), // Refund address
-      ...(orderId && { extra_id: orderId }),
+      extra_id_to: '', // Empty string if not needed
+      ...(validRefundAddress && { user_refund_address: validRefundAddress }), // Refund address
+      ...(orderId && { user_refund_extra_id: orderId }), // Use extra_id for order tracking
     }
 
     log('info', 'Creating exchange transaction', {
@@ -258,9 +259,8 @@ export const createExchangeTransaction = async (orderData) => {
           'Content-Type': 'application/json',
         }
         
-        // SimpleSwap API authentication - use X-API-KEY header
-        // The token provided is the API key
-        headers['X-API-KEY'] = apiKey
+        // SimpleSwap API v1 uses query parameter for auth, not headers
+        // api_key is already in the URL
         
         response = await fetchWithTimeout(apiUrl, {
           method: 'POST',
@@ -376,15 +376,14 @@ export const getExchangeStatus = async (exchangeId) => {
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in your .env file.')
     }
 
-    // SimpleSwap API v1 endpoint: https://api.simpleswap.io/v1/exchange/{id}
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v1/exchange/${exchangeId.trim()}`
+    // SimpleSwap API v1 endpoint: /get_exchange with api_key as query parameter
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_exchange?api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(exchangeId.trim())}`
     
     log('info', 'Getting transaction status', { exchangeId })
     
-    // SimpleSwap authentication
+    // SimpleSwap API v1 uses query parameter for auth, not headers
     const headers = {
       'Content-Type': 'application/json',
-      'X-API-KEY': apiKey,
     }
     
     const response = await fetchWithTimeout(apiUrl, {
@@ -482,13 +481,14 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
     const normalizedAmount = normalizeAmount(amount)
-    // SimpleSwap API v1 endpoint: https://api.simpleswap.io/v1/estimate
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v1/estimate?currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
+    // SimpleSwap API v1 endpoint: /get_estimated with api_key as query parameter
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
     
     log('info', 'Getting exchange rate', {
       from: `${fromAsset}(${fromChain})`,
       to: `${toAsset}(${toChain})`,
-      amount: normalizedAmount
+      amount: normalizedAmount,
+      url: apiUrl.replace(apiKey, '***')
     })
 
     // Retry on transient server errors with exponential backoff
@@ -497,10 +497,9 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // SimpleSwap authentication
+        // SimpleSwap API v1 uses query parameter for auth, not headers
         const headers = {
           'Content-Type': 'application/json',
-          'X-API-KEY': apiKey,
         }
         
         response = await fetchWithTimeout(apiUrl, {
