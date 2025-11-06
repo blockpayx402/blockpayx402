@@ -272,20 +272,49 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     
     // Get chains directly from API instead of SDK to ensure we have all chains
     const chains = await getAllRelayChains()
+    
+    // Map common chain names to IDs
+    const chainNameMap = {
+      'ethereum': '1',
+      'eth': '1',
+      'bsc': '56',
+      'bnb': '56',
+      'binance': '56',
+      'polygon': '137',
+      'matic': '137',
+      'arbitrum': '42161',
+      'arbitrum-one': '42161',
+      'optimism': '10',
+      'op': '10',
+      'op-mainnet': '10',
+      'base': '8453',
+      'solana': '792703809',
+      'sol': '792703809',
+    }
+    
+    const fromChainId = chainNameMap[fromChain.toLowerCase()] || fromChain
+    const toChainId = chainNameMap[toChain.toLowerCase()] || toChain
+    
     const originChain = chains.find(c => {
       const cId = c.chainId || c.id || c.chain_id
-      const cName = (c.name || c.displayName || '').toLowerCase()
-      return cId?.toString() === fromChain.toString() || 
+      const cName = (c.name || c.displayName || c.label || '').toLowerCase().replace(/\s+/g, '-')
+      const cSymbol = (c.symbol || '').toLowerCase()
+      return cId?.toString() === fromChainId.toString() || 
+             cId?.toString() === fromChain.toString() ||
              cName === fromChain.toLowerCase() ||
-             c.symbol?.toLowerCase() === fromChain.toLowerCase()
+             cName === fromChainId.toLowerCase() ||
+             cSymbol === fromChain.toLowerCase()
     })
     
     const destinationChain = chains.find(c => {
       const cId = c.chainId || c.id || c.chain_id
-      const cName = (c.name || c.displayName || '').toLowerCase()
-      return cId?.toString() === toChain.toString() || 
+      const cName = (c.name || c.displayName || c.label || '').toLowerCase().replace(/\s+/g, '-')
+      const cSymbol = (c.symbol || '').toLowerCase()
+      return cId?.toString() === toChainId.toString() || 
+             cId?.toString() === toChain.toString() ||
              cName === toChain.toLowerCase() ||
-             c.symbol?.toLowerCase() === toChain.toLowerCase()
+             cName === toChainId.toLowerCase() ||
+             cSymbol === toChain.toLowerCase()
     })
     
     if (!originChain) {

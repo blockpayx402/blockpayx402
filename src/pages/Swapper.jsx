@@ -274,11 +274,18 @@ const Swapper = () => {
             const decimals = selectedToken?.decimals || 18
             const balanceInTokens = (parseInt(balance, 16) / Math.pow(10, decimals)).toFixed(6)
             setWalletBalance(balanceInTokens)
-          } else if (selectedToken?.address) {
-            // ERC20 token balance
+          } else if (selectedToken?.address && selectedToken.address.trim() !== '' && selectedToken.address !== '0x0000000000000000000000000000000000000000') {
+            // ERC20 token balance - only if address is valid
             try {
               const { ethers } = await import('ethers')
               const provider = new ethers.BrowserProvider(window.ethereum)
+              
+              // Validate address format
+              if (!ethers.isAddress(selectedToken.address)) {
+                console.warn('Invalid token address:', selectedToken.address)
+                setWalletBalance('0.0')
+                return
+              }
               
               // ERC20 balanceOf ABI
               const erc20Abi = [
@@ -305,7 +312,13 @@ const Swapper = () => {
               setWalletBalance(parseFloat(balanceInTokens).toFixed(6))
             } catch (error) {
               console.error('Error fetching ERC20 token balance:', error)
-              setWalletBalance('0.0')
+              // If it's a contract error (invalid address or contract doesn't exist), set to 0
+              if (error.code === 'BAD_DATA' || error.message?.includes('decode')) {
+                console.warn('Token contract may not exist or address is invalid:', selectedToken.address)
+                setWalletBalance('0.0')
+              } else {
+                setWalletBalance('0.0')
+              }
             }
           } else {
             setWalletBalance('0.0')
