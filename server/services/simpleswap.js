@@ -101,15 +101,122 @@ const NETWORK_MAP = {
   'bitcoin': 'btc',
 }
 
+// Cache for SimpleSwap currency list
+let currencyListCache = null
+let currencyListCacheTime = 0
+const CURRENCY_CACHE_TTL = 3600000 // 1 hour
+
+/**
+ * Fetch available currencies from SimpleSwap API
+ * This gets the exact currency codes SimpleSwap uses
+ */
+const fetchSimpleSwapCurrencies = async () => {
+  try {
+    const apiKey = (process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || '').trim()
+    if (!apiKey) {
+      log('warn', 'No API key for fetching currencies, using fallback mapping')
+      return null
+    }
+
+    // Try v3 first
+    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/get_currencies`
+    let headers = { 'Authorization': `Bearer ${apiKey}` }
+    
+    let response = await fetchWithTimeout(apiUrl, { method: 'GET', headers }, 10000)
+    
+    // If v3 fails, try v1
+    if (!response.ok) {
+      apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_currencies?api_key=${encodeURIComponent(apiKey)}`
+      headers = {}
+      response = await fetchWithTimeout(apiUrl, { method: 'GET', headers }, 10000)
+    }
+    
+    if (response.ok) {
+      const data = await response.json()
+      currencyListCache = data
+      currencyListCacheTime = Date.now()
+      log('info', 'Fetched SimpleSwap currency list', { count: Array.isArray(data) ? data.length : Object.keys(data).length })
+      return data
+    }
+  } catch (error) {
+    log('warn', 'Failed to fetch SimpleSwap currencies, using fallback', { error: error.message })
+  }
+  return null
+}
+
+/**
+ * Get SimpleSwap currency code by searching the currency list
+ * This uses the exact format SimpleSwap uses
+ */
+const getSimpleSwapCurrencyFromList = (currency, chain = null) => {
+  if (!currencyListCache) return null
+  
+  const upperCurrency = currency.toUpperCase()
+  const chainLower = chain ? chain.toLowerCase() : null
+  
+  // Try to find exact match in currency list
+  // Currency list format varies, could be array or object
+  let currencies = []
+  if (Array.isArray(currencyListCache)) {
+    currencies = currencyListCache
+  } else if (currencyListCache.currencies) {
+    currencies = currencyListCache.currencies
+  } else if (typeof currencyListCache === 'object') {
+    currencies = Object.values(currencyListCache)
+  }
+  
+  // Search for matching currency
+  for (const item of currencies) {
+    const itemSymbol = (item.symbol || item.code || item.currency || '').toUpperCase()
+    const itemNetwork = (item.network || item.chain || '').toLowerCase()
+    
+    // Match by symbol
+    if (itemSymbol === upperCurrency) {
+      // If chain specified, match network too
+      if (chainLower) {
+        const networkMap = {
+          'ethereum': ['eth', 'ethereum', 'erc20'],
+          'bnb': ['bsc', 'bep20', 'binance'],
+          'polygon': ['matic', 'polygon'],
+          'solana': ['sol', 'solana', 'spl'],
+        }
+        const expectedNetworks = networkMap[chainLower] || [chainLower]
+        
+        if (!itemNetwork || expectedNetworks.some(n => itemNetwork.includes(n))) {
+          return item.code || item.currency || itemSymbol.toLowerCase()
+        }
+      } else {
+        // No chain specified, return first match
+        return item.code || item.currency || itemSymbol.toLowerCase()
+      }
+    }
+  }
+  
+  return null
+}
+
 /**
  * Get SimpleSwap currency code
- * SimpleSwap uses format like: bnb, usdt, usdt_bsc, usdt_eth
+ * First tries to fetch from SimpleSwap API, then falls back to mapping
  * @param {string} currency - Currency symbol
  * @param {string} chain - Chain name
  * @returns {string} - SimpleSwap currency code
  */
-const getSimpleSwapCurrency = (currency, chain = null) => {
+const getSimpleSwapCurrency = async (currency, chain = null) => {
   if (!currency) return 'eth'
+  
+  // Refresh cache if expired
+  if (!currencyListCache || Date.now() - currencyListCacheTime > CURRENCY_CACHE_TTL) {
+    await fetchSimpleSwapCurrencies()
+  }
+  
+  // Try to get from currency list first
+  const fromList = getSimpleSwapCurrencyFromList(currency, chain)
+  if (fromList) {
+    return fromList
+  }
+  
+  // Fallback to mapping
   const upperCurrency = currency.toUpperCase()
   const chainLower = chain ? chain.toLowerCase() : null
   
@@ -122,13 +229,7 @@ const getSimpleSwapCurrency = (currency, chain = null) => {
   if (chainLower && NETWORK_MAP[chainLower]) {
     const network = NETWORK_MAP[chainLower]
     
-    // Special handling for BSC tokens
-    // SimpleSwap uses just the currency code for USDT/BUSD on BSC (not "usdt_bsc")
-    if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
-      return upperCurrency.toLowerCase()
-    }
-    
-    // For other networks, use currency_network format
+    // For tokens on any network, use currency_network format
     // Format: currency_network (e.g., usdc_eth, usdc_sol)
     return `${upperCurrency.toLowerCase()}_${network}`
   }
@@ -212,9 +313,9 @@ export const createExchangeTransaction = async (orderData) => {
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
     }
 
-    // Get currency codes
-    const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
-    const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
+    // Get currency codes (await since it's now async)
+    const fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
+    const toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
     
     // Try v3 first, fallback to v1
     let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/create_exchange`
@@ -554,8 +655,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in your .env file.')
     }
 
-    const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
-    const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
+    const fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
+    const toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
     const normalizedAmount = normalizeAmount(amount)
     
     console.log('[SimpleSwap getExchangeRate] Currency mapping:', {
