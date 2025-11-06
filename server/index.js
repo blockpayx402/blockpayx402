@@ -364,18 +364,39 @@ app.post('/api/exchange-rate', async (req, res) => {
       }
     }
 
+    // Ensure result is defined before accessing its properties
+    if (!result) {
+      throw new Error('Failed to get exchange rate data')
+    }
+
     res.json({
       fromAmount: direction === 'reverse' ? (requiredFromAmount || fromAmount) : fromAmount,
-      estimatedToAmount: direction === 'reverse' ? parseFloat(amount) : result.estimatedAmount,
-      rate: result.rate,
-      minAmount: result.minAmount,
-      maxAmount: result.maxAmount,
+      estimatedToAmount: direction === 'reverse' ? (estimatedToAmount || parseFloat(amount)) : (result.estimatedAmount || estimatedToAmount),
+      rate: result.rate || null,
+      minAmount: result.minAmount || null,
+      maxAmount: result.maxAmount || null,
       direction
     })
   } catch (error) {
     console.error('Error getting exchange rate:', error)
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to get exchange rate. Please try again.'
+    
+    if (error.message) {
+      if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
+        errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration.'
+      } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
+        errorMessage = 'This exchange pair is not available. Please try a different currency or chain.'
+      } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Cannot connect to exchange service. Please check your internet connection.'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    
     res.status(500).json({ 
-      error: error.message || 'Failed to get exchange rate. Please check your ChangeNOW API key and try again.' 
+      error: errorMessage
     })
   }
 })

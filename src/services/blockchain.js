@@ -56,12 +56,14 @@ export const CHAINS = {
     symbol: 'SOL',
     rpcUrl: 'https://api.mainnet-beta.solana.com',
     // Multiple RPC endpoints for better reliability and rate limit handling
+    // Note: Many free endpoints require API keys or block browser requests
+    // Using public endpoints that work from browsers
     rpcUrls: [
-      'https://rpc.ankr.com/solana', // Ankr (free, reliable, no rate limits)
-      'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy demo (free tier)
-      'https://api.mainnet-beta.solana.com', // Official Solana (fallback, may be rate-limited)
-      'https://solana-api.projectserum.com', // Project Serum (if still active)
+      'https://api.mainnet-beta.solana.com', // Official Solana (works from browser, may be rate-limited)
+      'https://solana-api.projectserum.com', // Project Serum
+      'https://rpc.ankr.com/solana', // Ankr (may require API key, but try anyway)
       'https://1rpc.io/sol', // 1RPC (free tier)
+      'https://solana-rpc.publicnode.com', // Public Node (free, no API key)
     ],
     explorerUrl: 'https://solscan.io',
     decimals: 9,
