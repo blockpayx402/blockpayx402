@@ -205,15 +205,24 @@ const getSimpleSwapCurrencyFromList = (currency, chain = null) => {
 const getSimpleSwapCurrency = async (currency, chain = null) => {
   if (!currency) return 'eth'
   
-  // Refresh cache if expired
-  if (!currencyListCache || Date.now() - currencyListCacheTime > CURRENCY_CACHE_TTL) {
-    await fetchSimpleSwapCurrencies()
-  }
-  
-  // Try to get from currency list first
-  const fromList = getSimpleSwapCurrencyFromList(currency, chain)
-  if (fromList) {
-    return fromList
+  try {
+    // Refresh cache if expired
+    if (!currencyListCache || Date.now() - currencyListCacheTime > CURRENCY_CACHE_TTL) {
+      await fetchSimpleSwapCurrencies()
+    }
+    
+    // Try to get from currency list first
+    const fromList = getSimpleSwapCurrencyFromList(currency, chain)
+    if (fromList) {
+      return fromList
+    }
+  } catch (error) {
+    // If fetching currencies fails, just use fallback mapping
+    log('warn', 'Failed to get currency from list, using fallback', { 
+      currency, 
+      chain, 
+      error: error.message 
+    })
   }
   
   // Fallback to mapping
