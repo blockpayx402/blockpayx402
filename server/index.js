@@ -692,15 +692,20 @@ app.get('/api/relay/chains', async (req, res) => {
 app.get('/api/relay/tokens/:chainId', async (req, res) => {
   try {
     const { chainId } = req.params
+    console.log('[API] Fetching tokens for chainId:', chainId)
     const tokens = await getAllRelayTokens(chainId)
+    console.log('[API] Got', tokens.length, 'tokens for chainId', chainId)
+    
     // Format tokens for frontend
     const formattedTokens = tokens.map(token => ({
-      symbol: token.symbol || token.name,
-      address: token.address || token.contractAddress,
+      symbol: token.symbol || token.name || 'UNKNOWN',
+      address: token.address || token.contractAddress || '',
       decimals: token.decimals || 18,
-      name: token.name,
-      isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000',
+      name: token.name || token.symbol || 'Unknown Token',
+      isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
     }))
+    
+    console.log('[API] Formatted', formattedTokens.length, 'tokens')
     res.json({ tokens: formattedTokens })
   } catch (error) {
     console.error('[API] Error fetching tokens:', error)

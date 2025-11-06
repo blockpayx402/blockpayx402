@@ -452,10 +452,64 @@ export const getAllRelayTokens = async (chainId) => {
       isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
     }))
     
+    // If still no tokens, add at least native token as fallback
+    if (tokens.length === 0) {
+      console.log('[Relay] No tokens found, adding native token fallback')
+      const chains = await getAllRelayChains()
+      const chain = chains.find(c => 
+        c.chainId?.toString() === chainId.toString() || 
+        c.id?.toString() === chainId.toString() ||
+        c.chainId === chainId ||
+        c.id === chainId
+      )
+      
+      if (chain) {
+        const nativeSymbol = chain.symbol || chain.nativeCurrency?.symbol || chain.native_currency?.symbol || 'ETH'
+        tokens = [{
+          symbol: nativeSymbol,
+          address: '0x0000000000000000000000000000000000000000',
+          decimals: chain.decimals || chain.nativeCurrency?.decimals || 18,
+          name: nativeSymbol,
+          isNative: true,
+        }]
+        
+        // Add common tokens for known chains
+        const commonTokens = {
+          '1': ['USDT', 'USDC', 'DAI', 'WBTC'], // Ethereum
+          '56': ['USDT', 'BUSD', 'USDC', 'CAKE'], // BSC
+          '137': ['USDT', 'USDC', 'DAI'], // Polygon
+          '42161': ['USDT', 'USDC', 'ARB'], // Arbitrum
+          '10': ['USDT', 'USDC', 'OP'], // Optimism
+        }
+        
+        const chainIdStr = chainId.toString()
+        if (commonTokens[chainIdStr]) {
+          commonTokens[chainIdStr].forEach(symbol => {
+            tokens.push({
+              symbol: symbol,
+              address: '', // Will need to be fetched or looked up
+              decimals: symbol === 'WBTC' ? 8 : (symbol === 'USDT' || symbol === 'USDC' ? 6 : 18),
+              name: symbol,
+              isNative: false,
+            })
+          })
+        }
+        
+        console.log('[Relay] Added fallback tokens:', tokens.length)
+      }
+    }
+    
     return tokens
   } catch (error) {
     console.error('[Relay SDK] Error getting tokens:', error)
-    return []
+    // Return at least native token on error
+    return [{
+      symbol: 'ETH',
+      address: '0x0000000000000000000000000000000000000000',
+      decimals: 18,
+      name: 'Ethereum',
+      isNative: true,
+    }]
   }
 }
 
