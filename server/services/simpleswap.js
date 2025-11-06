@@ -437,6 +437,18 @@ export const createExchangeTransaction = async (orderData) => {
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
         
+        // Log detailed error for debugging
+        console.error('[SimpleSwap createExchangeTransaction] API Error:', {
+          status,
+          fromCurrency,
+          toCurrency,
+          amount: payloadAmount,
+          error: parsed,
+          fullResponse: text.substring(0, 500),
+          apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***'),
+          payload: { ...payload, address_to: payload.address_to?.substring(0, 10) + '...' }
+        })
+        
         // If v3 returns 404 or 401, try v1
         if (useV3 && (status === 404 || status === 401) && attempt === 0) {
           log('info', 'v3 not available, falling back to v1', { status, error: parsed.error || parsed.message })
