@@ -4,7 +4,7 @@
  * Supports ChangeNOW for cross-chain swaps
  */
 
-import { createExchangeTransaction, getExchangeStatus, validateExchangePair } from './changenow.js'
+import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
@@ -25,30 +25,8 @@ export const generateDepositAddress = async (orderData) => {
   } = orderData
 
   try {
-    // Validate pair availability up-front (with timeout to avoid 502s)
-    // Skip validation if it takes too long - let ChangeNOW handle it
-    try {
-      const pairCheckPromise = validateExchangePair(fromAsset, toAsset, fromChain, toChain)
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Validation timeout')), 3000)
-      )
-      const pairCheck = await Promise.race([pairCheckPromise, timeoutPromise])
-      
-      if (pairCheck && !pairCheck.available) {
-        // Provide actionable guidance
-        const sameChain = fromChain === toChain
-        const hint = sameChain
-          ? `Try changing the asset (e.g., USDT(${fromChain})) or adjust amount.`
-          : `Try using a supported path on the origin chain (e.g., swap to USDT(${fromChain}) first) or try a nearby amount.`
-        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). ${hint}`)
-      }
-    } catch (validationError) {
-      // If validation fails or times out, continue anyway - ChangeNOW will handle it
-      if (!validationError.message.includes('timeout')) {
-        console.warn('[DepositAddress] Pair validation warning:', validationError.message)
-      }
-      // Continue to attempt transaction - ChangeNOW will return proper error if pair is invalid
-    }
+    // Skip pair validation - it causes false negatives for valid pairs
+    // ChangeNOW will return proper errors if pair is truly invalid
 
     // Calculate BlockPay platform fee (with chain-specific recipient)
     const fee = calculatePlatformFee(amount, fromAsset, fromChain)
