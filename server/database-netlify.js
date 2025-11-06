@@ -3,6 +3,8 @@
  * Uses in-memory storage with localStorage-like persistence for serverless
  */
 
+import { BLOCKPAY_CONFIG } from './config.js'
+
 // In-memory database (persists during function execution)
 let memoryDB = {
   payment_requests: [],
@@ -105,7 +107,7 @@ export const dbHelpers = {
       recipient: requestData.recipient || '',
       status: requestData.status || 'pending',
       createdAt: requestData.createdAt || requestData.created_at || new Date().toISOString(),
-      expiresAt: requestData.expiresAt || requestData.expires_at || new Date(Date.now() + 3600000).toISOString(),
+      expiresAt: requestData.expiresAt || requestData.expires_at || new Date(Date.now() + (BLOCKPAY_CONFIG.paymentRequest.expirationHours || 1) * 60 * 60 * 1000).toISOString(),
       updatedAt: requestData.updatedAt || requestData.updated_at || new Date().toISOString(),
       lastChecked: requestData.lastChecked || requestData.last_checked || null,
     }
@@ -148,9 +150,13 @@ export const dbHelpers = {
   deleteExpiredRequests: () => {
     const now = new Date()
     const before = memoryDB.payment_requests.length
-    memoryDB.payment_requests = memoryDB.payment_requests.filter(
-      req => !req.expiresAt || new Date(req.expiresAt) > now
-    )
+    // Only delete expired pending requests; keep completed/failed for history
+    memoryDB.payment_requests = memoryDB.payment_requests.filter(req => {
+      if (!req.expiresAt) return true
+      const isExpired = new Date(req.expiresAt) <= now
+      if (isExpired && req.status === 'pending') return false
+      return true
+    })
     saveToEnv().catch(() => {})
     return before - memoryDB.payment_requests.length
   },

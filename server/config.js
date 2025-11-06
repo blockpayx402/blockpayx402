@@ -44,7 +44,7 @@ export const BLOCKPAY_CONFIG = {
   // Payment Request Settings
   paymentRequest: {
     // Expiration time in hours
-    expirationHours: parseInt(process.env.PAYMENT_REQUEST_EXPIRY_HOURS || '1'),
+    expirationHours: parseInt(process.env.PAYMENT_REQUEST_EXPIRY_HOURS || '720'),
     // Auto-monitoring interval in seconds
     monitoringInterval: parseInt(process.env.MONITORING_INTERVAL_SECONDS || '20'),
   },
@@ -52,7 +52,7 @@ export const BLOCKPAY_CONFIG = {
   // Order Settings
   order: {
     // Order expiration time in hours (after which order is cancelled)
-    expirationHours: parseInt(process.env.ORDER_EXPIRY_HOURS || '24'),
+    expirationHours: parseInt(process.env.ORDER_EXPIRY_HOURS || '720'),
     // Status check interval in seconds
     statusCheckInterval: parseInt(process.env.ORDER_STATUS_CHECK_INTERVAL || '10'),
   },

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { BLOCKPAY_CONFIG } from './config.js'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
@@ -117,7 +118,7 @@ const statements = {
   
   deleteExpiredRequests: db.prepare(`
     DELETE FROM payment_requests 
-    WHERE expires_at < datetime('now')
+    WHERE status = 'pending' AND expires_at < datetime('now')
   `),
   
   // Transactions
@@ -175,7 +176,8 @@ export const dbHelpers = {
   // Payment Requests
   createRequest: (requestData) => {
     const now = new Date().toISOString()
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString() // 1 hour from now
+    const hours = (BLOCKPAY_CONFIG?.paymentRequest?.expirationHours || 1)
+    const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
     
     const request = {
       id: requestData.id || `req_${Date.now()}_${Math.random().toString(36).substring(7)}`,
