@@ -32,17 +32,45 @@ export const generateDepositAddress = async (orderData) => {
     // The fee will be deducted from the final amount received by the seller
     const amountAfterFee = amount - fee.amount
 
-    // Create exchange transaction via ChangeNOW API
-    const exchangeData = await createExchangeTransaction({
-      fromChain,
-      fromAsset,
-      toChain,
-      toAsset,
-      amount: amountAfterFee, // Amount after BlockPay fee
-      recipientAddress,
-      refundAddress,
-      orderId,
-    })
+    // Try with small amount adjustments if provider is temporarily unavailable
+    const attemptAmounts = [
+      amountAfterFee,
+      Math.max(0, Number((amountAfterFee * 0.995).toFixed(8))), // -0.5%
+      Math.max(0, Number((amountAfterFee * 0.99).toFixed(8))),  // -1%
+    ]
+
+    let exchangeData = null
+    let lastError = null
+
+    for (const tryAmount of attemptAmounts) {
+      try {
+        // Create exchange transaction via ChangeNOW API
+        exchangeData = await createExchangeTransaction({
+          fromChain,
+          fromAsset,
+          toChain,
+          toAsset,
+          amount: tryAmount, // Amount after BlockPay fee (with adjustment)
+          recipientAddress,
+          refundAddress,
+          orderId,
+        })
+        break
+      } catch (err) {
+        lastError = err
+        const msg = String(err?.message || '')
+        // Only retry if provider is temporarily unavailable or 5xx-like errors were bubbled up
+        const isTransient = msg.includes('temporarily unavailable') || msg.includes('unknown_error')
+        if (!isTransient) {
+          throw err
+        }
+        // continue to next reduced amount
+      }
+    }
+
+    if (!exchangeData) {
+      throw lastError || new Error('Provider temporarily unavailable. Please try again later.')
+    }
 
     return {
       depositAddress: exchangeData.depositAddress,
