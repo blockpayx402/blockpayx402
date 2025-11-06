@@ -9,11 +9,13 @@ import { CHAINS } from '../services/blockchain'
 
 const DepositAddressPayment = ({ request }) => {
   const navigate = useNavigate()
+  // Buyer/sender chooses what to pay with
   const [fromChain, setFromChain] = useState('bnb')
   const [fromAsset, setFromAsset] = useState('USDT')
   const [amount, setAmount] = useState('')
-  const [requiredAmount] = useState(request.amount || '') // Fixed from payment request
-  const [calculatedAmount, setCalculatedAmount] = useState('')
+  // Seller wants to receive (fixed from payment request)
+  const [requiredAmount] = useState(request.amount || '') // Seller's requested amount
+  const [calculatedAmount, setCalculatedAmount] = useState('') // How much buyer needs to send
   const [estimatedReceive, setEstimatedReceive] = useState('')
   const [refundAddress, setRefundAddress] = useState('')
   const [showRefund, setShowRefund] = useState(false)
@@ -220,87 +222,111 @@ const DepositAddressPayment = ({ request }) => {
       </div>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">From Chain</label>
-            <select
-              value={fromChain}
-              onChange={(e) => {
-                setFromChain(e.target.value)
-                const chain = availableChains.find(c => c.value === e.target.value)
-                // Prefer USDT if available, otherwise first asset
-                const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
-                setFromAsset(preferredAsset)
-                // Clear calculated amounts when chain changes (will auto-recalculate)
-                setAmount('')
-                setCalculatedAmount('')
-              }}
-              className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
-            >
-              {availableChains.map(chain => (
-                <option key={chain.value} value={chain.value} className="bg-black text-white">
-                  {chain.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">From Asset</label>
-            <select
-              value={fromAsset}
-              onChange={(e) => setFromAsset(e.target.value)}
-              className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
-            >
-              {currentChainConfig?.assets.map(asset => (
-                <option key={asset} value={asset} className="bg-black text-white">
-                  {asset}
-                </option>
-              ))}
-            </select>
+        {/* Step 1: Seller wants to receive (Fixed - from payment request) */}
+        <div>
+          <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You get</label>
+          <div className="p-4 glass-strong rounded-xl border border-green-500/30 bg-green-500/10">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex-1">
+                <p className="text-xs text-white/60 mb-1 tracking-tight">Recipient will receive</p>
+                <p className="text-2xl font-semibold text-white tracking-tight">
+                  {requiredAmount} {request.currency}
+                </p>
+                <p className="text-xs text-white/50 mt-1 tracking-tight">on {CHAINS[request.chain]?.name || request.chain}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-white/60 mb-1 tracking-tight">Recipient Address</p>
+                <p className="text-xs font-mono text-white/80 break-all max-w-[200px]">
+                  {request.recipient?.substring(0, 10)}...{request.recipient?.substring(request.recipient.length - 8)}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {/* Payment Request Amount (Fixed) */}
-          <div className="p-4 glass-strong rounded-xl border border-white/10 bg-white/[0.02]">
-            <p className="text-xs text-white/60 mb-1 tracking-tight">Payment Request Amount</p>
-            <p className="text-2xl font-semibold text-white tracking-tight">
-              {requiredAmount} {request.currency}
-            </p>
-            <p className="text-xs text-white/50 mt-1 tracking-tight">on {CHAINS[request.chain]?.name || request.chain}</p>
+        {/* Floating rate indicator */}
+        <div className="flex items-center justify-center gap-2 py-2">
+          <div className="flex items-center gap-2 text-xs text-white/60">
+            <RefreshCw className="w-4 h-4" />
+            <span>Floating rate</span>
           </div>
+        </div>
 
-          {/* Calculated Send Amount */}
-          <div>
-            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
-              Amount You'll Send ({fromAsset})
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={calculatedAmount || ''}
-                readOnly
-                placeholder={calculating ? "Calculating..." : "0.0"}
-                className="w-full px-4 py-3 glass-strong rounded-xl border border-blue-500/30 focus:border-blue-500/50 focus:outline-none transition-all bg-blue-500/10 text-white placeholder:text-white/30 text-sm font-semibold"
-              />
+        {/* Step 2: Buyer chooses what to send */}
+        <div>
+          <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You send</label>
+          <div className="space-y-3">
+            {/* Chain and Asset Selection */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
+                <select
+                  value={fromChain}
+                  onChange={(e) => {
+                    setFromChain(e.target.value)
+                    const chain = availableChains.find(c => c.value === e.target.value)
+                    // Prefer USDT if available, otherwise first asset
+                    const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
+                    setFromAsset(preferredAsset)
+                    // Clear calculated amounts when chain changes (will auto-recalculate)
+                    setAmount('')
+                    setCalculatedAmount('')
+                  }}
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                >
+                  {availableChains.map(chain => (
+                    <option key={chain.value} value={chain.value} className="bg-black text-white">
+                      {chain.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
+                <select
+                  value={fromAsset}
+                  onChange={(e) => setFromAsset(e.target.value)}
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                >
+                  {currentChainConfig?.assets.map(asset => (
+                    <option key={asset} value={asset} className="bg-black text-white">
+                      {asset}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Calculated Send Amount */}
+            <div>
+              <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Amount to send</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={calculatedAmount || ''}
+                  readOnly
+                  placeholder={calculating ? "Calculating..." : "0.0"}
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-blue-500/30 focus:border-blue-500/50 focus:outline-none transition-all bg-blue-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
+                />
+                {calculating && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                  </div>
+                )}
+              </div>
               {calculating && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                </div>
+                <p className="text-xs text-blue-400 mt-2 flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Calculating how much {fromAsset} you need to send...
+                </p>
+              )}
+              {calculatedAmount && !calculating && (
+                <p className="text-xs text-white/60 mt-2 tracking-tight">
+                  This will automatically exchange to <span className="font-semibold text-white">{requiredAmount} {request.currency}</span> and send to recipient
+                </p>
               )}
             </div>
-            {calculating && (
-              <p className="text-xs text-blue-400 mt-2 flex items-center gap-2">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Calculating how much {fromAsset} you need to send...
-              </p>
-            )}
-            {calculatedAmount && !calculating && (
-              <p className="text-xs text-white/60 mt-2 tracking-tight">
-                This will automatically exchange to <span className="font-semibold text-white">{requiredAmount} {request.currency}</span> and send to the recipient
-              </p>
-            )}
           </div>
         </div>
 
