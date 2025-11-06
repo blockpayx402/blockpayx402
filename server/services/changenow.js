@@ -181,18 +181,23 @@ export const getExchangeStatus = async (exchangeId) => {
  */
 export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
+    // Read API key dynamically from environment (not from cached config)
+    const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
+    
     // Check if API key is configured
-    if (!BLOCKPAY_CONFIG.changenow.apiKey || BLOCKPAY_CONFIG.changenow.apiKey === '') {
+    if (!apiKey || apiKey === '') {
       console.error('[ChangeNOW] API key is missing!')
       console.error('[ChangeNOW] process.env.CHANGENOW_API_KEY exists:', !!process.env.CHANGENOW_API_KEY)
       console.error('[ChangeNOW] process.env.CHANGENOW_API_KEY length:', process.env.CHANGENOW_API_KEY?.length || 0)
+      console.error('[ChangeNOW] BLOCKPAY_CONFIG.changenow.apiKey exists:', !!BLOCKPAY_CONFIG.changenow.apiKey)
       throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file.')
     }
 
     // Debug: Log API key info (without exposing full key)
-    const apiKeyPrefix = BLOCKPAY_CONFIG.changenow.apiKey.substring(0, 8)
-    const apiKeySuffix = BLOCKPAY_CONFIG.changenow.apiKey.substring(BLOCKPAY_CONFIG.changenow.apiKey.length - 4)
-    console.log(`[ChangeNOW] Using API key: ${apiKeyPrefix}...${apiKeySuffix} (length: ${BLOCKPAY_CONFIG.changenow.apiKey.length})`)
+    const apiKeyPrefix = apiKey.substring(0, 8)
+    const apiKeySuffix = apiKey.substring(apiKey.length - 4)
+    console.log(`[ChangeNOW] Using API key: ${apiKeyPrefix}...${apiKeySuffix} (length: ${apiKey.length})`)
+    console.log(`[ChangeNOW] API key source: ${process.env.CHANGENOW_API_KEY ? 'process.env' : 'BLOCKPAY_CONFIG'}`)
 
     const apiUrl = `${BLOCKPAY_CONFIG.changenow.apiUrl}/exchange/estimated-amount`
     

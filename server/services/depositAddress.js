@@ -22,8 +22,12 @@ export const generateDepositAddress = async (orderData) => {
     orderId // BlockPay order ID
   } = orderData
 
-  // Check if ChangeNOW API is configured
-  if (!BLOCKPAY_CONFIG.changenow.apiKey || BLOCKPAY_CONFIG.changenow.apiKey === '') {
+  // Check if ChangeNOW API is configured - read directly from environment
+  const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
+  if (!apiKey || apiKey === '') {
+    console.error('[Deposit Address] API key is missing!')
+    console.error('[Deposit Address] process.env.CHANGENOW_API_KEY exists:', !!process.env.CHANGENOW_API_KEY)
+    console.error('[Deposit Address] process.env.CHANGENOW_API_KEY length:', process.env.CHANGENOW_API_KEY?.length || 0)
     throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in Netlify environment variables. Get your key from: https://changenow.io/api')
   }
 

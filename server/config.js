@@ -115,13 +115,18 @@ export const calculatePlatformFee = (amount, currency = 'USD', chain = 'ethereum
 
 /**
  * Get ChangeNOW API headers
+ * Reads API key dynamically from environment to ensure it's always current
  */
 export const getChangeNowHeaders = () => {
+  // Read API key dynamically from environment (not from cached config)
+  const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
+  const partnerId = process.env.CHANGENOW_PARTNER_ID || BLOCKPAY_CONFIG.changenow.partnerId || ''
+  
   return {
     'Content-Type': 'application/json',
-    'x-api-key': BLOCKPAY_CONFIG.changenow.apiKey,
-    ...(BLOCKPAY_CONFIG.changenow.partnerId && {
-      'x-partner-id': BLOCKPAY_CONFIG.changenow.partnerId,
+    'x-api-key': apiKey,
+    ...(partnerId && {
+      'x-partner-id': partnerId,
     }),
   }
 }
