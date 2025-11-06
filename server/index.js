@@ -274,17 +274,17 @@ app.post('/api/create-order', async (req, res) => {
       requestId: requestId || null, // null for direct swaps
       fromChain,
       fromAsset,
-      toChain: request.chain,
-      toAsset: request.currency,
-      amount: amount.toString(),
+      toChain,
+      toAsset,
+      amount: amountNum.toString(),
       depositAddress: depositInfo.depositAddress,
       refundAddress,
-      expectedAmount: depositInfo.estimatedAmount?.toString() || request.amount,
+      expectedAmount: depositInfo.estimatedAmount?.toString() || amountNum.toString(),
       status: 'awaiting_deposit',
       exchangeId: depositInfo.exchangeId,
       platformFeeAmount: fee.amount.toString(),
       platformFeePercent: fee.percent.toString(),
-      amountAfterFee: depositInfo.amountAfterFee?.toString() || amount.toString()
+      amountAfterFee: depositInfo.amountAfterFee?.toString() || amountNum.toString()
     })
 
     res.json({

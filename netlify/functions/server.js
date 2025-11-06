@@ -316,10 +316,27 @@ app.post('/api/create-order', async (req, res) => {
       return res.status(400).json({ error: `Invalid amount: ${amount}. Amount must be a positive number greater than zero.` })
     }
 
-    // Get the payment request
-    const request = dbHelpers.getRequestById(requestId)
-    if (!request) {
-      return res.status(404).json({ error: 'Payment request not found' })
+    // Support both payment requests and direct swaps
+    let toChain, toAsset, recipientAddress
+    
+    if (requestId) {
+      // Payment request flow
+      const request = dbHelpers.getRequestById(requestId)
+      if (!request) {
+        return res.status(404).json({ error: 'Payment request not found' })
+      }
+      toChain = request.chain
+      toAsset = request.currency
+      recipientAddress = request.recipient
+    } else {
+      // Direct swap flow - get from request body
+      toChain = req.body.toChain
+      toAsset = req.body.toAsset
+      recipientAddress = req.body.recipientAddress
+      
+      if (!toChain || !toAsset || !recipientAddress) {
+        return res.status(400).json({ error: 'For direct swaps, toChain, toAsset, and recipientAddress are required' })
+      }
     }
 
     // Calculate platform fee (with chain-specific recipient)
@@ -332,10 +349,10 @@ app.post('/api/create-order', async (req, res) => {
     const depositInfo = await generateDepositAddress({
       fromChain,
       fromAsset,
-      toChain: request.chain,
-      toAsset: request.currency,
+      toChain,
+      toAsset,
       amount: amountNum,
-      recipientAddress: request.recipient,
+      recipientAddress,
       refundAddress,
       orderId
     })
@@ -343,20 +360,20 @@ app.post('/api/create-order', async (req, res) => {
     // Create order in database
     const order = dbHelpers.createOrder({
       id: orderId,
-      requestId: request.id,
+      requestId: requestId || null, // null for direct swaps
       fromChain,
       fromAsset,
-      toChain: request.chain,
-      toAsset: request.currency,
-      amount: amount.toString(),
+      toChain,
+      toAsset,
+      amount: amountNum.toString(),
       depositAddress: depositInfo.depositAddress,
       refundAddress,
-      expectedAmount: depositInfo.estimatedAmount?.toString() || request.amount,
+      expectedAmount: depositInfo.estimatedAmount?.toString() || amountNum.toString(),
       status: 'awaiting_deposit',
       exchangeId: depositInfo.exchangeId,
       platformFeeAmount: fee.amount.toString(),
       platformFeePercent: fee.percent.toString(),
-      amountAfterFee: depositInfo.amountAfterFee?.toString() || amount.toString()
+      amountAfterFee: depositInfo.amountAfterFee?.toString() || amountNum.toString()
     })
 
     res.json({
