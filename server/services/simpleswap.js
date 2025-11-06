@@ -258,17 +258,9 @@ export const createExchangeTransaction = async (orderData) => {
           'Content-Type': 'application/json',
         }
         
-        // Add authentication - SimpleSwap might use different auth methods
-        // Try multiple formats to find what works
-        if (apiKey && apiKey.length > 100) {
-          // Looks like a JWT/certificate - try Authorization header
-          headers['Authorization'] = `Bearer ${apiKey}`
-          // Also try as X-API-KEY in case it's expected there
-          headers['X-API-KEY'] = apiKey
-        } else {
-          // Regular API key - use X-API-KEY header
-          headers['X-API-KEY'] = apiKey
-        }
+        // SimpleSwap API authentication - use X-API-KEY header
+        // The token provided is the API key
+        headers['X-API-KEY'] = apiKey
         
         response = await fetchWithTimeout(apiUrl, {
           method: 'POST',
@@ -392,12 +384,7 @@ export const getExchangeStatus = async (exchangeId) => {
     // SimpleSwap authentication
     const headers = {
       'Content-Type': 'application/json',
-    }
-    
-    if (apiKey && apiKey.length > 100) {
-      headers['Authorization'] = `Bearer ${apiKey}`
-    } else {
-      headers['X-API-KEY'] = apiKey
+      'X-API-KEY': apiKey,
     }
     
     const response = await fetchWithTimeout(apiUrl, {
@@ -513,12 +500,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         // SimpleSwap authentication
         const headers = {
           'Content-Type': 'application/json',
-        }
-        
-        if (apiKey && apiKey.length > 100) {
-          headers['Authorization'] = `Bearer ${apiKey}`
-        } else {
-          headers['X-API-KEY'] = apiKey
+          'X-API-KEY': apiKey,
         }
         
         response = await fetchWithTimeout(apiUrl, {
@@ -587,24 +569,45 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
 
     const data = await response.json()
     
-    const estimatedAmount = data.amount_to || data.estimated_amount || data.amount
+    log('info', 'SimpleSwap estimate response', { data, responseKeys: Object.keys(data) })
+    
+    // SimpleSwap API v1 estimate response format
+    // Could be: { amount_to, amount_from, rate } or { estimated_amount, rate } or just a number
+    let estimatedAmount = null
+    
+    if (typeof data === 'number') {
+      estimatedAmount = data
+    } else if (data.amount_to) {
+      estimatedAmount = data.amount_to
+    } else if (data.estimated_amount) {
+      estimatedAmount = data.estimated_amount
+    } else if (data.amount) {
+      estimatedAmount = data.amount
+    } else if (data.to_amount) {
+      estimatedAmount = data.to_amount
+    }
     
     if (estimatedAmount === null || estimatedAmount === undefined || isNaN(estimatedAmount)) {
-      log('error', 'Invalid response from SimpleSwap API', { data })
-      throw new Error('Invalid response from SimpleSwap API')
+      log('error', 'Invalid response from SimpleSwap API - no amount found', { 
+        data, 
+        dataType: typeof data,
+        responseKeys: Object.keys(data || {})
+      })
+      throw new Error('Invalid response from SimpleSwap API: Could not find estimated amount in response')
     }
 
     log('info', 'Exchange rate retrieved', {
       from: `${fromAsset}(${fromChain})`,
       to: `${toAsset}(${toChain})`,
-      estimatedAmount: estimatedAmount.toString()
+      estimatedAmount: estimatedAmount.toString(),
+      rate: data.rate || null
     })
 
     return {
       estimatedAmount: estimatedAmount.toString(),
       rate: data.rate || null,
-      minAmount: data.min_amount || null,
-      maxAmount: data.max_amount || null,
+      minAmount: data.min_amount || data.minAmount || null,
+      maxAmount: data.max_amount || data.maxAmount || null,
     }
   } catch (error) {
     log('error', 'Error getting exchange rate', {
