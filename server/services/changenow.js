@@ -109,6 +109,11 @@ const NETWORK_MAP = {
  * Get ChangeNOW currency code with network specification
  * For tokens, includes network: e.g., "usdc_eth", "usdc_bsc", "usdc_sol"
  * For native currencies, returns just the currency code
+ * 
+ * Note: ChangeNOW v1 uses different formats:
+ * - BSC tokens: For USDT on BSC, ChangeNOW uses just "usdt" (not "usdt_bsc")
+ * - Ethereum tokens: "usdt_eth" or "usdt"
+ * - Solana tokens: "usdc_sol"
  */
 const getChangeNowCurrency = (currency, chain = null) => {
   if (!currency) return 'eth'
@@ -123,7 +128,16 @@ const getChangeNowCurrency = (currency, chain = null) => {
   // For tokens, include network if specified
   if (chainLower && NETWORK_MAP[chainLower]) {
     const network = NETWORK_MAP[chainLower]
-    // Format: currency_network (e.g., usdc_eth, usdc_bsc, usdc_sol)
+    
+    // Special handling for BSC tokens
+    // ChangeNOW v1 API uses just "usdt" for USDT on BSC (not "usdt_bsc")
+    if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
+      // For USDT and BUSD on BSC, use just the currency code without network suffix
+      return upperCurrency.toLowerCase()
+    }
+    
+    // For other networks, use currency_network format
+    // Format: currency_network (e.g., usdc_eth, usdc_sol)
     return `${upperCurrency.toLowerCase()}_${network}`
   }
   
