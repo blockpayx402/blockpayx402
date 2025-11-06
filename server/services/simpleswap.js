@@ -248,11 +248,12 @@ export const createExchangeTransaction = async (orderData) => {
       fixed: false, // Use floating rate
       currency_from: fromCurrency,
       currency_to: toCurrency,
-      amount: payloadAmount,
+      amount: payloadAmount, // Already a string from normalizeAmount
       address_to: recipientAddress.trim(),
-      extra_id_to: '', // Empty string if not needed
+      // Only include extra_id_to if needed (some currencies require it)
+      // Don't include if empty to avoid 400 errors
       ...(validRefundAddress && { user_refund_address: validRefundAddress }), // Refund address
-      ...(orderId && { user_refund_extra_id: orderId }), // Use extra_id for order tracking
+      // Don't include user_refund_extra_id unless needed
     }
 
     log('info', 'Creating exchange transaction', {
