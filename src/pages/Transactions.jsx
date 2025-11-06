@@ -279,8 +279,9 @@ const Transactions = () => {
                         status: item.status || 'pending',
                         chain: item.chain || 'ethereum',
                         description: item.description || (item.type === 'transaction' ? 'Transaction' : 'Payment request'),
-                        recipient: item.type === 'transaction' ? (item.to || item.from || '') : (item.from || ''),
+                        recipient: item.type === 'request' ? item.from : (item.to || item.from || ''),
                         createdAt: item.createdAt,
+                        expiresAt: item.type === 'request' ? (item.expiresAt || null) : null,
                         isExpired: false,
                         txHash: item.txHash || item.tx_hash || null
                       }}
