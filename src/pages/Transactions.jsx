@@ -261,13 +261,15 @@ const Transactions = () => {
                     className="relative"
                   >
                     {item.type === 'request' && (
-                      <button
-                        onClick={() => navigate(`/pay/${item.id}`)}
-                        className="absolute top-4 right-4 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all text-white/60 hover:text-primary-400 z-10"
-                        title="View payment page"
-                      >
-                        <LinkIcon className="w-4 h-4" />
-                      </button>
+                      <div className="absolute top-4 right-4 flex gap-2 z-10">
+                        <button
+                          onClick={() => navigate(`/pay/${item.id}`)}
+                          className="p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all text-white/60 hover:text-primary-400"
+                          title="View payment page"
+                        >
+                          <LinkIcon className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                     <PaymentRequestCard 
                       request={{
