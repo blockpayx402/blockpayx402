@@ -10,15 +10,17 @@ import { BLOCKPAY_CONFIG } from '../config.js'
  * Chain ID mapping for Relay Link
  * Note: Relay Link uses its own chain ID system
  * These IDs should match Relay Link's chain IDs from /chains endpoint
- * IMPORTANT: Relay Link does NOT support Solana - only EVM chains
  */
 const CHAIN_ID_MAP = {
   'ethereum': 1,
   'bnb': 56,
   'polygon': 137,
-  // 'solana': NOT SUPPORTED by Relay Link - Relay only supports EVM chains
+  'solana': 792703809, // Solana chain ID in Relay Link (verified via API)
   'bitcoin': 0, // Not supported by Relay
 }
+
+// Cache for dynamically fetched chain IDs
+let chainIdCache = null
 
 /**
  * Currency address mapping for Relay Link
@@ -48,13 +50,59 @@ const CURRENCY_ADDRESS_MAP = {
 
 /**
  * Get Relay chain ID
+ * Dynamically fetches chain IDs from Relay API if not cached
  */
-const getRelayChainId = (chain) => {
-  // Relay Link does not support Solana - only EVM chains
-  if (chain === 'solana') {
-    throw new Error('Solana is not supported by Relay Link. Relay Link only supports EVM chains (Ethereum, BNB Chain, Polygon, etc.). Please use a different source or destination chain.')
+const getRelayChainId = async (chain) => {
+  // Return cached static mapping if available
+  if (CHAIN_ID_MAP[chain]) {
+    return CHAIN_ID_MAP[chain]
   }
-  return CHAIN_ID_MAP[chain] || null
+  
+  // Try to fetch from API if cache is empty
+  if (!chainIdCache) {
+    try {
+      const response = await fetch('https://api.relay.link/chains')
+      const data = await response.json()
+      chainIdCache = {}
+      
+      if (data.chains && Array.isArray(data.chains)) {
+        data.chains.forEach(chainData => {
+          const chainName = chainData.name?.toLowerCase()
+          if (chainName) {
+            chainIdCache[chainName] = chainData.id
+          }
+          if (chainData.displayName) {
+            chainIdCache[chainData.displayName.toLowerCase()] = chainData.id
+          }
+        })
+      }
+      
+      // Check cache for Solana
+      const solanaId = chainIdCache['solana'] || chainIdCache['sol'] || 
+                      data.chains?.find(c => 
+                        c.name?.toLowerCase().includes('solana') || 
+                        c.displayName?.toLowerCase().includes('solana')
+                      )?.id
+      
+      if (solanaId && chain === 'solana') {
+        CHAIN_ID_MAP['solana'] = solanaId
+        return solanaId
+      }
+    } catch (error) {
+      console.error('[Relay Link] Error fetching chains:', error)
+    }
+  }
+  
+  // Check cache
+  if (chainIdCache) {
+    const cachedId = chainIdCache[chain.toLowerCase()] || 
+                     chainIdCache[chain.toLowerCase().replace(' ', '')]
+    if (cachedId) {
+      return cachedId
+    }
+  }
+  
+  return null
 }
 
 /**
@@ -299,8 +347,8 @@ export const createRelayTransaction = async (orderData) => {
   } = orderData
 
   try {
-    const originChainId = getRelayChainId(fromChain)
-    const destinationChainId = getRelayChainId(toChain)
+    const originChainId = await getRelayChainId(fromChain)
+    const destinationChainId = await getRelayChainId(toChain)
     
     if (!originChainId || !destinationChainId) {
       throw new Error(`Unsupported chain: ${fromChain} or ${toChain}`)
