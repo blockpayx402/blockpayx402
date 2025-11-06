@@ -379,15 +379,26 @@ export const createRelayTransaction = async (orderData) => {
       throw new Error(`Invalid recipient address format for Solana. Expected Solana address (base58, 32-44 chars) but got EVM format.`)
     }
     
-    // Format user address - should match origin chain if provided
-    let formattedUserAddress = userAddress || recipientAddress
+    // Format user address - should match origin chain format
+    // If userAddress is not provided or doesn't match origin chain, omit it
+    let formattedUserAddress = null
     if (userAddress) {
       const userIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(userAddress)
-      if (isEVMChain(fromChain) && !userIsEVM) {
-        console.warn(`[Relay Link] User address format mismatch for origin chain ${fromChain}. Expected EVM format.`)
-        // If user address is Solana but origin is EVM, use recipient as fallback
-        formattedUserAddress = isEVMChain(toChain) ? recipientAddress : null
+      if (isEVMChain(fromChain) && userIsEVM) {
+        formattedUserAddress = userAddress
+      } else if (isSolanaChain(fromChain) && !userIsEVM && userAddress.length >= 32 && userAddress.length <= 44) {
+        formattedUserAddress = userAddress
+      } else {
+        console.warn(`[Relay Link] User address format mismatch for origin chain ${fromChain}. Omitting user field.`)
       }
+    } else {
+      // If no userAddress provided, check if recipient matches origin chain format
+      if (isEVMChain(fromChain) && /^0x[a-fA-F0-9]{40}$/i.test(recipientAddress)) {
+        formattedUserAddress = recipientAddress
+      } else if (isSolanaChain(fromChain) && recipientAddress.length >= 32 && recipientAddress.length <= 44) {
+        formattedUserAddress = recipientAddress
+      }
+      // If recipient doesn't match origin chain format, don't include user field
     }
     
     // Format refund address - should match origin chain
