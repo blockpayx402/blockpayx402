@@ -176,17 +176,17 @@ export const createRelayTransaction = async (orderData) => {
     }
     
     // Use SDK's getQuote method to get an executable quote
+    // Based on Relay SDK docs: https://docs.relay.link/references/api/overview
     const quote = await client.getQuote({
-      originChainId: originChain.chainId || originChain.id,
-      destinationChainId: destinationChain.chainId || destinationChain.id,
-      originTokenAddress: originToken.address,
-      destinationTokenAddress: destinationToken.address,
+      fromChainId: originChain.chainId || originChain.id,
+      toChainId: destinationChain.chainId || destinationChain.id,
+      fromTokenAddress: originToken.address,
+      toTokenAddress: destinationToken.address,
       amount: amount.toString(),
-      destinationAmount: null, // Let Relay calculate
-      user: recipientAddress.trim(),
-      recipient: recipientAddress.trim(),
+      userAddress: recipientAddress.trim(),
+      recipientAddress: recipientAddress.trim(),
       ...(refundAddress && {
-        refundTo: refundAddress.trim()
+        refundAddress: refundAddress.trim()
       }),
     })
     
@@ -279,24 +279,26 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     
     // Get quote for estimation
     const quote = await client.getQuote({
-      originChainId: originChain.chainId || originChain.id,
-      destinationChainId: destinationChain.chainId || destinationChain.id,
-      originTokenAddress: originToken.address,
-      destinationTokenAddress: destinationToken.address,
+      fromChainId: originChain.chainId || originChain.id,
+      toChainId: destinationChain.chainId || destinationChain.id,
+      fromTokenAddress: originToken.address,
+      toTokenAddress: destinationToken.address,
       amount: amount.toString(),
-      destinationAmount: null,
-      user: placeholderAddress,
-      recipient: placeholderAddress,
+      userAddress: placeholderAddress,
+      recipientAddress: placeholderAddress,
     })
     
-    if (!quote || !quote.destinationAmount) {
-      throw new Error('Invalid response from Relay SDK: missing destinationAmount')
+    // Extract destination amount from quote (handle different response formats)
+    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount
+    
+    if (!quote || !destinationAmount) {
+      throw new Error('Invalid response from Relay SDK: missing destination amount')
     }
     
     return {
-      estimatedAmount: parseFloat(quote.destinationAmount),
+      estimatedAmount: parseFloat(destinationAmount),
       fromAmount: parseFloat(amount),
-      exchangeRate: parseFloat(quote.destinationAmount) / parseFloat(amount),
+      exchangeRate: parseFloat(destinationAmount) / parseFloat(amount),
     }
   } catch (error) {
     console.error('[Relay SDK] Error getting exchange rate:', error)
