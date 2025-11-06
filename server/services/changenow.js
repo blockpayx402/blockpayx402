@@ -252,15 +252,15 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       console.log(`[ChangeNOW] Trying v1 API: ${v1Url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
       
       try {
-        response = await fetch(v1Url, {
+        const v1Response = await fetch(v1Url, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
           },
         })
         
-        if (response.ok) {
-          const v1Data = await response.json()
+        if (v1Response.ok) {
+          const v1Data = await v1Response.json()
           console.log(`[ChangeNOW] v1 API success:`, v1Data)
           
           // v1 API returns just a number (the estimated amount), not an object
@@ -278,7 +278,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
           }
         } else {
           // v1 API also failed, check what error it returned
-          const v1ErrorText = await response.text()
+          const v1ErrorText = await v1Response.text()
           let v1ErrorData
           try {
             v1ErrorData = JSON.parse(v1ErrorText)
@@ -286,7 +286,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
             v1ErrorData = { message: v1ErrorText }
           }
           
-          console.error(`[ChangeNOW] v1 API error ${response.status}:`, v1ErrorData)
+          console.error(`[ChangeNOW] v1 API error ${v1Response.status}:`, v1ErrorData)
           
           // Handle specific v1 API errors
           if (v1ErrorData.error === 'max_amount_exceeded') {
@@ -298,14 +298,16 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
           }
           
           // Throw the v1 error
-          throw new Error(`ChangeNOW v1 API error: ${response.status} - ${v1ErrorData.message || v1ErrorData.error || v1ErrorText}`)
+          throw new Error(`ChangeNOW v1 API error: ${v1Response.status} - ${v1ErrorData.message || v1ErrorData.error || v1ErrorText}`)
         }
       } catch (v1Error) {
         console.error('[ChangeNOW] v1 API fallback also failed:', v1Error)
-        // Continue to throw the original v2 error
+        // If v1 fallback fails, throw its error instead of trying to read v2 response again
+        throw v1Error
       }
     }
 
+    // Only process v2 response if we didn't use v1 fallback
     if (!response.ok) {
       const errorText = await response.text()
       let errorData
