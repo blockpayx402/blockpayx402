@@ -57,15 +57,19 @@ export const generateDepositAddress = async (orderData) => {
     // The fee will be deducted from the final amount received by the seller
     const amountAfterFee = amount - fee.amount
 
-    // Try with small amount adjustments if provider is temporarily unavailable
+    // Try with multiple amount adjustments and retries for better reliability
+    // ChangeNOW can be sensitive to exact amounts, so we try several variations
     const attemptAmounts = [
       amountAfterFee,
+      Math.max(0, Number((amountAfterFee * 0.998).toFixed(8))), // -0.2%
       Math.max(0, Number((amountAfterFee * 0.995).toFixed(8))), // -0.5%
       Math.max(0, Number((amountAfterFee * 0.99).toFixed(8))),  // -1%
+      Math.max(0, Number((amountAfterFee * 0.98).toFixed(8))),  // -2%
     ]
 
     let exchangeData = null
     let lastError = null
+    let lastErrorStatus = null
 
     for (const tryAmount of attemptAmounts) {
       try {
@@ -80,21 +84,66 @@ export const generateDepositAddress = async (orderData) => {
           refundAddress,
           orderId,
         })
+        // Success! Break out of retry loop
         break
       } catch (err) {
         lastError = err
         const msg = String(err?.message || '')
-        // Only retry if provider is temporarily unavailable or 5xx-like errors were bubbled up
-        const isTransient = msg.includes('temporarily unavailable') || msg.includes('unknown_error')
-        if (!isTransient) {
+        
+        // Extract status code if available
+        const statusMatch = msg.match(/error:\s*(\d+)/i) || msg.match(/status\s*(\d+)/i)
+        if (statusMatch) {
+          lastErrorStatus = parseInt(statusMatch[1])
+        }
+        
+        // Retry on transient errors or 5xx errors
+        const isTransient = 
+          msg.includes('temporarily unavailable') || 
+          msg.includes('unknown_error') ||
+          msg.includes('500') ||
+          msg.includes('502') ||
+          msg.includes('503') ||
+          (lastErrorStatus && lastErrorStatus >= 500)
+        
+        // Also retry on 400 errors that might be amount-related
+        const isAmountError = 
+          msg.includes('max_amount') ||
+          msg.includes('min_amount') ||
+          msg.includes('amount') ||
+          (lastErrorStatus === 400 && tryAmount !== attemptAmounts[attemptAmounts.length - 1]) // Not the last attempt
+        
+        // Don't retry on clear pair errors or auth errors
+        const isFatal = 
+          msg.includes('Invalid pair') ||
+          msg.includes('pair not available') ||
+          msg.includes('pair_is_inactive') ||
+          msg.includes('401') ||
+          msg.includes('403') ||
+          msg.includes('API key')
+        
+        if (isFatal) {
           throw err
         }
-        // continue to next reduced amount
+        
+        // Continue to next amount if transient or amount-related
+        if (isTransient || isAmountError) {
+          console.log(`[DepositAddress] Retrying with adjusted amount: ${tryAmount} (was ${amountAfterFee})`)
+          continue
+        }
+        
+        // For other errors, throw immediately
+        throw err
       }
     }
 
     if (!exchangeData) {
-      throw lastError || new Error('Provider temporarily unavailable. Please try again later.')
+      // Provide helpful error message
+      if (lastErrorStatus === 400) {
+        throw new Error(`Invalid request for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different amount or currency pair.`)
+      } else if (lastErrorStatus && lastErrorStatus >= 500) {
+        throw new Error(`ChangeNOW is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again in a few moments.`)
+      }
+      throw lastError || new Error(`Failed to generate deposit address for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again.`)
     }
 
     return {
