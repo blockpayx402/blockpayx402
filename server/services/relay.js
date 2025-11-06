@@ -177,16 +177,17 @@ export const createRelayTransaction = async (orderData) => {
     
     // Use SDK's getQuote method to get an executable quote
     // Based on Relay SDK docs: https://docs.relay.link/references/api/overview
-    const quote = await client.getQuote({
-      fromChainId: originChain.chainId || originChain.id,
+    // getQuote is under client.actions, not client directly
+    const quote = await client.actions.getQuote({
+      chainId: originChain.chainId || originChain.id,
       toChainId: destinationChain.chainId || destinationChain.id,
-      fromTokenAddress: originToken.address,
-      toTokenAddress: destinationToken.address,
+      currency: originToken.address,
+      toCurrency: destinationToken.address,
       amount: amount.toString(),
-      userAddress: recipientAddress.trim(),
-      recipientAddress: recipientAddress.trim(),
+      user: recipientAddress.trim(),
+      recipient: recipientAddress.trim(),
       ...(refundAddress && {
-        refundAddress: refundAddress.trim()
+        refundTo: refundAddress.trim()
       }),
     })
     
@@ -392,14 +393,15 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     // Use Relay SDK's getQuote method instead of direct API call
     const client = await getRelayClient()
     
-    const quote = await client.getQuote({
-      fromChainId: parseInt(originChainId),
+    // getQuote is under client.actions, not client directly
+    const quote = await client.actions.getQuote({
+      chainId: parseInt(originChainId),
       toChainId: parseInt(destinationChainId),
-      fromTokenAddress: originToken.address || '0x0000000000000000000000000000000000000000',
-      toTokenAddress: destinationToken.address || '0x0000000000000000000000000000000000000000',
+      currency: originToken.address || '0x0000000000000000000000000000000000000000',
+      toCurrency: destinationToken.address || '0x0000000000000000000000000000000000000000',
       amount: amountInSmallestUnit,
-      userAddress: placeholderAddress,
-      recipientAddress: placeholderAddress,
+      user: placeholderAddress,
+      recipient: placeholderAddress,
     })
     
     console.log('[Relay] Quote response:', JSON.stringify(quote).substring(0, 300))
