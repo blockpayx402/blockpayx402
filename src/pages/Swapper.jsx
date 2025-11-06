@@ -501,7 +501,8 @@ const Swapper = () => {
 
   if (order) {
     // Check if this is a direct swap (no deposit address)
-    const isDirectSwap = order.isDirectSwap || !order.depositAddress
+    // Use optional chaining and provide fallback to prevent undefined errors
+    const isDirectSwap = Boolean(order?.isDirectSwap || (!order?.depositAddress && order?.depositAddress !== ''))
     
     return (
       <div className="max-w-4xl mx-auto">
@@ -628,7 +629,7 @@ const Swapper = () => {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <a
-                  href={`https://app.uniswap.org/#/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}&chainId=${order.chainId}`}
+                  href={`https://app.uniswap.org/#/swap?inputCurrency=${order?.fromTokenAddress || ''}&outputCurrency=${order?.toTokenAddress || ''}&chainId=${order?.chainId || ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
@@ -636,7 +637,7 @@ const Swapper = () => {
                   Uniswap
                 </a>
                 <a
-                  href={`https://pancakeswap.finance/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}`}
+                  href={`https://pancakeswap.finance/swap?inputCurrency=${order?.fromTokenAddress || ''}&outputCurrency=${order?.toTokenAddress || ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
