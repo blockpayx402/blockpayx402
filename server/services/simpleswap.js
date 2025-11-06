@@ -709,13 +709,14 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
 
     const normalizedAmount = normalizeAmount(amount)
     
-    // For same-chain swaps, we MUST use v3 API with tickerFrom/tickerTo/networkFrom/networkTo
-    // v1 API doesn't support network-specific currencies for same-chain swaps
+    // Check if this is a same-chain swap
     const isSameChain = fromChain === toChain
     
-    // Try v3 first for same-chain swaps, but fallback to v1 if API key doesn't support v3
-    // v3 requires Bearer token auth, v1 uses query parameter
-    let useV3 = isSameChain // Only use v3 for same-chain swaps initially
+    // ROOT PROBLEM: v3 API requires Bearer token and may not work with v1 API keys
+    // v1 API keys (UUID format) work with query parameter auth, but v3 might need different auth
+    // For now, use v1 API for everything since the API key is v1 format
+    // v1 API can handle same-chain swaps if we use the correct currency codes
+    let useV3 = false // Disable v3 for now - API key is v1 format
     
     let apiUrl
     let fromCurrency, toCurrency
@@ -790,13 +791,9 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
           'Content-Type': 'application/json',
         }
         
-        if (useV3) {
-          headers['Authorization'] = `Bearer ${apiKey}`
-          // v3 API URL already set above
-        } else {
-          // v1: api_key in query parameter (already in URL)
-          delete headers['Authorization']
-        }
+        // v1 API: api_key is already in query parameter, no Authorization header needed
+        // Remove Authorization header if it exists
+        delete headers['Authorization']
         
         response = await fetchWithTimeout(apiUrl, {
           method: 'GET',
@@ -810,22 +807,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
         
-        // If v3 returns 404 or 401, try v1 (for both same-chain and cross-chain)
-        // This handles cases where API key doesn't support v3 or v3 doesn't support the pair
-        if (useV3 && (status === 404 || status === 401) && attempt === 0) {
-          log('info', 'v3 not available (401/404), falling back to v1', { 
-            status, 
-            error: parsed.error || parsed.message,
-            isSameChain 
-          })
-          // Fallback to v1 format
-          useV3 = false
-          fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
-          toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
-          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
-          delete headers['Authorization']
-          continue
-        }
+        // No fallback needed - we're using v1 API directly
         
         const isTransient = status >= 500
         const isRetryable = isTransient && attempt < MAX_RETRIES - 1
@@ -913,31 +895,19 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       }
     }
 
-    // Parse response based on API version
+    // v1 API returns the estimated amount as a plain string (or JSON string)
     const text = await response.text()
     let estimatedAmount = null
     
     try {
-      if (useV3) {
-        // v3 API returns JSON: { result: { estimatedAmount: "...", rateId: "...", validUntil: "..." }, traceId: "..." }
-        const parsed = JSON.parse(text)
-        if (parsed?.result?.estimatedAmount) {
-          estimatedAmount = parsed.result.estimatedAmount
-        } else if (parsed?.estimatedAmount) {
-          estimatedAmount = parsed.estimatedAmount
-        } else {
-          throw new Error(`Unexpected v3 API response format: ${text.substring(0, 200)}`)
-        }
+      // Try parsing as JSON first (in case it's wrapped)
+      const parsed = JSON.parse(text)
+      if (typeof parsed === 'string') {
+        estimatedAmount = parsed
+      } else if (typeof parsed === 'number') {
+        estimatedAmount = parsed.toString()
       } else {
-        // v1 API returns plain string
-        const parsed = JSON.parse(text)
-        if (typeof parsed === 'string') {
-          estimatedAmount = parsed
-        } else if (typeof parsed === 'number') {
-          estimatedAmount = parsed.toString()
-        } else {
-          estimatedAmount = text.trim()
-        }
+        estimatedAmount = text.trim()
       }
     } catch (e) {
       // If not JSON, treat as plain string (v1 format)
