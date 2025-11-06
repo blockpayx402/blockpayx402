@@ -101,7 +101,8 @@ export const createExchangeTransaction = async (orderData) => {
       address: recipientAddress,
       amount: amount,
       ...(refundAddress && { refundAddress }),
-      ...(orderId && { extraId: orderId }),
+      // Only include extraId if the currency supports it (Solana doesn't support extraId)
+      ...(orderId && toCurrency !== 'sol' && toCurrency !== 'SOL' && { extraId: orderId }),
     }
 
     console.log(`[ChangeNOW] Creating transaction (v1): ${apiUrl.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
