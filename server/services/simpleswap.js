@@ -194,11 +194,8 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
-    // SimpleSwap API endpoint - try different formats
-    // Format 1: /api/v2/create-exchange (most common)
-    // Format 2: /api/v1/create-exchange (fallback)
-    // Format 3: /create-exchange (alternative)
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v2/create-exchange`
+    // SimpleSwap API v1 endpoint (per documentation: https://api.simpleswap.io/?urls.primaryName=API%20v1)
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v1/create-exchange`
     
     // Normalize amount
     const payloadAmount = normalizeAmount(normalizedAmount)
@@ -386,7 +383,8 @@ export const getExchangeStatus = async (exchangeId) => {
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in your .env file.')
     }
 
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v2/exchange/${exchangeId.trim()}`
+    // SimpleSwap API v1 endpoint
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v1/exchange/${exchangeId.trim()}`
     
     log('info', 'Getting transaction status', { exchangeId })
     
@@ -496,7 +494,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
     const normalizedAmount = normalizeAmount(amount)
-    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v2/estimate?currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
+    // SimpleSwap API v1 endpoint
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v1/estimate?currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
     
     log('info', 'Getting exchange rate', {
       from: `${fromAsset}(${fromChain})`,
