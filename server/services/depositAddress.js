@@ -27,6 +27,10 @@ export const generateDepositAddress = async (orderData) => {
   } = orderData
 
   try {
+    // Check if it's the same currency on the same chain - no exchange needed
+    if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
+      throw new Error(`Cannot create exchange for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.`)
+    }
     // Skip pair validation - it causes false negatives for valid pairs
         // SimpleSwap will return proper errors if pair is truly invalid
 

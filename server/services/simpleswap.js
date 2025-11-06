@@ -164,6 +164,11 @@ export const createExchangeTransaction = async (orderData) => {
   } = orderData
 
   try {
+    // Check if it's the same currency on the same chain - no exchange needed
+    if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
+      throw new Error(`Cannot create exchange for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.`)
+    }
+    
     // Ensure amount is a number before validation
     const normalizedAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
     
