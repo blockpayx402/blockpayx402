@@ -380,7 +380,7 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     const decimals = originToken.decimals || 18
     const amountInSmallestUnit = Math.floor(parseFloat(amount) * Math.pow(10, decimals)).toString()
     
-    console.log('[Relay] Requesting quote from API...')
+    console.log('[Relay] Requesting quote from SDK...')
     console.log('[Relay] Quote request:', {
       originChainId: originChainId.toString(),
       destinationChainId: destinationChainId.toString(),
@@ -389,45 +389,37 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
       amount: amountInSmallestUnit,
     })
     
-    // Use Relay API /quotes endpoint
-    // Based on: https://docs.relay.link/references/api/overview
-    const response = await fetch('https://api.relay.link/quotes', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        originChainId: parseInt(originChainId),
-        destinationChainId: parseInt(destinationChainId),
-        originTokenAddress: originToken.address || '0x0000000000000000000000000000000000000000',
-        destinationTokenAddress: destinationToken.address || '0x0000000000000000000000000000000000000000',
-        amount: amountInSmallestUnit,
-        destinationAmount: null,
-        user: placeholderAddress,
-        recipient: placeholderAddress,
-      }),
+    // Use Relay SDK's getQuote method instead of direct API call
+    const client = await getRelayClient()
+    
+    const quote = await client.getQuote({
+      fromChainId: parseInt(originChainId),
+      toChainId: parseInt(destinationChainId),
+      fromTokenAddress: originToken.address || '0x0000000000000000000000000000000000000000',
+      toTokenAddress: destinationToken.address || '0x0000000000000000000000000000000000000000',
+      amount: amountInSmallestUnit,
+      userAddress: placeholderAddress,
+      recipientAddress: placeholderAddress,
     })
     
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error')
-      console.error('[Relay] Quote API error:', response.status, errorText)
-      throw new Error(`Relay API error: ${response.status} - ${errorText}`)
-    }
-    
-    const quote = await response.json()
     console.log('[Relay] Quote response:', JSON.stringify(quote).substring(0, 300))
     
-    // Extract destination amount
-    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount || quote.estimatedAmount
+    // Extract destination amount from quote
+    // Relay SDK quote format may vary, so we handle multiple possible fields
+    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount || quote.estimatedAmount || quote.amountOut
     
     if (!destinationAmount) {
       console.error('[Relay] No destination amount in quote:', quote)
-      throw new Error('Invalid response from Relay API: missing destination amount')
+      throw new Error('Invalid response from Relay SDK: missing destination amount')
     }
     
     // Convert back from smallest unit
     const destDecimals = destinationToken.decimals || 18
-    const estimatedAmount = parseFloat(destinationAmount) / Math.pow(10, destDecimals)
+    // destinationAmount might already be in human-readable format or smallest unit
+    // Check if it's a string (likely smallest unit) or number (might be human-readable)
+    const estimatedAmount = typeof destinationAmount === 'string' 
+      ? parseFloat(destinationAmount) / Math.pow(10, destDecimals)
+      : parseFloat(destinationAmount)
     
     return {
       estimatedAmount: estimatedAmount,
