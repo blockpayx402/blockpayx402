@@ -670,8 +670,12 @@ app.get('/api/relay/chains', async (req, res) => {
       const name = chain.name || chain.displayName || chain.label || `Chain ${chainId}`
       const symbol = chain.symbol || chain.nativeCurrency?.symbol || chain.native_currency?.symbol
       
+      // Create value that matches what frontend will send
+      // Use chainId as primary identifier, but also support name-based lookup
+      const chainValue = chainId?.toString() || name.toLowerCase().replace(/\s+/g, '-')
+      
       return {
-        value: name.toLowerCase().replace(/\s+/g, '-') || chainId?.toString(),
+        value: chainValue, // Use chainId as value for reliable matching
         label: name,
         chainId: chainId,
         symbol: symbol,

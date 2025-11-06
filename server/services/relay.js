@@ -292,29 +292,48 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
       'sol': '792703809',
     }
     
-    const fromChainId = chainNameMap[fromChain.toLowerCase()] || fromChain
-    const toChainId = chainNameMap[toChain.toLowerCase()] || toChain
+    // Normalize chain input - could be name, ID, or value from frontend
+    const fromChainLower = fromChain.toLowerCase()
+    const toChainLower = toChain.toLowerCase()
+    
+    const fromChainId = chainNameMap[fromChainLower] || fromChain
+    const toChainId = chainNameMap[toChainLower] || toChain
+    
+    console.log('[Relay] Looking for chains:', { fromChain, fromChainId, toChain, toChainId })
+    console.log('[Relay] Available chains:', chains.map(c => ({
+      id: c.chainId || c.id || c.chain_id,
+      name: c.name || c.displayName || c.label,
+      symbol: c.symbol
+    })).slice(0, 10))
     
     const originChain = chains.find(c => {
       const cId = c.chainId || c.id || c.chain_id
       const cName = (c.name || c.displayName || c.label || '').toLowerCase().replace(/\s+/g, '-')
       const cSymbol = (c.symbol || '').toLowerCase()
+      const cValue = cName.replace(/\s+/g, '-') // Match frontend value format
+      
       return cId?.toString() === fromChainId.toString() || 
              cId?.toString() === fromChain.toString() ||
-             cName === fromChain.toLowerCase() ||
-             cName === fromChainId.toLowerCase() ||
-             cSymbol === fromChain.toLowerCase()
+             cName === fromChainLower ||
+             cName === fromChainId.toString() ||
+             cValue === fromChainLower ||
+             cSymbol === fromChainLower ||
+             cId?.toString() === fromChainLower
     })
     
     const destinationChain = chains.find(c => {
       const cId = c.chainId || c.id || c.chain_id
       const cName = (c.name || c.displayName || c.label || '').toLowerCase().replace(/\s+/g, '-')
       const cSymbol = (c.symbol || '').toLowerCase()
+      const cValue = cName.replace(/\s+/g, '-') // Match frontend value format
+      
       return cId?.toString() === toChainId.toString() || 
              cId?.toString() === toChain.toString() ||
-             cName === toChain.toLowerCase() ||
-             cName === toChainId.toLowerCase() ||
-             cSymbol === toChain.toLowerCase()
+             cName === toChainLower ||
+             cName === toChainId.toString() ||
+             cValue === toChainLower ||
+             cSymbol === toChainLower ||
+             cId?.toString() === toChainLower
     })
     
     if (!originChain) {
