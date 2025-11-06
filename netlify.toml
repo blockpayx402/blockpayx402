@@ -2,12 +2,14 @@
 # This file configures Netlify to serve your app and proxy API requests
 
 [build]
-  # Build command - builds the frontend
-  command = "npm install && npm run build"
+  # Build command - ensure devDependencies are installed (vite is in devDependencies)
+  command = "npm install --include=dev && npm run build"
   # Publish directory - where the built files are
   publish = "dist"
   # Functions directory - Netlify Functions location
   functions = "netlify/functions"
+  # Environment variables
+  environment = { NODE_ENV = "production", NPM_CONFIG_PRODUCTION = "false" }
 
 # Redirect rules - handle API routes and SPA routing
 # API routes are handled by Netlify Function (server.js)
