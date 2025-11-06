@@ -170,12 +170,36 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
       )
 
         // Get recent Transfer events to this address
-        // For recent transactions, we don't need to check too far back
-        // BNB Chain has ~3 second block times, so 22 minutes = ~440 blocks
-        // We'll check last 2000 blocks (about 1.5 hours) to be safe but avoid rate limits
+        // Calculate precise block range based on request creation time to avoid rate limits
         const currentBlock = await provider.getBlockNumber()
-        const blocksToCheck = chain === 'bnb' ? 2000 : 1000 // Reduced from 5000 to avoid rate limits
-        const startBlock = Math.max(0, currentBlock - blocksToCheck)
+        const currentBlockData = await provider.getBlock(currentBlock).catch(() => null)
+        
+        let startBlock = Math.max(0, currentBlock - 1000) // Default fallback
+        
+        if (sinceTimestamp && currentBlockData) {
+          // Calculate approximate block number when request was created
+          // BNB Chain: ~3 seconds per block, Ethereum: ~12 seconds per block
+          const avgBlockTime = chain === 'bnb' ? 3 : 12 // seconds
+          const timeDiff = Date.now() - sinceTimestamp // milliseconds
+          const blocksAgo = Math.ceil((timeDiff / 1000) / avgBlockTime)
+          // Add 10% buffer for safety
+          const bufferBlocks = Math.ceil(blocksAgo * 0.1)
+          startBlock = Math.max(0, currentBlock - blocksAgo - bufferBlocks)
+          
+          console.log(`📅 Calculated block range:`, {
+            requestCreated: new Date(sinceTimestamp).toISOString(),
+            timeDiffMinutes: Math.floor(timeDiff / 60000),
+            blocksAgo,
+            bufferBlocks,
+            startBlock,
+            currentBlock,
+            blockRange: currentBlock - startBlock
+          })
+        } else {
+          // Fallback: use smaller fixed range
+          const blocksToCheck = chain === 'bnb' ? 1000 : 500 // Much smaller to avoid rate limits
+          startBlock = Math.max(0, currentBlock - blocksToCheck)
+        }
       
       console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
         tokenAddress: token.address,
