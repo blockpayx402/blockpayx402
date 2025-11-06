@@ -394,12 +394,14 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     const client = await getRelayClient()
     
     // getQuote is under client.actions, not client directly
+    // tradeType is required: 'EXACT_INPUT' or 'EXACT_OUTPUT'
     const quote = await client.actions.getQuote({
       chainId: parseInt(originChainId),
       toChainId: parseInt(destinationChainId),
       currency: originToken.address || '0x0000000000000000000000000000000000000000',
       toCurrency: destinationToken.address || '0x0000000000000000000000000000000000000000',
       amount: amountInSmallestUnit,
+      tradeType: 'EXACT_INPUT', // Required: EXACT_INPUT means we know the input amount
       user: placeholderAddress,
       recipient: placeholderAddress,
     })
