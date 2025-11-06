@@ -42,11 +42,13 @@ const Transactions = () => {
         amount: `${req.amount || 0} ${req.currency || ''}`,
         status: req.status || 'pending',
         chain: req.chain,
-        from: req.recipient ? `${req.recipient.slice(0, 6)}...${req.recipient.slice(-4)}` : 'Pending',
+        recipient: req.recipient || '', // Keep FULL recipient address
+        from: req.recipient ? `${req.recipient.slice(0, 6)}...${req.recipient.slice(-4)}` : 'Pending', // Display version
         timestamp: req.createdAt ? formatDistanceToNow(new Date(req.createdAt), { addSuffix: true }) : 'Unknown',
         description: req.description || 'Payment request',
         type: 'request',
-        createdAt: req.createdAt
+        createdAt: req.createdAt,
+        expiresAt: req.expiresAt || null
       }
     }).filter(req => req !== null && req.id)
 
@@ -279,7 +281,7 @@ const Transactions = () => {
                         status: item.status || 'pending',
                         chain: item.chain || 'ethereum',
                         description: item.description || (item.type === 'transaction' ? 'Transaction' : 'Payment request'),
-                        recipient: item.type === 'request' ? item.from : (item.to || item.from || ''),
+                        recipient: item.type === 'request' ? (item.recipient || item.from || '') : (item.to || item.from || ''),
                         createdAt: item.createdAt,
                         expiresAt: item.type === 'request' ? (item.expiresAt || null) : null,
                         isExpired: false,

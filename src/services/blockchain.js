@@ -77,9 +77,9 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
       return { verified: false, error: 'Unsupported chain' }
     }
 
-    const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl, {
-      timeout: 20000, // Increased timeout for reliability
-    })
+    // Create provider - ethers.js v6 constructor: JsonRpcProvider(url, network?, options?)
+    // Use default options - network will be detected from RPC
+    const provider = new ethers.JsonRpcProvider(chainConfig.rpcUrl)
 
     const requiredAmount = parseFloat(amount) || 0
     const tolerance = Math.max(0.0001, requiredAmount * 0.01) // 1% tolerance or 0.0001, whichever is larger

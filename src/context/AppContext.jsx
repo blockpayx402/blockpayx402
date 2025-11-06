@@ -420,9 +420,13 @@ export const AppProvider = ({ children }) => {
               ? new Date(updatedRequest.createdAt).getTime() 
               : requestCreationTime
             
+            // Normalize recipient address before verification
+            const normalizedRecipient = updatedRequest.recipient ? updatedRequest.recipient.trim() : ''
+            
             console.log(`🔎 Checking blockchain for payment:`, {
               chain,
-              recipient: updatedRequest.recipient,
+              recipient: normalizedRecipient,
+              originalRecipient: updatedRequest.recipient,
               amount: updatedRequest.amount,
               currency: updatedRequest.currency,
               sinceTimestamp: new Date(requestTimestamp).toISOString()
@@ -430,7 +434,7 @@ export const AppProvider = ({ children }) => {
             
             verifyPayment(
               chain,
-              updatedRequest.recipient,
+              normalizedRecipient,
               updatedRequest.amount,
               isNativeCurrency ? 'native' : updatedRequest.currency,
               requestTimestamp
