@@ -69,6 +69,33 @@ const getChangeNowNetwork = (chain) => {
   return NETWORK_MAP[chain] || chain.toLowerCase()
 }
 
+// Normalize amount to string with up to 8 decimals (v1 accepts number-like strings)
+const normalizeAmount = (amount) => {
+  const num = typeof amount === 'string' ? Number(amount) : amount
+  if (!isFinite(num) || num <= 0) return '0'
+  // Trim trailing zeros
+  return Number(num.toFixed(8)).toString()
+}
+
+// Get minimum amount for a pair (v1)
+const getMinAmountV1 = async (fromAsset, toAsset, fromChain, toChain) => {
+  try {
+    const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
+    if (!apiKey) return null
+    const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
+    const toCurrency = getChangeNowCurrency(toAsset, toChain)
+    const url = `https://api.changenow.io/v1/min-amount/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
+    const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    // v1 returns just a number or { minAmount }
+    const value = typeof data === 'number' ? data : (data.minAmount || data.min_amount)
+    return typeof value === 'number' && value > 0 ? Number(value.toFixed(8)) : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Create a new exchange transaction
  * Returns deposit address and order ID
@@ -103,7 +130,7 @@ export const createExchangeTransaction = async (orderData) => {
       from: fromCurrency,
       to: toCurrency,
       address: recipientAddress,
-      amount: amount,
+      amount: normalizeAmount(amount),
       ...(refundAddress && { refundAddress }),
       // Only include extraId if the currency supports it (Solana doesn't support extraId)
       ...(orderId && toCurrency !== 'sol' && toCurrency !== 'SOL' && { extraId: orderId }),
@@ -111,6 +138,22 @@ export const createExchangeTransaction = async (orderData) => {
 
     console.log(`[ChangeNOW] Creating transaction (v1): ${apiUrl.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
     console.log(`[ChangeNOW] Transaction payload:`, { ...payload, address: recipientAddress.substring(0, 10) + '...' })
+
+    // Preflight: if amount is below min, bump to min
+    try {
+      const preflight = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, payload.amount)
+      if (preflight?.estimatedAmount === '0') {
+        // No route; continue to normal flow to get proper error
+      }
+    } catch (e) {
+      const msg = String(e?.message || '')
+      if (msg.includes('below minimum') || msg.includes('min_amount')) {
+        const min = await getMinAmountV1(fromAsset, toAsset, fromChain, toChain)
+        if (min && min > 0) {
+          payload.amount = normalizeAmount(min)
+        }
+      }
+    }
 
     // Retry on transient server errors
     let response
@@ -289,7 +332,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     // Include network in currency code for tokens (e.g., usdc_eth, usdc_sol)
     const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
     const toCurrency = getChangeNowCurrency(toAsset, toChain)
-    const url = `https://api.changenow.io/v1/exchange-amount/${amount}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
+    const url = `https://api.changenow.io/v1/exchange-amount/${normalizeAmount(amount)}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
     
     console.log(`[ChangeNOW] Getting exchange rate (v1): ${url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
 
@@ -337,7 +380,12 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       if (errorData.error === 'max_amount_exceeded') {
         throw new Error(`Amount exceeds maximum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a smaller amount.`)
       } else if (errorData.error === 'min_amount') {
-        throw new Error(`Amount is below minimum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a larger amount.`)
+        const min = await getMinAmountV1(fromAsset, toAsset, fromChain, toChain)
+        if (min) {
+          throw new Error(`Amount is below minimum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Minimum is ${min}.`)
+        } else {
+          throw new Error(`Amount is below minimum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a larger amount.`)
+        }
       } else if (errorData.error === 'pair_is_inactive') {
         throw new Error(`Exchange pair is currently inactive: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
       } else if (response.status === 401 || response.status === 403) {
