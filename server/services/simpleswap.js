@@ -13,10 +13,10 @@ if (!BLOCKPAY_CONFIG.simpleswap.apiKey && process.env.NODE_ENV === 'production')
 }
 
 // Configuration constants
-const API_TIMEOUT = 15000 // 15 seconds
-const MAX_RETRIES = 3
-const RETRY_DELAY_BASE = 500 // Base delay in ms
-const RETRY_DELAY_MAX = 5000 // Max delay in ms
+const API_TIMEOUT = 20000 // 20 seconds (increased for SimpleSwap)
+const MAX_RETRIES = 2 // Reduced retries to avoid timeouts
+const RETRY_DELAY_BASE = 1000 // Base delay in ms
+const RETRY_DELAY_MAX = 5000 // Max delay in ms (reduced)
 
 /**
  * Create a fetch request with timeout
@@ -255,6 +255,18 @@ export const createExchangeTransaction = async (orderData) => {
       ...(validRefundAddress && { user_refund_address: validRefundAddress }), // Refund address
       // Don't include user_refund_extra_id unless needed
     }
+    
+    console.log('[SimpleSwap createExchangeTransaction] Request payload:', {
+      currency_from: fromCurrency,
+      currency_to: toCurrency,
+      amount: payloadAmount,
+      address_to: recipientAddress.substring(0, 10) + '...',
+      has_refund: !!validRefundAddress,
+      fromAsset,
+      fromChain,
+      toAsset,
+      toChain
+    })
 
     log('info', 'Creating exchange transaction', {
       from: `${fromAsset}(${fromChain})`,
@@ -338,7 +350,11 @@ export const createExchangeTransaction = async (orderData) => {
       if (errorData.status === 401 || errorData.status === 403) {
         throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
       } else if (errorData.status === 404) {
-        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+        // Check if it's a same-chain swap (SimpleSwap may not support same-chain swaps)
+        if (fromChain === toChain) {
+          throw new Error(`SimpleSwap does not support same-chain swaps: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use a DEX (like PancakeSwap) for same-chain swaps, or choose different chains.`)
+        }
+        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap.`)
       } else if (errorData.status === 502) {
         throw new Error(`SimpleSwap API gateway error (502): The service may be temporarily unavailable. Please try again in a few moments. If the issue persists, check SimpleSwap's status page.`)
       } else if (errorData.status >= 500) {
@@ -589,7 +605,11 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       if (errorData.status === 401 || errorData.status === 403) {
         throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
       } else if (errorData.status === 404) {
-        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+        // Check if it's a same-chain swap (SimpleSwap may not support same-chain swaps)
+        if (fromChain === toChain) {
+          throw new Error(`SimpleSwap does not support same-chain swaps: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use a DEX (like PancakeSwap) for same-chain swaps, or choose different chains.`)
+        }
+        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap.`)
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
       } else {
