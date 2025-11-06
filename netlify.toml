@@ -17,6 +17,13 @@
   status = 200
   force = true
 
+# Force HTTPS redirect
+[[redirects]]
+  from = "http://blockpay.cloud/*"
+  to = "https://blockpay.cloud/:splat"
+  status = 301
+  force = true
+
 # SPA fallback - redirect all non-API routes to index.html
 [[redirects]]
   from = "/*"
