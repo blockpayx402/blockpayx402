@@ -831,8 +831,15 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       
       if (errorData.status === 401 || errorData.status === 403) {
         throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
-      } else if (errorData.status === 404) {
-        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap.`)
+      } else if (errorData.status === 404 || errorData.status === 400) {
+        // 400 or 404 might mean pair not available, but could also mean wrong currency format
+        const errorMsg = error.message || error.error || errorData.text || 'Unknown error'
+        // Check if it's a pair availability issue or format issue
+        if (errorMsg.toLowerCase().includes('pair') || errorMsg.toLowerCase().includes('not available') || errorMsg.toLowerCase().includes('not found')) {
+          throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap API. Note: SimpleSwap's public API may not support all pairs that their website supports.`)
+        } else {
+          throw new Error(`SimpleSwap API error (${errorData.status}): ${errorMsg}. Currency codes used: ${fromCurrency} -> ${toCurrency}`)
+        }
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
       } else {
