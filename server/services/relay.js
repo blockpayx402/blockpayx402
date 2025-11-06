@@ -331,34 +331,65 @@ export const getAllRelayChains = async () => {
  */
 export const getAllRelayTokens = async (chainId) => {
   try {
+    console.log('[Relay] Fetching tokens for chainId:', chainId)
+    
     // Use Relay API endpoint to get currencies for a chain
     // Based on: https://docs.relay.link/references/api/overview
-    const response = await fetch(`https://api.relay.link/currencies`, {
-      method: 'POST',
+    // Try GET /chains/{chainId}/tokens first (more reliable)
+    let response = await fetch(`https://api.relay.link/chains/${chainId}/tokens`, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        chainId: chainId.toString(),
-      }),
     })
     
+    // If GET fails, try POST /currencies
     if (!response.ok) {
+      console.log('[Relay] GET /chains/{chainId}/tokens failed, trying POST /currencies')
+      response = await fetch(`https://api.relay.link/currencies`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chainId: chainId.toString(),
+        }),
+      })
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error')
+      console.error(`[Relay] Failed to fetch tokens: ${response.status} - ${errorText}`)
       throw new Error(`Failed to fetch tokens: ${response.status}`)
     }
     
     const data = await response.json()
+    console.log('[Relay] Token response format:', Array.isArray(data) ? 'array' : typeof data, Object.keys(data || {}))
     
     // Handle different response formats
+    let tokens = []
     if (Array.isArray(data)) {
-      return data
-    } else if (data.currencies) {
-      return data.currencies
-    } else if (data.tokens) {
-      return data.tokens
+      tokens = data
+    } else if (data.currencies && Array.isArray(data.currencies)) {
+      tokens = data.currencies
+    } else if (data.tokens && Array.isArray(data.tokens)) {
+      tokens = data.tokens
+    } else if (data.data && Array.isArray(data.data)) {
+      tokens = data.data
     }
     
-    return []
+    console.log('[Relay] Found', tokens.length, 'tokens for chain', chainId)
+    
+    // Ensure tokens have required fields
+    tokens = tokens.map(token => ({
+      symbol: token.symbol || token.name || 'UNKNOWN',
+      address: token.address || token.contractAddress || token.tokenAddress || '0x0000000000000000000000000000000000000000',
+      decimals: token.decimals || 18,
+      name: token.name || token.symbol,
+      isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+    }))
+    
+    return tokens
   } catch (error) {
     console.error('[Relay SDK] Error getting tokens:', error)
     // Fallback: try to get from SDK client
@@ -370,7 +401,14 @@ export const getAllRelayTokens = async (chainId) => {
       )
       
       if (chain && chain.tokens) {
-        return chain.tokens
+        console.log('[Relay] Using fallback tokens from SDK client:', chain.tokens.length)
+        return chain.tokens.map(token => ({
+          symbol: token.symbol || token.name || 'UNKNOWN',
+          address: token.address || token.contractAddress || '0x0000000000000000000000000000000000000000',
+          decimals: token.decimals || 18,
+          name: token.name || token.symbol,
+          isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+        }))
       }
     } catch (fallbackError) {
       console.error('[Relay SDK] Fallback also failed:', fallbackError)

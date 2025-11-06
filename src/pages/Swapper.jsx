@@ -66,23 +66,29 @@ const Swapper = () => {
   // Fetch tokens when chain changes
   useEffect(() => {
     const fetchTokens = async () => {
-      if (!fromChain) return
+      if (!fromChain || availableChains.length === 0) return
       
       setTokensLoading(true)
+      setFromChainTokens([]) // Clear previous tokens
       try {
         const chain = availableChains.find(c => c.value === fromChain)
-        if (chain) {
+        if (chain && chain.chainId) {
+          console.log('[Swapper] Fetching tokens for chain:', chain.label, 'chainId:', chain.chainId)
           const tokens = await relayAPI.getTokens(chain.chainId)
+          console.log('[Swapper] Received tokens:', tokens.length)
           setFromChainTokens(tokens)
           
           // Set default token if available
           if (tokens.length > 0 && !fromAsset) {
-            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.isNative) || tokens[0]
+            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.symbol === 'BNB' || t.isNative) || tokens[0]
             setFromAsset(defaultToken.symbol)
           }
+        } else {
+          console.warn('[Swapper] Chain not found or missing chainId:', fromChain, chain)
         }
       } catch (error) {
         console.error('Error fetching from chain tokens:', error)
+        toast.error(`Failed to load tokens for ${fromChain}. Please try again.`)
       } finally {
         setTokensLoading(false)
       }
@@ -93,19 +99,23 @@ const Swapper = () => {
 
   useEffect(() => {
     const fetchTokens = async () => {
-      if (!toChain) return
+      if (!toChain || availableChains.length === 0) return
       
       try {
         const chain = availableChains.find(c => c.value === toChain)
-        if (chain) {
+        if (chain && chain.chainId) {
+          console.log('[Swapper] Fetching tokens for toChain:', chain.label, 'chainId:', chain.chainId)
           const tokens = await relayAPI.getTokens(chain.chainId)
+          console.log('[Swapper] Received toChain tokens:', tokens.length)
           setToChainTokens(tokens)
           
           // Set default token if available
           if (tokens.length > 0 && !toAsset) {
-            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.isNative) || tokens[0]
+            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.symbol === 'BNB' || t.isNative) || tokens[0]
             setToAsset(defaultToken.symbol)
           }
+        } else {
+          console.warn('[Swapper] ToChain not found or missing chainId:', toChain, chain)
         }
       } catch (error) {
         console.error('Error fetching to chain tokens:', error)
