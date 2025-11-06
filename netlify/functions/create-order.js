@@ -42,8 +42,8 @@ export const handler = async (event, context) => {
       }
     }
 
-    // Calculate platform fee
-    const fee = calculatePlatformFee(parseFloat(amount), fromAsset)
+    // Calculate platform fee (with chain-specific recipient)
+    const fee = calculatePlatformFee(parseFloat(amount), fromAsset, fromChain)
 
     // Generate order ID first
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
