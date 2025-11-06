@@ -455,28 +455,40 @@ export const createRelayTransaction = async (orderData) => {
     const isEVMChain = (chain) => ['ethereum', 'bnb', 'polygon'].includes(chain.toLowerCase())
     const isSolanaChain = (chain) => chain.toLowerCase() === 'solana'
     
-    const recipientIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(recipientAddress)
-    const recipientIsSolana = !recipientIsEVM && recipientAddress.length >= 32 && recipientAddress.length <= 44
+    // Normalize addresses (remove whitespace)
+    const normalizedRecipient = (recipientAddress || '').trim()
+    const normalizedUser = (userAddress || '').trim()
+    const normalizedRefund = (refundAddress || '').trim()
     
-    if (isEVMChain(toChain) && !recipientIsEVM) {
-      throw new Error(`Invalid recipient address format for ${toChain}. Expected EVM address (0x...) but got Solana format.`)
-    }
-    if (isSolanaChain(toChain) && !recipientIsSolana) {
-      throw new Error(`Invalid recipient address format for Solana. Expected Solana address (base58, 32-44 chars) but got EVM format.`)
+    // Validate address formats
+    const recipientIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(normalizedRecipient)
+    const recipientIsSolana = !recipientIsEVM && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedRecipient)
+    
+    // Validate recipient matches destination chain
+    if (isEVMChain(toChain)) {
+      if (!recipientIsEVM) {
+        throw new Error(`Invalid recipient address format for ${toChain}. Expected EVM address (0x...) but got: ${normalizedRecipient.substring(0, 20)}...`)
+      }
+    } else if (isSolanaChain(toChain)) {
+      if (!recipientIsSolana) {
+        throw new Error(`Invalid recipient address format for Solana. Expected Solana address (base58, 32-44 chars) but got EVM format: ${normalizedRecipient.substring(0, 20)}...`)
+      }
     }
     
     // Format user address - should match origin chain format
     // Relay Link requires this field, so we must provide a valid address in origin chain format
     let formattedUserAddress = null
     
-    if (userAddress) {
-      const userIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(userAddress)
+    if (normalizedUser) {
+      const userIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(normalizedUser)
+      const userIsSolana = !userIsEVM && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedUser)
+      
       if (isEVMChain(fromChain) && userIsEVM) {
-        formattedUserAddress = userAddress
-      } else if (isSolanaChain(fromChain) && !userIsEVM && userAddress.length >= 32 && userAddress.length <= 44) {
-        formattedUserAddress = userAddress
+        formattedUserAddress = normalizedUser
+      } else if (isSolanaChain(fromChain) && userIsSolana) {
+        formattedUserAddress = normalizedUser
       } else {
-        console.warn(`[Relay Link] User address format mismatch for origin chain ${fromChain}. Using fallback.`)
+        console.warn(`[Relay Link] User address format mismatch for origin chain ${fromChain}. User: ${normalizedUser.substring(0, 20)}... Using fallback.`)
       }
     }
     
@@ -487,9 +499,10 @@ export const createRelayTransaction = async (orderData) => {
         formattedUserAddress = '0x0000000000000000000000000000000000000000'
         console.log(`[Relay Link] Using zero address placeholder for EVM origin chain ${fromChain}`)
       } else if (isSolanaChain(fromChain)) {
-        // For Solana, check if recipient is Solana format
-        if (recipientAddress.length >= 32 && recipientAddress.length <= 44) {
-          formattedUserAddress = recipientAddress
+        // For Solana, check if recipient is Solana format and use it
+        if (recipientIsSolana) {
+          formattedUserAddress = normalizedRecipient
+          console.log(`[Relay Link] Using recipient address as user address for Solana origin chain`)
         } else {
           // Use Solana system program address as placeholder
           formattedUserAddress = '11111111111111111111111111111111'
@@ -499,12 +512,17 @@ export const createRelayTransaction = async (orderData) => {
     }
     
     // Format refund address - should match origin chain
-    let formattedRefundAddress = refundAddress
-    if (refundAddress) {
-      const refundIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(refundAddress)
-      if (isEVMChain(fromChain) && !refundIsEVM) {
-        console.warn(`[Relay Link] Refund address format mismatch for origin chain ${fromChain}. Expected EVM format.`)
-        formattedRefundAddress = null // Don't include if format is wrong
+    let formattedRefundAddress = null
+    if (normalizedRefund) {
+      const refundIsEVM = /^0x[a-fA-F0-9]{40}$/i.test(normalizedRefund)
+      const refundIsSolana = !refundIsEVM && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(normalizedRefund)
+      
+      if (isEVMChain(fromChain) && refundIsEVM) {
+        formattedRefundAddress = normalizedRefund
+      } else if (isSolanaChain(fromChain) && refundIsSolana) {
+        formattedRefundAddress = normalizedRefund
+      } else {
+        console.warn(`[Relay Link] Refund address format mismatch for origin chain ${fromChain}. Refund: ${normalizedRefund.substring(0, 20)}... Skipping.`)
       }
     }
     
@@ -515,7 +533,7 @@ export const createRelayTransaction = async (orderData) => {
       destinationCurrency,
       amount: amountInSmallestUnit,
       tradeType: 'EXACT_INPUT',
-      recipient: recipientAddress, // Destination chain format
+      recipient: normalizedRecipient, // Destination chain format - validated above
       user: formattedUserAddress, // Required field - origin chain format
       useDepositAddress: true,
       ...(formattedRefundAddress && { refundTo: formattedRefundAddress }), // Origin chain format
