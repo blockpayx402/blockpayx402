@@ -50,7 +50,7 @@ const DepositAddressPayment = ({ request }) => {
             amount: parseFloat(amount),
             direction: 'forward'
           })
-          setEstimatedReceive(rateData.estimatedToAmount?.toFixed(6) || '')
+          setEstimatedReceive(rateData.estimatedToAmount && typeof rateData.estimatedToAmount === 'number' ? rateData.estimatedToAmount.toFixed(6) : (rateData.estimatedToAmount?.toString() || ''))
         } catch (error) {
           console.error('Error calculating rate:', error)
           setEstimatedReceive('')
@@ -73,8 +73,9 @@ const DepositAddressPayment = ({ request }) => {
             amount: parseFloat(requiredAmount),
             direction: 'reverse'
           })
-          setCalculatedAmount(rateData.fromAmount?.toFixed(6) || '')
-          setAmount(rateData.fromAmount?.toFixed(6) || '')
+          const fromAmount = rateData.fromAmount && typeof rateData.fromAmount === 'number' ? rateData.fromAmount.toFixed(6) : (rateData.fromAmount?.toString() || '')
+          setCalculatedAmount(fromAmount)
+          setAmount(fromAmount)
         } catch (error) {
           console.error('Error calculating rate:', error)
           setCalculatedAmount('')

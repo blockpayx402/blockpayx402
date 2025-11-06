@@ -372,9 +372,9 @@ app.post('/api/create-order', async (req, res) => {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
         errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in Netlify environment variables.'
         statusCode = 401
-      } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
-        errorMessage = `This exchange pair is not available: ${fromAsset}(${fromChain}) -> ${req.body?.requestId ? 'target currency' : 'unknown'}. Please try a different currency or chain.`
-        statusCode = 404
+      } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404') || error.message.includes('inactive')) {
+        errorMessage = error.message.includes('inactive') ? error.message : `This exchange pair is not available: ${fromAsset}(${fromChain}) -> ${req.body?.toAsset || req.body?.requestId ? 'target currency' : 'unknown'}. Please try a different currency or chain.`
+        statusCode = 400
       } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
         errorMessage = 'Cannot connect to ChangeNOW API. Please check your internet connection and try again.'
         statusCode = 503
@@ -515,7 +515,10 @@ app.post('/api/exchange-rate', async (req, res) => {
       } else if (error.message.includes('min_amount') || error.message.includes('below minimum')) {
         errorMessage = error.message
         statusCode = 400
-      } else if (error.message.includes('pair_is_inactive') || error.message.includes('inactive')) {
+      } else if (error.message.includes('pair_is_inactive') || error.message.includes('inactive') || error.message.includes('currently inactive')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('not available')) {
         errorMessage = error.message
         statusCode = 400
       } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
