@@ -343,8 +343,8 @@ export const validateExchangePair = async (fromAsset, toAsset, fromChain, toChai
     }
 
     const pairs = await response.json()
-    const fromCurrency = getChangeNowCurrency(fromAsset)
-    const toCurrency = getChangeNowCurrency(toAsset)
+    const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
+    const toCurrency = getChangeNowCurrency(toAsset, toChain)
     const fromNetwork = getChangeNowNetwork(fromChain)
     const toNetwork = getChangeNowNetwork(toChain)
 
