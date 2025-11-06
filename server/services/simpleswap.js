@@ -483,10 +483,6 @@ export const createExchangeTransaction = async (orderData) => {
       if (errorData.status === 401 || errorData.status === 403) {
         throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
       } else if (errorData.status === 404) {
-        // Check if it's a same-chain swap (SimpleSwap may not support same-chain swaps)
-        if (fromChain === toChain) {
-          throw new Error(`SimpleSwap does not support same-chain swaps: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use a DEX (like PancakeSwap) for same-chain swaps, or choose different chains.`)
-        }
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap.`)
       } else if (errorData.status === 502) {
         throw new Error(`SimpleSwap API gateway error (502): The service may be temporarily unavailable. Please try again in a few moments. If the issue persists, check SimpleSwap's status page.`)
@@ -754,10 +750,6 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       if (errorData.status === 401 || errorData.status === 403) {
         throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
       } else if (errorData.status === 404) {
-        // Check if it's a same-chain swap (SimpleSwap may not support same-chain swaps)
-        if (fromChain === toChain) {
-          throw new Error(`SimpleSwap does not support same-chain swaps: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use a DEX (like PancakeSwap) for same-chain swaps, or choose different chains.`)
-        }
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap.`)
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
