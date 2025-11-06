@@ -289,9 +289,19 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       console.error(`[Relay Link] API error ${response.status}:`, errorData)
       
       if (response.status === 400) {
-        throw new Error(`Invalid request: ${errorData.message || errorText}`)
+        const errorMsg = errorData.message || errorText
+        if (errorMsg.includes('Could not execute swap') || errorMsg.includes('swap')) {
+          throw new Error(`This swap route is not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). The currency pair may not be supported by Relay Link. Please try a different currency pair.`)
+        }
+        throw new Error(`Invalid request: ${errorMsg}`)
       } else if (response.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+      } else if (response.status === 500) {
+        const errorMsg = errorData.message || errorText || ''
+        if (errorMsg.includes('Could not execute swap') || errorMsg.includes('swap')) {
+          throw new Error(`Relay Link cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported or the route is unavailable. Please try a different currency pair or amount.`)
+        }
+        throw new Error(`Relay Link API error: ${errorMsg || 'Internal server error'}`)
       } else {
         throw new Error(`Relay Link API error: ${response.status} - ${errorData.message || errorText}`)
       }
@@ -469,9 +479,19 @@ export const createRelayTransaction = async (orderData) => {
       console.error(`[Relay Link] API error ${response.status}:`, errorData)
       
       if (response.status === 400) {
-        throw new Error(`Invalid request: ${errorData.message || errorText}`)
+        const errorMsg = errorData.message || errorText
+        if (errorMsg.includes('Could not execute swap') || errorMsg.includes('swap')) {
+          throw new Error(`This swap route is not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). The currency pair may not be supported by Relay Link. Please try a different currency pair.`)
+        }
+        throw new Error(`Invalid request: ${errorMsg}`)
       } else if (response.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+      } else if (response.status === 500) {
+        const errorMsg = errorData.message || errorText || ''
+        if (errorMsg.includes('Could not execute swap') || errorMsg.includes('swap')) {
+          throw new Error(`Relay Link cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported or the route is unavailable. Please try a different currency pair or amount.`)
+        }
+        throw new Error(`Relay Link API error: ${errorMsg || 'Internal server error'}`)
       } else {
         throw new Error(`Relay Link API error: ${response.status} - ${errorData.message || errorText}`)
       }
