@@ -1,9 +1,10 @@
 /**
  * BlockPay Deposit Address Generation Service
- * Production-ready integration with Relay Link for cross-chain swaps
+ * Deposit address generation service
+ * Supports ChangeNOW for cross-chain swaps
  */
 
-import { createRelayTransaction, getRelayStatus } from './relay.js'
+import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
@@ -31,8 +32,8 @@ export const generateDepositAddress = async (orderData) => {
     // The fee will be deducted from the final amount received by the seller
     const amountAfterFee = amount - fee.amount
 
-    // Create exchange transaction via Relay Link API
-    const exchangeData = await createRelayTransaction({
+    // Create exchange transaction via ChangeNOW API
+    const exchangeData = await createExchangeTransaction({
       fromChain,
       fromAsset,
       toChain,
@@ -41,7 +42,6 @@ export const generateDepositAddress = async (orderData) => {
       recipientAddress,
       refundAddress,
       orderId,
-      userAddress,
     })
 
     return {
@@ -58,14 +58,12 @@ export const generateDepositAddress = async (orderData) => {
     console.error('Error generating deposit address:', error)
     
     // Provide helpful error messages
-    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-      throw new Error('Invalid Relay Link API request. Please check your configuration.')
-    } else if (error.message.includes('404') || error.message.includes('not found') || error.message.includes('not available')) {
+    if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
+      throw new Error('Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in environment variables.')
+    } else if (error.message.includes('inactive') || error.message.includes('not available') || error.message.includes('404')) {
       throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
-    } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
-      throw new Error('Cannot connect to Relay Link API. Please check your internet connection and try again.')
-    } else if (error.message.includes('Unsupported chain')) {
-      throw new Error(`Unsupported blockchain: ${fromChain} or ${toChain}. Please use supported chains (Ethereum, BNB Chain, Polygon, Solana).`)
+    } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
+      throw new Error('Cannot connect to ChangeNOW API. Please check your internet connection and try again.')
     }
     
     throw new Error(`Failed to generate deposit address: ${error.message}`)
@@ -73,20 +71,20 @@ export const generateDepositAddress = async (orderData) => {
 }
 
 /**
- * Check deposit status via Relay Link API
+ * Check deposit status via ChangeNOW API
  * This checks the actual status of the exchange transaction
  */
 export const checkDepositStatus = async (exchangeId) => {
   try {
-    const status = await getRelayStatus(exchangeId)
+    const status = await getExchangeStatus(exchangeId)
     return {
-      received: status.status !== 'awaiting_deposit',
-      amount: status.fromAmount,
-      txHash: status.depositTxHash,
-      swapTxHash: status.swapTxHash,
-      status: status.status,
-      toAmount: status.toAmount,
-      exchangeRate: status.exchangeRate,
+      received: status.status !== 'waiting' && status.payinHash,
+      amount: status.amount || null,
+      txHash: status.payinHash || null,
+      swapTxHash: status.payoutHash || null,
+      status: status.status || 'awaiting_deposit',
+      toAmount: status.payoutAmount || null,
+      exchangeRate: null,
     }
   } catch (error) {
     console.error('Error checking deposit status:', error)
