@@ -1,19 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, RefreshCw, Loader2, ArrowUpDown, CheckCircle2, Copy, ExternalLink } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Loader2, ArrowUpDown, CheckCircle2, Copy, ExternalLink, Wallet, Maximize2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
 import { ordersAPI } from '../services/api'
 import { CHAINS } from '../services/blockchain'
+import { useApp } from '../context/AppContext'
 
 const Swapper = () => {
   const navigate = useNavigate()
+  const { wallet, connectWallet, disconnectWallet } = useApp()
   
   // Swap direction: from -> to
   const [fromChain, setFromChain] = useState('bnb')
   const [fromAsset, setFromAsset] = useState('BNB')
   const [fromAmount, setFromAmount] = useState('')
+  const [walletBalance, setWalletBalance] = useState('0.0')
+  const [balanceLoading, setBalanceLoading] = useState(false)
   
   const [toChain, setToChain] = useState('bnb')
   const [toAsset, setToAsset] = useState('USDT')
@@ -28,14 +32,131 @@ const Swapper = () => {
   const debounceTimer = useRef(null)
 
   const availableChains = [
-    { value: 'ethereum', label: 'Ethereum', assets: ['ETH', 'USDT', 'USDC'] },
-    { value: 'bnb', label: 'BNB Chain', assets: ['BNB', 'USDT', 'BUSD'] },
-    { value: 'polygon', label: 'Polygon', assets: ['MATIC', 'USDT', 'USDC'] },
-    { value: 'solana', label: 'Solana', assets: ['SOL', 'USDC'] },
+    { value: 'ethereum', label: 'Ethereum', chainId: '0x1', assets: ['ETH', 'USDT', 'USDC'] },
+    { value: 'bnb', label: 'BNB Chain', chainId: '0x38', assets: ['BNB', 'USDT', 'BUSD'] },
+    { value: 'polygon', label: 'Polygon', chainId: '0x89', assets: ['MATIC', 'USDT', 'USDC'] },
+    { value: 'solana', label: 'Solana', chainId: null, assets: ['SOL', 'USDC'] },
   ]
 
   const fromChainConfig = availableChains.find(c => c.value === fromChain)
   const toChainConfig = availableChains.find(c => c.value === toChain)
+
+  // Map EVM chain IDs to our chain names
+  const chainIdMap = {
+    '0x1': 'ethereum',
+    '0x38': 'bnb',
+    '0x89': 'polygon',
+    '0xa': 'optimism',
+    '0xa4b1': 'arbitrum',
+  }
+
+  // Auto-detect chain from wallet when connected
+  useEffect(() => {
+    if (wallet?.connected && wallet?.chain === 'evm' && typeof window.ethereum !== 'undefined') {
+      const detectChain = async () => {
+        try {
+          const chainId = await window.ethereum.request({ method: 'eth_chainId' })
+          const detectedChain = chainIdMap[chainId] || 'ethereum'
+          
+          // Auto-set from chain if wallet is on a supported chain
+          if (availableChains.find(c => c.value === detectedChain)) {
+            setFromChain(detectedChain)
+            const chain = availableChains.find(c => c.value === detectedChain)
+            const preferredAsset = chain?.assets[0] || 'ETH'
+            setFromAsset(preferredAsset)
+          }
+        } catch (error) {
+          console.error('Error detecting chain:', error)
+        }
+      }
+      detectChain()
+    } else if (wallet?.connected && wallet?.chain === 'solana') {
+      // Auto-set to Solana if Solana wallet connected
+      setFromChain('solana')
+      setFromAsset('SOL')
+    }
+  }, [wallet?.connected, wallet?.chain])
+
+  // Auto-fill recipient address from wallet
+  useEffect(() => {
+    if (wallet?.connected && wallet?.address) {
+      // Auto-fill recipient address
+      setRecipientAddress(wallet.address)
+      
+      // Auto-fill refund address
+      if (!refundAddress) {
+        setRefundAddress(wallet.address)
+      }
+    }
+  }, [wallet?.connected, wallet?.address])
+
+  // Fetch wallet balance when chain/asset changes
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!wallet?.connected || !wallet?.address) {
+        setWalletBalance('0.0')
+        return
+      }
+
+      // Check if wallet chain matches from chain
+      const chainMap = {
+        'ethereum': 'evm',
+        'bnb': 'evm',
+        'polygon': 'evm',
+        'solana': 'solana'
+      }
+      
+      const walletChainType = wallet.chain || (wallet.provider === 'phantom' || wallet.provider === 'solflare' ? 'solana' : 'evm')
+      const selectedChainType = chainMap[fromChain] || 'evm'
+      
+      // Only fetch balance if chains match
+      if (walletChainType !== selectedChainType) {
+        setWalletBalance('0.0')
+        return
+      }
+      
+      setBalanceLoading(true)
+      try {
+        if (walletChainType === 'solana' && wallet.address) {
+          const { CHAINS } = await import('../services/blockchain')
+          const rpcUrl = CHAINS.solana?.rpcUrls?.[0] || CHAINS.solana?.rpcUrl
+          
+          if (rpcUrl) {
+            const response = await fetch(rpcUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getBalance',
+                params: [wallet.address]
+              })
+            })
+            
+            const data = await response.json()
+            if (data.result) {
+              const sol = data.result.value / 1_000_000_000
+              setWalletBalance(sol.toFixed(6))
+            }
+          }
+        } else if (walletChainType === 'evm' && wallet.address && typeof window.ethereum !== 'undefined') {
+          const balance = await window.ethereum.request({
+            method: 'eth_getBalance',
+            params: [wallet.address, 'latest'],
+          })
+          const balanceInEth = (parseInt(balance, 16) / Math.pow(10, 18)).toFixed(6)
+          setWalletBalance(balanceInEth)
+        }
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error)
+        setWalletBalance('0.0')
+      } finally {
+        setBalanceLoading(false)
+      }
+    }
+    
+    fetchBalance()
+  }, [wallet, fromChain, fromAsset])
 
   // Auto-calculate "to" amount when "from" amount changes
   useEffect(() => {
@@ -44,6 +165,12 @@ const Swapper = () => {
     }
 
     const calculateRate = async () => {
+      // Don't calculate if same currency on same chain (direct transfer, not swap)
+      if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
+        setToAmount(fromAmount)
+        return
+      }
+
       if (fromAmount && parseFloat(fromAmount) > 0 && fromChain && fromAsset && toChain && toAsset) {
         setCalculating(true)
         try {
@@ -63,7 +190,7 @@ const Swapper = () => {
           console.error('Error calculating rate:', error)
           setToAmount('')
           const errorMsg = error.response?.data?.error || error.message || 'Failed to calculate exchange rate'
-          if (!errorMsg.includes('API key')) {
+          if (!errorMsg.includes('API key') && !errorMsg.includes('pair not available')) {
             toast.error(errorMsg, { duration: 4000 })
           }
         } finally {
@@ -82,6 +209,15 @@ const Swapper = () => {
       }
     }
   }, [fromAmount, fromChain, fromAsset, toChain, toAsset])
+
+  const handleMaxAmount = () => {
+    if (walletBalance && parseFloat(walletBalance) > 0) {
+      // Reserve small amount for gas (0.01 for EVM, 0.001 for Solana)
+      const reserve = fromChain === 'solana' ? 0.001 : 0.01
+      const maxAmount = Math.max(0, parseFloat(walletBalance) - reserve)
+      setFromAmount(maxAmount.toFixed(6))
+    }
+  }
 
   const handleSwap = async () => {
     if (!fromAmount || parseFloat(fromAmount) <= 0) {
@@ -246,10 +382,25 @@ const Swapper = () => {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-soft-lg shadow-purple-500/20">
             <RefreshCw className="w-7 h-7 text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">Token Swapper</h1>
             <p className="text-white/60 text-lg">Swap any cryptocurrency instantly</p>
           </div>
+          {!wallet?.connected && (
+            <button
+              onClick={() => connectWallet('auto')}
+              className="px-6 py-3 glass-strong rounded-xl border border-white/10 hover:border-purple-500/50 text-white font-medium flex items-center gap-2 transition-all"
+            >
+              <Wallet className="w-4 h-4" />
+              Connect Wallet
+            </button>
+          )}
+          {wallet?.connected && (
+            <div className="px-4 py-2 glass-strong rounded-xl border border-green-500/30 bg-green-500/10 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+              <span className="text-sm text-white/90 font-mono">{wallet.address?.substring(0, 6)}...{wallet.address?.substring(wallet.address.length - 4)}</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -295,7 +446,21 @@ const Swapper = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Amount</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs text-white/60 tracking-tight">Amount</label>
+                  {wallet?.connected && walletBalance && parseFloat(walletBalance) > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/50">Available: {walletBalance} {fromAsset}</span>
+                      <button
+                        onClick={handleMaxAmount}
+                        className="px-2 py-1 glass-strong rounded-lg border border-white/10 hover:border-purple-500/50 text-xs text-white/70 hover:text-white transition-all flex items-center gap-1"
+                      >
+                        <Maximize2 className="w-3 h-3" />
+                        MAX
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <input
                   type="number"
                   step="0.000001"
@@ -395,9 +560,19 @@ const Swapper = () => {
 
           {/* Recipient Address */}
           <div>
-            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
-              Recipient Address
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-white/80 tracking-tight">
+                Recipient Address
+              </label>
+              {wallet?.connected && (
+                <button
+                  onClick={() => setRecipientAddress(wallet.address)}
+                  className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  Use Wallet
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={recipientAddress}
@@ -413,9 +588,19 @@ const Swapper = () => {
           {/* Refund Address (Optional) */}
           {showRefund && (
             <div>
-              <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
-                Refund Address (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-white/80 tracking-tight">
+                  Refund Address (Optional)
+                </label>
+                {wallet?.connected && (
+                  <button
+                    onClick={() => setRefundAddress(wallet.address)}
+                    className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    Use Wallet
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={refundAddress}
@@ -467,4 +652,3 @@ const Swapper = () => {
 }
 
 export default Swapper
-
