@@ -194,19 +194,25 @@ export const createRelayTransaction = async (orderData) => {
       throw new Error('Failed to get quote from Relay SDK')
     }
     
+    // Extract data from quote response
+    // Relay SDK quote format may vary, so we handle multiple possible fields
+    const depositAddress = quote.depositAddress || quote.originAddress || quote.fromAddress
+    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount
+    const quoteId = quote.id || quote.quoteId || quote.requestId
+    
     console.log('[Relay SDK] Quote received:', {
-      depositAddress: quote.depositAddress,
-      destinationAmount: quote.destinationAmount,
-      quoteId: quote.id
+      depositAddress,
+      destinationAmount,
+      quoteId
     })
     
     return {
-      exchangeId: quote.id || quote.quoteId || orderId,
-      depositAddress: quote.depositAddress,
-      estimatedAmount: quote.destinationAmount ? parseFloat(quote.destinationAmount) : null,
+      exchangeId: quoteId || orderId,
+      depositAddress: depositAddress,
+      estimatedAmount: destinationAmount ? parseFloat(destinationAmount) : null,
       amountAfterFee: amount, // Relay handles fees internally
-      exchangeRate: quote.destinationAmount && amount ? parseFloat(quote.destinationAmount) / parseFloat(amount) : null,
-      validUntil: quote.expiresAt || quote.validUntil || null,
+      exchangeRate: destinationAmount && amount ? parseFloat(destinationAmount) / parseFloat(amount) : null,
+      validUntil: quote.expiresAt || quote.validUntil || quote.expiry || null,
       quote: quote, // Store full quote for execution
     }
   } catch (error) {
