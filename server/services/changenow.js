@@ -181,6 +181,11 @@ export const getExchangeStatus = async (exchangeId) => {
  */
 export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
+    // Check if API key is configured
+    if (!BLOCKPAY_CONFIG.changenow.apiKey || BLOCKPAY_CONFIG.changenow.apiKey === '') {
+      throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file.')
+    }
+
     const apiUrl = `${BLOCKPAY_CONFIG.changenow.apiUrl}/exchange/estimated-amount`
     
     const params = new URLSearchParams({
@@ -188,29 +193,54 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       toCurrency: getChangeNowCurrency(toAsset),
       fromNetwork: getChangeNowNetwork(fromChain),
       toNetwork: getChangeNowNetwork(toChain),
-      fromAmount: amount,
+      fromAmount: amount.toString(),
       flow: 'standard',
     })
 
-    const response = await fetch(`${apiUrl}?${params}`, {
+    const url = `${apiUrl}?${params}`
+    console.log(`[ChangeNOW] Getting exchange rate: ${url}`)
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: getChangeNowHeaders(),
     })
 
     if (!response.ok) {
-      throw new Error(`ChangeNOW API error: ${response.status}`)
+      const errorText = await response.text()
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch (e) {
+        errorData = { message: errorText }
+      }
+      
+      console.error(`[ChangeNOW] API error ${response.status}:`, errorData)
+      
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Invalid ChangeNOW API key. Please check your CHANGENOW_API_KEY in .env file.')
+      } else if (response.status === 404) {
+        throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+      } else {
+        throw new Error(`ChangeNOW API error: ${response.status} - ${errorData.message || errorText}`)
+      }
     }
 
     const data = await response.json()
+    console.log(`[ChangeNOW] Exchange rate response:`, data)
+
+    // Validate response structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid response from ChangeNOW API')
+    }
 
     return {
-      estimatedAmount: data.toAmount,
-      rate: data.rate,
-      minAmount: data.minAmount,
-      maxAmount: data.maxAmount,
+      estimatedAmount: data.toAmount || data.estimatedAmount || null,
+      rate: data.rate || null,
+      minAmount: data.minAmount || null,
+      maxAmount: data.maxAmount || null,
     }
   } catch (error) {
-    console.error('Error getting exchange rate:', error)
+    console.error('[ChangeNOW] Error getting exchange rate:', error)
     throw error
   }
 }

@@ -316,6 +316,9 @@ app.post('/api/exchange-rate', async (req, res) => {
     if (direction === 'forward') {
       // Calculate how much will be received for a given send amount
       result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, fromAmount)
+      if (!result || !result.estimatedAmount) {
+        throw new Error('Failed to get exchange rate estimate')
+      }
       estimatedToAmount = result.estimatedAmount
     } else {
       // Calculate how much needs to be sent to receive a specific amount
@@ -329,12 +332,17 @@ app.post('/api/exchange-rate', async (req, res) => {
       
       // Iteratively refine the estimate
       while (iterations < maxIterations) {
-        result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, currentFromAmount)
-        const estimatedOutput = parseFloat(result.estimatedAmount)
-        
-        if (!result.rate || parseFloat(result.rate) <= 0) {
-          throw new Error('Unable to get exchange rate for this pair')
-        }
+        try {
+          result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, currentFromAmount)
+          if (!result || !result.estimatedAmount) {
+            throw new Error('Failed to get exchange rate estimate')
+          }
+          
+          const estimatedOutput = parseFloat(result.estimatedAmount)
+          
+          if (!result.rate || parseFloat(result.rate) <= 0 || isNaN(estimatedOutput)) {
+            throw new Error('Invalid exchange rate data received')
+          }
         
         const rate = parseFloat(result.rate)
         
@@ -354,13 +362,18 @@ app.post('/api/exchange-rate', async (req, res) => {
           currentFromAmount = currentFromAmount * (targetToAmount / estimatedOutput) * 0.98
         }
         
+        } catch (iterError) {
+          // If iteration fails, throw the error
+          throw iterError
+        }
+        
         iterations++
       }
       
       if (!requiredFromAmount) {
         // Use final calculated amount
         requiredFromAmount = currentFromAmount
-        estimatedToAmount = result.estimatedAmount
+        estimatedToAmount = result?.estimatedAmount || null
       }
     }
 
