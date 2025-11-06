@@ -9,6 +9,7 @@ import cors from 'cors'
 // Use Netlify-compatible database (in-memory with /tmp persistence)
 import { dbHelpers } from '../../server/database-netlify.js'
 import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from '../../server/services/depositAddress.js'
+import { getExchangeRate } from '../../server/services/changenow.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../../server/config.js'
 import { checkSetup, generateSetupInstructions } from '../../server/utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from '../../server/utils/security.js'
@@ -288,7 +289,112 @@ app.post('/api/create-order', async (req, res) => {
     })
   } catch (error) {
     console.error('Error creating order:', error)
-    res.status(500).json({ error: error.message || 'Failed to create order. Please check your ChangeNOW API key.' })
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to create order. Please try again.'
+    
+    if (error.message) {
+      if (error.message.includes('API key') || error.message.includes('Unauthorized')) {
+        errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration.'
+      } else if (error.message.includes('not available') || error.message.includes('not found')) {
+        errorMessage = 'This exchange pair is not available. Please try a different currency or chain.'
+      } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Cannot connect to exchange service. Please check your internet connection.'
+      } else {
+        errorMessage = error.message
+      }
+    }
+    
+    res.status(500).json({ error: errorMessage })
+  }
+})
+
+// Get exchange rate estimate (for calculating required send amount)
+app.post('/api/exchange-rate', async (req, res) => {
+  try {
+    const {
+      fromChain,
+      fromAsset,
+      toChain,
+      toAsset,
+      amount, // Can be either fromAmount or toAmount
+      direction = 'forward' // 'forward' = fromAmount to estimate toAmount, 'reverse' = toAmount to estimate fromAmount
+    } = req.body
+
+    if (!fromChain || !fromAsset || !toChain || !toAsset || !amount) {
+      return res.status(400).json({ error: 'Missing required parameters' })
+    }
+
+    let fromAmount = parseFloat(amount)
+    let estimatedToAmount = null
+    let requiredFromAmount = null
+
+    let result
+    
+    if (direction === 'forward') {
+      // Calculate how much will be received for a given send amount
+      result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, fromAmount)
+      estimatedToAmount = result.estimatedAmount
+    } else {
+      // Calculate how much needs to be sent to receive a specific amount
+      // ChangeNOW doesn't have a direct reverse endpoint, so we estimate iteratively
+      const targetToAmount = parseFloat(amount)
+      
+      // Start with an initial estimate (assume similar value currencies)
+      let currentFromAmount = targetToAmount * 1.05 // 5% initial buffer
+      let iterations = 0
+      const maxIterations = 5
+      
+      // Iteratively refine the estimate
+      while (iterations < maxIterations) {
+        result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, currentFromAmount)
+        const estimatedOutput = parseFloat(result.estimatedAmount)
+        
+        if (!result.rate || parseFloat(result.rate) <= 0) {
+          throw new Error('Unable to get exchange rate for this pair')
+        }
+        
+        const rate = parseFloat(result.rate)
+        
+        // If we're close enough (within 1%), use this amount
+        if (Math.abs(estimatedOutput - targetToAmount) / targetToAmount < 0.01) {
+          requiredFromAmount = currentFromAmount
+          estimatedToAmount = result.estimatedAmount
+          break
+        }
+        
+        // Adjust the fromAmount based on how far off we are
+        if (estimatedOutput < targetToAmount) {
+          // Need more input
+          currentFromAmount = currentFromAmount * (targetToAmount / estimatedOutput) * 1.02
+        } else {
+          // Too much input, reduce
+          currentFromAmount = currentFromAmount * (targetToAmount / estimatedOutput) * 0.98
+        }
+        
+        iterations++
+      }
+      
+      if (!requiredFromAmount) {
+        // Use final calculated amount
+        requiredFromAmount = currentFromAmount
+        estimatedToAmount = result.estimatedAmount
+      }
+    }
+
+    res.json({
+      fromAmount: direction === 'reverse' ? (requiredFromAmount || fromAmount) : fromAmount,
+      estimatedToAmount: direction === 'reverse' ? parseFloat(amount) : result.estimatedAmount,
+      rate: result.rate,
+      minAmount: result.minAmount,
+      maxAmount: result.maxAmount,
+      direction
+    })
+  } catch (error) {
+    console.error('Error getting exchange rate:', error)
+    res.status(500).json({ 
+      error: error.message || 'Failed to get exchange rate. Please check your ChangeNOW API key and try again.' 
+    })
   }
 })
 
