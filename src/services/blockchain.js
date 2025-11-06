@@ -28,7 +28,16 @@ export const CHAINS = {
   bnb: {
     name: 'BNB Chain',
     symbol: 'BNB',
-    rpcUrl: 'https://bsc-dataseed1.binance.org', // Using dataseed1 for better reliability
+    // Use multiple RPC endpoints for better reliability and rate limit handling
+    rpcUrl: 'https://bsc-dataseed.binance.org',
+    rpcUrls: [
+      'https://bsc-dataseed.binance.org',
+      'https://bsc-dataseed1.binance.org',
+      'https://bsc-dataseed2.binance.org',
+      'https://bsc-dataseed3.binance.org',
+      'https://rpc.ankr.com/bsc', // Alternative RPC
+      'https://1rpc.io/bnb' // Another alternative
+    ],
     explorerUrl: 'https://bscscan.com',
     decimals: 18,
     nativeCurrency: 'BNB'
@@ -160,11 +169,13 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
         provider
       )
 
-      // Get recent Transfer events to this address
-      // Check more blocks for BNB Chain (faster blocks = more blocks needed)
-      const currentBlock = await provider.getBlockNumber()
-      const blocksToCheck = chain === 'bnb' ? 5000 : 1000 // BNB has faster blocks, check more
-      const startBlock = Math.max(0, currentBlock - blocksToCheck)
+        // Get recent Transfer events to this address
+        // For recent transactions, we don't need to check too far back
+        // BNB Chain has ~3 second block times, so 22 minutes = ~440 blocks
+        // We'll check last 2000 blocks (about 1.5 hours) to be safe but avoid rate limits
+        const currentBlock = await provider.getBlockNumber()
+        const blocksToCheck = chain === 'bnb' ? 2000 : 1000 // Reduced from 5000 to avoid rate limits
+        const startBlock = Math.max(0, currentBlock - blocksToCheck)
       
       console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
         tokenAddress: token.address,
