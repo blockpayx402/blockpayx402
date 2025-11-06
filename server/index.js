@@ -391,25 +391,34 @@ app.post('/api/exchange-rate', async (req, res) => {
       direction
     })
   } catch (error) {
-    console.error('Error getting exchange rate:', error)
+    console.error('[Exchange Rate Error]', error)
+    console.error('[Exchange Rate Error Stack]', error.stack)
     
     // Provide more specific error messages
     let errorMessage = 'Failed to get exchange rate. Please try again.'
+    let statusCode = 500
     
     if (error.message) {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-        errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration.'
+        errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in Netlify environment variables.'
+        statusCode = 401
       } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
-        errorMessage = 'This exchange pair is not available. Please try a different currency or chain.'
-      } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED')) {
-        errorMessage = 'Cannot connect to exchange service. Please check your internet connection.'
+        errorMessage = `This exchange pair is not available: ${req.body.fromAsset}(${req.body.fromChain}) -> ${req.body.toAsset}(${req.body.toChain}). Please try a different currency or chain.`
+        statusCode = 404
+      } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
+        errorMessage = 'Cannot connect to ChangeNOW API. Please check your internet connection and try again.'
+        statusCode = 503
       } else {
         errorMessage = error.message
       }
     }
     
-    res.status(500).json({ 
-      error: errorMessage
+    // Log the full error for debugging
+    console.error('[Exchange Rate] Final error message:', errorMessage)
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     })
   }
 })

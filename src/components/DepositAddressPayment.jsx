@@ -54,6 +54,11 @@ const DepositAddressPayment = ({ request }) => {
         } catch (error) {
           console.error('Error calculating rate:', error)
           setEstimatedReceive('')
+          // Don't show toast for rate calculation errors - they're expected if API key is missing
+          // Only show error if it's a user-actionable error
+          if (error.message && !error.message.includes('API key')) {
+            console.warn('Rate calculation failed:', error.message)
+          }
         } finally {
           setCalculating(false)
         }
@@ -73,7 +78,13 @@ const DepositAddressPayment = ({ request }) => {
         } catch (error) {
           console.error('Error calculating rate:', error)
           setCalculatedAmount('')
-          toast.error(error.response?.data?.error || 'Failed to calculate required amount. Please check your settings.')
+          const errorMsg = error.response?.data?.error || error.message || 'Failed to calculate required amount'
+          // Only show toast if it's a meaningful error (not just API key missing)
+          if (errorMsg.includes('API key')) {
+            toast.error('ChangeNOW API key is not configured. Please contact support.')
+          } else {
+            toast.error(errorMsg)
+          }
         } finally {
           setCalculating(false)
         }

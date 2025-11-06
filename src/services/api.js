@@ -151,7 +151,11 @@ export const ordersAPI = {
       return response.data
     } catch (error) {
       console.error('Error getting exchange rate:', error)
-      throw error
+      // Extract error message from response if available
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to get exchange rate'
+      const enhancedError = new Error(errorMessage)
+      enhancedError.response = error.response
+      throw enhancedError
     }
   },
 }
