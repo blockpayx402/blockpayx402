@@ -56,14 +56,18 @@ export const CHAINS = {
     symbol: 'SOL',
     rpcUrl: 'https://api.mainnet-beta.solana.com',
     // Multiple RPC endpoints for better reliability and rate limit handling
-    // Note: Many free endpoints require API keys or block browser requests
-    // Using public endpoints that work from browsers
+    // Note: Many free endpoints require API keys or block browser requests due to CORS
+    // For production, consider getting a free API key from Helius, QuickNode, or Alchemy
     rpcUrls: [
-      'https://api.mainnet-beta.solana.com', // Official Solana (works from browser, may be rate-limited)
-      'https://solana-api.projectserum.com', // Project Serum
-      'https://rpc.ankr.com/solana', // Ankr (may require API key, but try anyway)
-      'https://1rpc.io/sol', // 1RPC (free tier)
-      'https://solana-rpc.publicnode.com', // Public Node (free, no API key)
+      'https://solana-rpc.publicnode.com', // Public Node (free, no API key, CORS enabled)
+      'https://api.mainnet-beta.solana.com', // Official Solana (rate-limited, may block)
+      'https://rpc.solana.com', // Alternative official endpoint
+      'https://solana.public-rpc.com', // Public RPC (if available)
+      'https://solana-api.projectserum.com', // Project Serum (may be down)
+      // Note: Browser-based RPC calls are heavily rate-limited
+      // For production, add: 'https://mainnet.helius-rpc.com/?api-key=YOUR_KEY'
+      // Or: 'https://YOUR_PROJECT_ID.solana-mainnet.quiknode.pro/YOUR_KEY/'
+      // Or: 'https://solana-mainnet.g.alchemy.com/v2/YOUR_KEY'
     ],
     explorerUrl: 'https://solscan.io',
     decimals: 9,
