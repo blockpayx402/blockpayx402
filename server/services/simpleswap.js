@@ -393,7 +393,8 @@ export const createExchangeTransaction = async (orderData) => {
       fromAsset,
       fromChain,
       toAsset,
-      toChain
+      toChain,
+      apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***')
     })
 
     log('info', 'Creating exchange transaction', {
@@ -671,7 +672,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       toAsset,
       toChain,
       toCurrency,
-      amount: normalizedAmount
+      amount: normalizedAmount,
+      apiUrl: `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/get_estimated?fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`.replace(apiKey, '***')
     })
     
     // Try v3 first, fallback to v1
