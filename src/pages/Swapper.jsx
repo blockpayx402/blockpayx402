@@ -389,10 +389,13 @@ const Swapper = () => {
             amount: parseFloat(fromAmount),
             direction: 'forward'
           })
-          const estimatedTo = rateData.estimatedAmount && typeof rateData.estimatedAmount === 'number' 
-            ? rateData.estimatedAmount.toFixed(6) 
-            : (rateData.estimatedAmount?.toString() || '')
-          setToAmount(estimatedTo)
+          console.log('[Swapper] Rate data received:', rateData)
+          const estimatedTo = rateData.estimatedToAmount || rateData.estimatedAmount
+          const estimatedToFormatted = estimatedTo && typeof estimatedTo === 'number' 
+            ? estimatedTo.toFixed(6) 
+            : (estimatedTo?.toString() || '0.0')
+          console.log('[Swapper] Setting toAmount to:', estimatedToFormatted)
+          setToAmount(estimatedToFormatted)
         } catch (error) {
           console.error('Error calculating rate:', error)
           setToAmount('')
