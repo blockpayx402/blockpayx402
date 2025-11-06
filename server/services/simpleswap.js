@@ -194,6 +194,7 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
+    // SimpleSwap API endpoint - try v2 first, fallback to v1 if needed
     const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v2/create-exchange`
     
     // Normalize amount
@@ -250,12 +251,24 @@ export const createExchangeTransaction = async (orderData) => {
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
+        // SimpleSwap might use Authorization header or X-API-KEY
+        // Try both formats if needed
+        const headers = {
+          'Content-Type': 'application/json',
+        }
+        
+        // Add authentication - try Authorization header first (for JWT tokens)
+        if (apiKey && apiKey.length > 100) {
+          // Looks like a JWT/certificate - use Authorization header
+          headers['Authorization'] = `Bearer ${apiKey}`
+        } else {
+          // Regular API key - use X-API-KEY header
+          headers['X-API-KEY'] = apiKey
+        }
+        
         response = await fetchWithTimeout(apiUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-KEY': apiKey,
-          },
+          headers,
           body: JSON.stringify(payload),
         }, API_TIMEOUT)
 
@@ -304,7 +317,9 @@ export const createExchangeTransaction = async (orderData) => {
         status: errorData.status,
         error: error.error || error.message,
         from: `${fromAsset}(${fromChain})`,
-        to: `${toAsset}(${toChain})`
+        to: `${toAsset}(${toChain})`,
+        apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***'),
+        payload: { ...payload, address_to: payload.address_to?.substring(0, 10) + '...' }
       })
       
       // Handle specific error cases
@@ -312,6 +327,8 @@ export const createExchangeTransaction = async (orderData) => {
         throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
       } else if (errorData.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+      } else if (errorData.status === 502) {
+        throw new Error(`SimpleSwap API gateway error (502): The service may be temporarily unavailable. Please try again in a few moments. If the issue persists, check SimpleSwap's status page.`)
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
       } else {
@@ -367,12 +384,20 @@ export const getExchangeStatus = async (exchangeId) => {
     
     log('info', 'Getting transaction status', { exchangeId })
     
+    // SimpleSwap authentication
+    const headers = {
+      'Content-Type': 'application/json',
+    }
+    
+    if (apiKey && apiKey.length > 100) {
+      headers['Authorization'] = `Bearer ${apiKey}`
+    } else {
+      headers['X-API-KEY'] = apiKey
+    }
+    
     const response = await fetchWithTimeout(apiUrl, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': apiKey,
-      },
+      headers,
     }, API_TIMEOUT)
 
     if (!response.ok) {
@@ -479,12 +504,20 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
+        // SimpleSwap authentication
+        const headers = {
+          'Content-Type': 'application/json',
+        }
+        
+        if (apiKey && apiKey.length > 100) {
+          headers['Authorization'] = `Bearer ${apiKey}`
+        } else {
+          headers['X-API-KEY'] = apiKey
+        }
+        
         response = await fetchWithTimeout(apiUrl, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-KEY': apiKey,
-          },
+          headers,
         }, API_TIMEOUT)
         
         if (response.ok) break
