@@ -405,6 +405,16 @@ export const AppProvider = ({ children }) => {
             const chainConfig = CHAINS[chain]
             const isNativeCurrency = chainConfig && updatedRequest.currency === chainConfig.nativeCurrency
             
+            // Log what we're checking
+            console.log(`🔍 Verification details:`, {
+              chain,
+              currency: updatedRequest.currency,
+              isNativeCurrency,
+              amount: updatedRequest.amount,
+              recipient: updatedRequest.recipient,
+              requestId
+            })
+            
             // Use request creation time to only check transactions after request was created
             const requestTimestamp = updatedRequest.createdAt 
               ? new Date(updatedRequest.createdAt).getTime() 

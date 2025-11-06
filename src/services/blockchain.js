@@ -28,7 +28,7 @@ export const CHAINS = {
   bnb: {
     name: 'BNB Chain',
     symbol: 'BNB',
-    rpcUrl: 'https://bsc-dataseed.binance.org',
+    rpcUrl: 'https://bsc-dataseed1.binance.org', // Using dataseed1 for better reliability
     explorerUrl: 'https://bscscan.com',
     decimals: 18,
     nativeCurrency: 'BNB'
@@ -188,13 +188,27 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
 
         const value = parseFloat(ethers.formatUnits(event.args.value, token.decimals))
         
+        // Normalize addresses for comparison (case-insensitive)
+        const eventTo = event.args.to?.toLowerCase()
+        const recipientLower = recipientAddress.toLowerCase()
+        
         console.log(`🔍 Checking token transfer:`, {
           value,
           requiredAmount,
           tolerance,
           matches: value >= requiredAmount - tolerance,
-          event: event.transactionHash
+          eventTo,
+          recipientLower,
+          addressesMatch: eventTo === recipientLower,
+          event: event.transactionHash,
+          blockNumber: event.blockNumber
         })
+        
+        // Verify recipient address matches (case-insensitive)
+        if (eventTo !== recipientLower) {
+          console.log(`⚠️  Address mismatch: event.to=${eventTo}, recipient=${recipientLower}`)
+          continue
+        }
         
         // Check if amount matches (within tolerance)
         if (value >= requiredAmount - tolerance) {
