@@ -664,13 +664,23 @@ app.get('/api/relay/chains', async (req, res) => {
   try {
     const chains = await getAllRelayChains()
     // Format chains for frontend
-    const formattedChains = chains.map(chain => ({
-      value: chain.name?.toLowerCase() || chain.id?.toString() || chain.chainId?.toString(),
-      label: chain.name || `Chain ${chain.chainId || chain.id}`,
-      chainId: chain.chainId || chain.id,
-      symbol: chain.symbol || chain.nativeCurrency?.symbol,
-      decimals: chain.decimals || chain.nativeCurrency?.decimals || 18,
-    }))
+    const formattedChains = chains.map(chain => {
+      // Handle different chain data formats
+      const chainId = chain.chainId || chain.id || chain.chain_id
+      const name = chain.name || chain.displayName || chain.label || `Chain ${chainId}`
+      const symbol = chain.symbol || chain.nativeCurrency?.symbol || chain.native_currency?.symbol
+      
+      return {
+        value: name.toLowerCase().replace(/\s+/g, '-') || chainId?.toString(),
+        label: name,
+        chainId: chainId,
+        symbol: symbol,
+        decimals: chain.decimals || chain.nativeCurrency?.decimals || chain.native_currency?.decimals || 18,
+        tokens: chain.tokens || [], // Include tokens if available in chain data
+      }
+    })
+    
+    console.log('[API] Formatted', formattedChains.length, 'chains for frontend')
     res.json({ chains: formattedChains })
   } catch (error) {
     console.error('[API] Error fetching chains:', error)
