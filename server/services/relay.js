@@ -1,206 +1,136 @@
 /**
- * Relay Link API Integration
- * Fully dynamic - fetches supported chains and tokens from Relay API
+ * Relay SDK Integration
+ * Fully dynamic - uses Relay SDK to fetch supported chains and tokens
  * No hardcoded pairs - works with every chain and token Relay supports
+ * Based on: https://docs.relay.link/references/sdk/getting-started
  */
 
+import { createClient, configureDynamicChains, MAINNET_RELAY_API, TESTNET_RELAY_API } from '@relayprotocol/relay-sdk'
 import { BLOCKPAY_CONFIG } from '../config.js'
-import { validateAddress, validateExchangeOrder } from '../utils/validation.js'
+import { validateAddress } from '../utils/validation.js'
 
-const API_BASE_URL = 'https://api.relay.link'
-const API_TIMEOUT = 20000
-const MAX_RETRIES = 2
-const RETRY_DELAY = 1000
-
-// Cache for chains and tokens
-let chainsCache = null
-let chainsCacheTime = 0
-let tokensCache = {}
-let tokensCacheTime = {}
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+// Initialize Relay client (singleton)
+let relayClient = null
+let chainsInitialized = false
 
 /**
- * Fetch with timeout
+ * Initialize Relay client
  */
-const fetchWithTimeout = async (url, options = {}, timeout = API_TIMEOUT) => {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeout)
-  
+const initializeRelayClient = async () => {
+  if (relayClient && chainsInitialized) {
+    return relayClient
+  }
+
   try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+    // Configure dynamic chains first
+    const chains = await configureDynamicChains()
+    
+    // Create client with dynamic chains
+    relayClient = createClient({
+      baseApiUrl: MAINNET_RELAY_API, // Use TESTNET_RELAY_API for testing
+      source: 'blockpay.cloud', // Your app identifier
+      chains: chains, // Dynamically fetched chains
     })
-    clearTimeout(timeoutId)
-    return response
+    
+    chainsInitialized = true
+    console.log('[Relay SDK] Client initialized with', chains.length, 'chains')
+    return relayClient
   } catch (error) {
-    clearTimeout(timeoutId)
-    if (error.name === 'AbortError') {
-      throw new Error('Request timeout')
-    }
-    throw error
+    console.error('[Relay SDK] Error initializing client:', error)
+    // Fallback: create client without dynamic chains (will use default)
+    relayClient = createClient({
+      baseApiUrl: MAINNET_RELAY_API,
+      source: 'blockpay.cloud',
+    })
+    return relayClient
   }
 }
 
 /**
- * Fetch all supported chains from Relay API
+ * Get Relay client instance
  */
-export const fetchRelayChains = async () => {
-  try {
-    const response = await fetchWithTimeout(
-      `${API_BASE_URL}/chains`,
-      { method: 'GET' },
-      10000
-    )
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch chains: ${response.status} ${response.statusText}`)
-    }
-    
-    const data = await response.json()
-    chainsCache = data
-    chainsCacheTime = Date.now()
-    console.log('[Relay] Fetched chains:', data?.length || 0)
-    return data
-  } catch (error) {
-    console.error('[Relay] Error fetching chains:', error)
-    throw error
+const getRelayClient = async () => {
+  if (!relayClient) {
+    await initializeRelayClient()
   }
+  return relayClient
 }
 
 /**
- * Get chain ID from chain name
+ * Get chain by name or ID
  */
-export const getRelayChainId = async (chainName) => {
-  try {
-    // Refresh cache if expired
-    if (!chainsCache || Date.now() - chainsCacheTime > CACHE_TTL) {
-      await fetchRelayChains()
-    }
-    
-    if (!chainsCache || !Array.isArray(chainsCache)) {
-      throw new Error('Chains cache is invalid')
-    }
-    
-    // Find chain by name (case-insensitive)
-    const chain = chainsCache.find(c => 
+const getChainByName = async (chainName) => {
+  const client = await getRelayClient()
+  
+  // Try to find chain by various identifiers
+  const chain = client.chains?.find(c => 
+    c.name?.toLowerCase() === chainName.toLowerCase() ||
+    c.chainId?.toString() === chainName.toString() ||
+    c.id?.toString() === chainName.toString() ||
+    c.symbol?.toLowerCase() === chainName.toLowerCase()
+  )
+  
+  if (!chain) {
+    // Refresh chains and try again
+    await initializeRelayClient()
+    const refreshedClient = await getRelayClient()
+    const refreshedChain = refreshedClient.chains?.find(c => 
       c.name?.toLowerCase() === chainName.toLowerCase() ||
-      c.chainId?.toString() === chainName ||
+      c.chainId?.toString() === chainName.toString() ||
+      c.id?.toString() === chainName.toString() ||
       c.symbol?.toLowerCase() === chainName.toLowerCase()
     )
     
-    if (!chain) {
-      throw new Error(`Chain not found: ${chainName}. Supported chains: ${chainsCache.map(c => c.name || c.chainId).join(', ')}`)
+    if (!refreshedChain) {
+      throw new Error(`Chain not found: ${chainName}. Available chains: ${refreshedClient.chains?.map(c => c.name || c.chainId).join(', ') || 'none'}`)
     }
     
-    return chain.chainId || chain.id
-  } catch (error) {
-    console.error('[Relay] Error getting chain ID:', error)
-    throw error
+    return refreshedChain
   }
+  
+  return chain
 }
 
 /**
- * Fetch supported tokens for a chain
+ * Get token by symbol on a chain
  */
-export const fetchRelayTokens = async (chainId) => {
+const getTokenBySymbol = async (tokenSymbol, chain) => {
   try {
-    // Check cache first
-    if (tokensCache[chainId] && Date.now() - (tokensCacheTime[chainId] || 0) < CACHE_TTL) {
-      return tokensCache[chainId]
-    }
+    // Use SDK's getCurrencies method if available
+    // For now, we'll use the chain's token list if available
+    const tokens = chain.tokens || []
     
-    const response = await fetchWithTimeout(
-      `${API_BASE_URL}/chains/${chainId}/tokens`,
-      { method: 'GET' },
-      10000
-    )
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch tokens for chain ${chainId}: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    tokensCache[chainId] = data
-    tokensCacheTime[chainId] = Date.now()
-    console.log(`[Relay] Fetched tokens for chain ${chainId}:`, data?.length || 0)
-    return data
-  } catch (error) {
-    console.error(`[Relay] Error fetching tokens for chain ${chainId}:`, error)
-    throw error
-  }
-}
-
-/**
- * Get token address from symbol and chain
- */
-export const getRelayTokenAddress = async (tokenSymbol, chainId) => {
-  try {
-    const tokens = await fetchRelayTokens(chainId)
-    
-    if (!tokens || !Array.isArray(tokens)) {
-      throw new Error(`No tokens found for chain ${chainId}`)
-    }
-    
-    // Find token by symbol (case-insensitive)
+    // Find token by symbol
     const token = tokens.find(t => 
       t.symbol?.toUpperCase() === tokenSymbol.toUpperCase() ||
       t.address?.toLowerCase() === tokenSymbol.toLowerCase()
     )
     
-    if (!token) {
-      throw new Error(`Token ${tokenSymbol} not found on chain ${chainId}. Available tokens: ${tokens.map(t => t.symbol).join(', ')}`)
+    if (token) {
+      return token
     }
     
-    return token.address || token.contractAddress
+    // If not found in chain tokens, try fetching from API
+    // Native tokens use zero address
+    const nativeTokens = ['ETH', 'BNB', 'MATIC', 'SOL', 'AVAX', 'FTM']
+    if (nativeTokens.includes(tokenSymbol.toUpperCase())) {
+      return {
+        address: '0x0000000000000000000000000000000000000000',
+        symbol: tokenSymbol.toUpperCase(),
+        decimals: chain.decimals || 18,
+        isNative: true
+      }
+    }
+    
+    throw new Error(`Token ${tokenSymbol} not found on chain ${chain.name || chain.chainId}`)
   } catch (error) {
-    console.error('[Relay] Error getting token address:', error)
+    console.error('[Relay SDK] Error getting token:', error)
     throw error
   }
 }
 
 /**
- * Convert amount to smallest unit (wei, lamports, etc.)
- */
-const convertToSmallestUnit = (amount, decimals = 18) => {
-  const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
-  if (!isFinite(num) || isNaN(num)) {
-    throw new Error(`Invalid amount: ${amount}`)
-  }
-  const multiplier = Math.pow(10, decimals)
-  return Math.floor(num * multiplier).toString()
-}
-
-/**
- * Convert from smallest unit to human-readable
- */
-const convertFromSmallestUnit = (amount, decimals = 18) => {
-  const num = BigInt(amount)
-  const divisor = BigInt(Math.pow(10, decimals))
-  const whole = num / divisor
-  const remainder = num % divisor
-  return (Number(whole) + Number(remainder) / Number(divisor)).toString()
-}
-
-/**
- * Get token decimals (default 18 for EVM, 9 for Solana)
- */
-const getTokenDecimals = (chainId, tokenAddress) => {
-  // Solana uses 9 decimals
-  if (chainId === 792703809 || chainId === '792703809') {
-    return 9
-  }
-  // Most EVM tokens use 18, but some use 6 (USDT, USDC on some chains)
-  // For now, default to 18 - Relay API should handle this
-  return 18
-}
-
-/**
- * Create a Relay transaction
+ * Create a Relay transaction using SDK
  */
 export const createRelayTransaction = async (orderData) => {
   const {
@@ -215,134 +145,96 @@ export const createRelayTransaction = async (orderData) => {
   } = orderData
 
   try {
-    // Get chain IDs
-    const originChainId = await getRelayChainId(fromChain)
-    const destinationChainId = await getRelayChainId(toChain)
+    const client = await getRelayClient()
     
-    console.log('[Relay] Chain IDs:', {
+    // Get chains
+    const originChain = await getChainByName(fromChain)
+    const destinationChain = await getChainByName(toChain)
+    
+    console.log('[Relay SDK] Chains:', {
       fromChain,
-      originChainId,
+      originChainId: originChain.chainId || originChain.id,
       toChain,
-      destinationChainId
+      destinationChainId: destinationChain.chainId || destinationChain.id
     })
     
-    // Get token addresses
-    let originTokenAddress = null
-    let destinationTokenAddress = null
+    // Get tokens
+    const originToken = await getTokenBySymbol(fromAsset, originChain)
+    const destinationToken = await getTokenBySymbol(toAsset, destinationChain)
     
-    // Check if it's native currency
-    const isOriginNative = fromAsset.toUpperCase() === 'ETH' || 
-                          fromAsset.toUpperCase() === 'BNB' || 
-                          fromAsset.toUpperCase() === 'MATIC' ||
-                          fromAsset.toUpperCase() === 'SOL'
-    
-    const isDestinationNative = toAsset.toUpperCase() === 'ETH' || 
-                                toAsset.toUpperCase() === 'BNB' || 
-                                toAsset.toUpperCase() === 'MATIC' ||
-                                toAsset.toUpperCase() === 'SOL'
-    
-    if (!isOriginNative) {
-      originTokenAddress = await getRelayTokenAddress(fromAsset, originChainId)
-    }
-    
-    if (!isDestinationNative) {
-      destinationTokenAddress = await getRelayTokenAddress(toAsset, destinationChainId)
-    }
-    
-    console.log('[Relay] Token addresses:', {
+    console.log('[Relay SDK] Tokens:', {
       fromAsset,
-      originTokenAddress,
+      originTokenAddress: originToken.address,
       toAsset,
-      destinationTokenAddress
+      destinationTokenAddress: destinationToken.address
     })
     
-    // Convert amount to smallest unit
-    const decimals = getTokenDecimals(originChainId, originTokenAddress)
-    const amountInSmallestUnit = convertToSmallestUnit(amount, decimals)
-    
-    // Validate addresses
+    // Validate recipient address
     const recipientValidation = validateAddress(recipientAddress.trim(), toChain)
     if (!recipientValidation.valid) {
       throw new Error(`Invalid recipient address: ${recipientValidation.error}`)
     }
     
-    // Build payload
-    const payload = {
-      originChainId: originChainId.toString(),
-      destinationChainId: destinationChainId.toString(),
-      originTokenAddress: originTokenAddress || '0x0000000000000000000000000000000000000000', // Native token
-      destinationTokenAddress: destinationTokenAddress || '0x0000000000000000000000000000000000000000', // Native token
-      amount: amountInSmallestUnit,
+    // Use SDK's getQuote method to get an executable quote
+    const quote = await client.getQuote({
+      originChainId: originChain.chainId || originChain.id,
+      destinationChainId: destinationChain.chainId || destinationChain.id,
+      originTokenAddress: originToken.address,
+      destinationTokenAddress: destinationToken.address,
+      amount: amount.toString(),
       destinationAmount: null, // Let Relay calculate
-      user: recipientAddress.trim(), // User address (for tracking)
+      user: recipientAddress.trim(),
       recipient: recipientAddress.trim(),
       ...(refundAddress && {
         refundTo: refundAddress.trim()
       }),
-    }
-    
-    console.log('[Relay] Creating transaction:', {
-      ...payload,
-      amount: `${amount} (${amountInSmallestUnit} smallest units)`
     })
     
-    // Make API call
-    const response = await fetchWithTimeout(
-      `${API_BASE_URL}/transactions`,
-      {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      },
-      API_TIMEOUT
-    )
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }))
-      console.error('[Relay] API error:', errorData)
-      
-      if (errorData.error?.includes('Invalid address')) {
-        throw new Error(`Invalid address format for chain. Please check your addresses.`)
-      } else if (errorData.error?.includes('not supported')) {
-        throw new Error(`Chain or token not supported by Relay: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
-      } else if (errorData.error?.includes('Could not execute')) {
-        throw new Error(`Relay cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be available.`)
-      } else {
-        throw new Error(`Relay API error: ${errorData.error || response.statusText}`)
-      }
+    if (!quote || !quote.depositAddress) {
+      throw new Error('Failed to get quote from Relay SDK')
     }
     
-    const data = await response.json()
+    console.log('[Relay SDK] Quote received:', {
+      depositAddress: quote.depositAddress,
+      destinationAmount: quote.destinationAmount,
+      quoteId: quote.id
+    })
     
     return {
-      exchangeId: data.id || data.transactionId,
-      depositAddress: data.depositAddress || data.originAddress,
-      estimatedAmount: data.destinationAmount ? convertFromSmallestUnit(data.destinationAmount, getTokenDecimals(destinationChainId, destinationTokenAddress)) : null,
+      exchangeId: quote.id || quote.quoteId || orderId,
+      depositAddress: quote.depositAddress,
+      estimatedAmount: quote.destinationAmount ? parseFloat(quote.destinationAmount) : null,
       amountAfterFee: amount, // Relay handles fees internally
-      exchangeRate: data.destinationAmount && amount ? parseFloat(convertFromSmallestUnit(data.destinationAmount, getTokenDecimals(destinationChainId, destinationTokenAddress))) / parseFloat(amount) : null,
-      validUntil: data.expiresAt || null,
+      exchangeRate: quote.destinationAmount && amount ? parseFloat(quote.destinationAmount) / parseFloat(amount) : null,
+      validUntil: quote.expiresAt || quote.validUntil || null,
+      quote: quote, // Store full quote for execution
     }
   } catch (error) {
-    console.error('[Relay] Error creating transaction:', error)
+    console.error('[Relay SDK] Error creating transaction:', error)
+    
+    // Provide helpful error messages
+    const errorMsg = error.message || String(error)
+    if (errorMsg.includes('not found') || errorMsg.includes('not supported')) {
+      throw new Error(`Relay does not support this pair: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
+    } else if (errorMsg.includes('Invalid address')) {
+      throw new Error(`Invalid address format for ${toChain}. Please check your recipient address.`)
+    } else if (errorMsg.includes('Could not execute') || errorMsg.includes('cannot execute')) {
+      throw new Error(`Relay cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be available.`)
+    }
+    
     throw error
   }
 }
 
 /**
- * Get exchange status
+ * Get exchange status using SDK
  */
 export const getRelayStatus = async (exchangeId) => {
   try {
-    const response = await fetchWithTimeout(
-      `${API_BASE_URL}/transactions/${exchangeId}`,
-      { method: 'GET' },
-      API_TIMEOUT
-    )
+    const client = await getRelayClient()
     
-    if (!response.ok) {
-      throw new Error(`Failed to get status: ${response.status}`)
-    }
-    
-    const data = await response.json()
+    // Use SDK's getStatus method
+    const status = await client.getStatus(exchangeId)
     
     // Map Relay status to our status
     const statusMap = {
@@ -355,103 +247,59 @@ export const getRelayStatus = async (exchangeId) => {
     }
     
     return {
-      status: statusMap[data.status] || data.status,
-      exchangeId: data.id || exchangeId,
-      ...data,
+      status: statusMap[status.status] || status.status,
+      exchangeId: status.id || exchangeId,
+      ...status,
     }
   } catch (error) {
-    console.error('[Relay] Error getting status:', error)
+    console.error('[Relay SDK] Error getting status:', error)
     throw error
   }
 }
 
 /**
- * Get exchange rate estimate
+ * Get exchange rate estimate using SDK
  */
 export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
-    // Get chain IDs
-    const originChainId = await getRelayChainId(fromChain)
-    const destinationChainId = await getRelayChainId(toChain)
+    const client = await getRelayClient()
     
-    // Get token addresses
-    let originTokenAddress = null
-    let destinationTokenAddress = null
+    // Get chains
+    const originChain = await getChainByName(fromChain)
+    const destinationChain = await getChainByName(toChain)
     
-    const isOriginNative = fromAsset.toUpperCase() === 'ETH' || 
-                          fromAsset.toUpperCase() === 'BNB' || 
-                          fromAsset.toUpperCase() === 'MATIC' ||
-                          fromAsset.toUpperCase() === 'SOL'
+    // Get tokens
+    const originToken = await getTokenBySymbol(fromAsset, originChain)
+    const destinationToken = await getTokenBySymbol(toAsset, destinationChain)
     
-    const isDestinationNative = toAsset.toUpperCase() === 'ETH' || 
-                                toAsset.toUpperCase() === 'BNB' || 
-                                toAsset.toUpperCase() === 'MATIC' ||
-                                toAsset.toUpperCase() === 'SOL'
+    // Use placeholder address for estimation
+    const placeholderAddress = originChain.chainId === 792703809 || originChain.id === 792703809
+      ? '11111111111111111111111111111111' // Solana placeholder
+      : '0x0000000000000000000000000000000000000000' // EVM placeholder
     
-    if (!isOriginNative) {
-      originTokenAddress = await getRelayTokenAddress(fromAsset, originChainId)
-    }
-    
-    if (!isDestinationNative) {
-      destinationTokenAddress = await getRelayTokenAddress(toAsset, destinationChainId)
-    }
-    
-    // Convert amount to smallest unit
-    const decimals = getTokenDecimals(originChainId, originTokenAddress)
-    const amountInSmallestUnit = convertToSmallestUnit(amount, decimals)
-    
-    // Use placeholder addresses for rate estimation
-    const placeholderEVM = '0x0000000000000000000000000000000000000000'
-    const placeholderSolana = '11111111111111111111111111111111'
-    
-    const originPlaceholder = (originChainId === 792703809 || originChainId === '792703809') 
-      ? placeholderSolana 
-      : placeholderEVM
-    
-    const payload = {
-      originChainId: originChainId.toString(),
-      destinationChainId: destinationChainId.toString(),
-      originTokenAddress: originTokenAddress || placeholderEVM,
-      destinationTokenAddress: destinationTokenAddress || placeholderEVM,
-      amount: amountInSmallestUnit,
+    // Get quote for estimation
+    const quote = await client.getQuote({
+      originChainId: originChain.chainId || originChain.id,
+      destinationChainId: destinationChain.chainId || destinationChain.id,
+      originTokenAddress: originToken.address,
+      destinationTokenAddress: destinationToken.address,
+      amount: amount.toString(),
       destinationAmount: null,
-      user: originPlaceholder,
-      recipient: originPlaceholder,
+      user: placeholderAddress,
+      recipient: placeholderAddress,
+    })
+    
+    if (!quote || !quote.destinationAmount) {
+      throw new Error('Invalid response from Relay SDK: missing destinationAmount')
     }
-    
-    // Use estimate endpoint if available, otherwise create transaction and cancel
-    const response = await fetchWithTimeout(
-      `${API_BASE_URL}/transactions/estimate`,
-      {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      },
-      API_TIMEOUT
-    )
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }))
-      throw new Error(`Relay API error: ${errorData.error || response.statusText}`)
-    }
-    
-    const data = await response.json()
-    
-    if (!data.destinationAmount) {
-      throw new Error('Invalid response from Relay API: missing destinationAmount')
-    }
-    
-    const estimatedAmount = convertFromSmallestUnit(
-      data.destinationAmount, 
-      getTokenDecimals(destinationChainId, destinationTokenAddress)
-    )
     
     return {
-      estimatedAmount: parseFloat(estimatedAmount),
-      fromAmount: amount,
-      exchangeRate: parseFloat(estimatedAmount) / parseFloat(amount),
+      estimatedAmount: parseFloat(quote.destinationAmount),
+      fromAmount: parseFloat(amount),
+      exchangeRate: parseFloat(quote.destinationAmount) / parseFloat(amount),
     }
   } catch (error) {
-    console.error('[Relay] Error getting exchange rate:', error)
+    console.error('[Relay SDK] Error getting exchange rate:', error)
     throw error
   }
 }
@@ -461,12 +309,10 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
  */
 export const getAllRelayChains = async () => {
   try {
-    if (!chainsCache || Date.now() - chainsCacheTime > CACHE_TTL) {
-      await fetchRelayChains()
-    }
-    return chainsCache || []
+    const client = await getRelayClient()
+    return client.chains || []
   } catch (error) {
-    console.error('[Relay] Error getting chains:', error)
+    console.error('[Relay SDK] Error getting chains:', error)
     return []
   }
 }
@@ -476,10 +322,26 @@ export const getAllRelayChains = async () => {
  */
 export const getAllRelayTokens = async (chainId) => {
   try {
-    return await fetchRelayTokens(chainId)
+    const client = await getRelayClient()
+    const chain = client.chains?.find(c => 
+      c.chainId?.toString() === chainId.toString() || 
+      c.id?.toString() === chainId.toString()
+    )
+    
+    if (!chain) {
+      return []
+    }
+    
+    return chain.tokens || []
   } catch (error) {
-    console.error('[Relay] Error getting tokens:', error)
+    console.error('[Relay SDK] Error getting tokens:', error)
     return []
   }
 }
 
+/**
+ * Initialize on module load
+ */
+initializeRelayClient().catch(err => {
+  console.error('[Relay SDK] Failed to initialize on load:', err)
+})

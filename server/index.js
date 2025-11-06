@@ -306,13 +306,13 @@ app.post('/api/create-order', async (req, res) => {
     
     if (error.message) {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-        errorMessage = 'Invalid SimpleSwap API key. Please check your server configuration. Set SIMPLESWAP_API_KEY in Netlify environment variables.'
+        errorMessage = 'Relay Link API error. Please check your configuration.'
         statusCode = 401
       } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
         errorMessage = `This exchange pair is not available: ${fromAsset}(${fromChain}) -> ${req.body?.requestId ? 'target currency' : 'unknown'}. Please try a different currency or chain.`
         statusCode = 404
       } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-        errorMessage = 'Cannot connect to SimpleSwap API. Please check your internet connection and try again.'
+        errorMessage = 'Cannot connect to Relay Link API. Please check your internet connection and try again.'
         statusCode = 503
       } else {
         errorMessage = error.message
@@ -446,13 +446,13 @@ app.post('/api/exchange-rate', async (req, res) => {
     
     if (error.message) {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-        errorMessage = 'Invalid SimpleSwap API key. Please check your server configuration. Set SIMPLESWAP_API_KEY in Netlify environment variables.'
+        errorMessage = 'Relay Link API error. Please check your configuration.'
         statusCode = 401
       } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
         errorMessage = `This exchange pair is not available: ${req.body.fromAsset}(${req.body.fromChain}) -> ${req.body.toAsset}(${req.body.toChain}). Please try a different currency or chain.`
         statusCode = 404
       } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-        errorMessage = 'Cannot connect to SimpleSwap API. Please check your internet connection and try again.'
+        errorMessage = 'Cannot connect to Relay Link API. Please check your internet connection and try again.'
         statusCode = 503
       } else {
         errorMessage = error.message

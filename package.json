@@ -18,12 +18,15 @@
   },
   "dependencies": {
     "@netlify/functions": "^2.8.2",
+    "@relayprotocol/relay-sdk": "^3.1.0",
     "@solana/web3.js": "^1.87.6",
     "axios": "^1.6.2",
     "buffer": "^6.0.3",
     "clsx": "^2.0.0",
+    "cors": "^2.8.5",
     "date-fns": "^2.30.0",
     "ethers": "^6.9.0",
+    "express": "^4.18.2",
     "framer-motion": "^10.16.16",
     "lucide-react": "^0.294.0",
     "process": "^0.11.10",
@@ -35,8 +38,7 @@
     "serverless-http": "^4.0.0",
     "tailwind-merge": "^2.1.0",
     "util": "^0.12.5",
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "viem": "^2.38.6"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
