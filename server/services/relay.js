@@ -175,14 +175,80 @@ const convertToSmallestUnit = (amount, asset, chain) => {
   return result.toString()
 }
 
+// Cache for currency addresses fetched from Relay Link API
+let currencyCache = {}
+
+/**
+ * Fetch currency address from Relay Link API
+ * Uses the /currencies/v2 endpoint to get the exact currency identifier
+ */
+const fetchRelayCurrencyAddress = async (asset, chain) => {
+  const cacheKey = `${asset.toUpperCase()}_${chain.toLowerCase()}`
+  if (currencyCache[cacheKey]) {
+    return currencyCache[cacheKey]
+  }
+  
+  try {
+    const chainId = await getRelayChainId(chain)
+    if (!chainId) {
+      throw new Error(`Chain ID not found for ${chain}`)
+    }
+    
+    const response = await fetch('https://api.relay.link/currencies/v2', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chainIds: [chainId],
+        term: asset.toUpperCase(),
+        verified: true,
+        limit: 10,
+      }),
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch currencies: ${response.status}`)
+    }
+    
+    const currencies = await response.json()
+    if (Array.isArray(currencies) && currencies.length > 0) {
+      // Find exact match by symbol and chain
+      const currency = currencies.find(c => 
+        c.symbol?.toUpperCase() === asset.toUpperCase() && 
+        c.chainId === chainId
+      ) || currencies[0]
+      
+      if (currency.address) {
+        currencyCache[cacheKey] = currency.address
+        console.log(`[Relay Link] Fetched currency ${asset} on ${chain}: ${currency.address}`)
+        return currency.address
+      }
+    }
+  } catch (error) {
+    console.warn(`[Relay Link] Failed to fetch currency from API: ${error.message}`)
+  }
+  
+  return null
+}
+
 /**
  * Get Relay currency address
  * Relay Link uses token contract addresses for EVM chains and mint addresses for Solana
+ * First tries to fetch from API, then falls back to static mapping
  */
-const getRelayCurrencyAddress = (asset, chain) => {
+const getRelayCurrencyAddress = async (asset, chain) => {
   const assetUpper = asset.toUpperCase()
   const chainLower = chain.toLowerCase()
+  const cacheKey = `${assetUpper}_${chainLower}`
   
+  // Try API first
+  const apiAddress = await fetchRelayCurrencyAddress(asset, chain)
+  if (apiAddress) {
+    return apiAddress
+  }
+  
+  // Fallback to static mapping
   // For native currencies on EVM chains, use zero address
   const nativeCurrencies = {
     'ethereum': ['ETH'],
