@@ -71,12 +71,21 @@ const Swapper = () => {
       setTokensLoading(true)
       setFromChainTokens([]) // Clear previous tokens
       try {
-        const chain = availableChains.find(c => c.value === fromChain)
+        const chain = availableChains.find(c => c.value === fromChain || c.chainId?.toString() === fromChain)
         if (chain && chain.chainId) {
           console.log('[Swapper] Fetching tokens for chain:', chain.label, 'chainId:', chain.chainId)
           const tokens = await relayAPI.getTokens(chain.chainId)
-          console.log('[Swapper] Received tokens:', tokens.length)
-          setFromChainTokens(tokens)
+          console.log('[Swapper] Received tokens:', tokens.length, 'tokens:', tokens)
+          // Ensure tokens have the required fields
+          const formattedTokens = tokens.map(token => ({
+            symbol: token.symbol || token.name || 'UNKNOWN',
+            address: token.address || token.contractAddress || '',
+            decimals: token.decimals || 18,
+            name: token.name || token.symbol || 'Unknown Token',
+            isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+          }))
+          console.log('[Swapper] Formatted tokens:', formattedTokens.length)
+          setFromChainTokens(formattedTokens)
           
           // Set default token if available
           if (tokens.length > 0 && !fromAsset) {
