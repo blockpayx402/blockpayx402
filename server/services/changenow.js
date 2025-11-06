@@ -376,37 +376,60 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
 
 /**
  * Validate exchange pair
+ * Returns { available: true/false } or null if validation fails
  */
 export const validateExchangePair = async (fromAsset, toAsset, fromChain, toChain) => {
   try {
-    const apiUrl = `${BLOCKPAY_CONFIG.changenow.apiUrl}/exchange/available-pairs`
-    
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: getChangeNowHeaders(),
-    })
-
-    if (!response.ok) {
-      return { available: false }
+    // Use v1 API format for pair validation - faster and more reliable
+    const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
+    if (!apiKey) {
+      return null // Skip validation if no API key
     }
 
-    const pairs = await response.json()
+    // Try to get exchange rate as a quick validation (with timeout)
     const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
     const toCurrency = getChangeNowCurrency(toAsset, toChain)
-    const fromNetwork = getChangeNowNetwork(fromChain)
-    const toNetwork = getChangeNowNetwork(toChain)
-
-    const isAvailable = pairs.some(pair => 
-      pair.fromCurrency === fromCurrency &&
-      pair.toCurrency === toCurrency &&
-      pair.fromNetwork === fromNetwork &&
-      pair.toNetwork === toNetwork
-    )
-
-    return { available: isAvailable }
+    
+    // Use a small test amount to validate the pair
+    const testAmount = 1
+    const url = `https://api.changenow.io/v1/exchange-amount/${testAmount}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      if (response.ok) {
+        const data = await response.json()
+        // If we get a valid number response, pair is available
+        const isValid = typeof data === 'number' && !isNaN(data) && data > 0
+        return { available: isValid }
+      } else if (response.status === 404 || response.status === 400) {
+        // Pair not available
+        return { available: false }
+      } else {
+        // Other errors - assume available and let ChangeNOW handle it
+        return null
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      if (fetchError.name === 'AbortError') {
+        // Timeout - skip validation
+        return null
+      }
+      throw fetchError
+    }
   } catch (error) {
-    console.error('Error validating exchange pair:', error)
-    return { available: false }
+    console.warn('[ChangeNOW] Pair validation error (non-critical):', error.message)
+    // Return null to indicate validation should be skipped
+    return null
   }
 }
 

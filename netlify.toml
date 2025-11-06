@@ -11,6 +11,13 @@
   # Environment variables
   environment = { NODE_ENV = "production", NPM_CONFIG_PRODUCTION = "false" }
 
+# Function configuration - increase timeout for API calls
+[functions]
+  node_bundler = "esbuild"
+  
+[functions.server]
+  timeout = 26
+
 # Redirect rules - handle API routes and SPA routing
 # API routes are handled by Netlify Function (server.js)
 [[redirects]]
