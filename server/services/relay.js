@@ -358,10 +358,21 @@ export const createRelayTransaction = async (orderData) => {
     console.log(`[Relay Link] Transaction response:`, data)
     
     // Extract deposit address and transaction info from Relay response
+    const rawEstimatedAmount = data.destinationAmount || data.quote?.destinationAmount || null
+    
+    // Convert estimated amount back from smallest unit to human-readable format
+    let estimatedAmountHuman = null
+    if (rawEstimatedAmount) {
+      const toDecimals = getTokenDecimals(toAsset, toChain)
+      const estimatedAmountBigInt = BigInt(rawEstimatedAmount.toString())
+      const divisor = BigInt(10 ** toDecimals)
+      estimatedAmountHuman = (Number(estimatedAmountBigInt) / Number(divisor)).toString()
+    }
+    
     return {
       depositAddress: data.depositAddress || data.deposit?.address || null,
       exchangeId: data.quoteId || data.id || data.requestId || null,
-      estimatedAmount: data.destinationAmount || data.quote?.destinationAmount || null,
+      estimatedAmount: estimatedAmountHuman,
       exchangeRate: data.rate || null,
       validUntil: data.expiresAt || data.validUntil || null,
       flow: 'relay',
