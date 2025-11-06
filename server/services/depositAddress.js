@@ -4,7 +4,7 @@
  * Supports ChangeNOW for cross-chain swaps
  */
 
-import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
+import { createExchangeTransaction, getExchangeStatus, validateExchangePair } from './changenow.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
@@ -25,6 +25,17 @@ export const generateDepositAddress = async (orderData) => {
   } = orderData
 
   try {
+    // Validate pair availability up-front to avoid provider 400s
+    const pairCheck = await validateExchangePair(fromAsset, toAsset, fromChain, toChain)
+    if (!pairCheck?.available) {
+      // Provide actionable guidance
+      const sameChain = fromChain === toChain
+      const hint = sameChain
+        ? `Try changing the asset (e.g., USDT(${fromChain})) or adjust amount.`
+        : `Try using a supported path on the origin chain (e.g., swap to USDT(${fromChain}) first) or try a nearby amount.`
+      throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). ${hint}`)
+    }
+
     // Calculate BlockPay platform fee (with chain-specific recipient)
     const fee = calculatePlatformFee(amount, fromAsset, fromChain)
     
