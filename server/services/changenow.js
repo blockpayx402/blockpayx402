@@ -235,9 +235,13 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       }
       
       console.error(`[ChangeNOW] API error ${response.status}:`, errorData)
+      console.error(`[ChangeNOW] Request URL: ${url}`)
+      console.error(`[ChangeNOW] Response headers:`, Object.fromEntries(response.headers.entries()))
+      console.error(`[ChangeNOW] Full error response:`, errorText)
       
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Invalid ChangeNOW API key. Please check your CHANGENOW_API_KEY in .env file.')
+        const detailedError = errorData.message || errorData.error || errorText
+        throw new Error(`Invalid ChangeNOW API key (${response.status}): ${detailedError}. Please check your CHANGENOW_API_KEY in .env file.`)
       } else if (response.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
       } else {
