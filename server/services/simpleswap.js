@@ -718,60 +718,22 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     // v1 API can handle same-chain swaps if we use the correct currency codes
     let useV3 = false // Disable v3 for now - API key is v1 format
     
-    let apiUrl
-    let fromCurrency, toCurrency
-    let tickerFrom, tickerTo, networkFrom, networkTo
+    // Always use v1 API format (API key is v1 format)
+    // v1 API uses: currency_from, currency_to with api_key as query parameter
+    const fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
+    const toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
     
-    if (useV3) {
-      // v3 API format: tickerFrom, tickerTo, networkFrom, networkTo
-      tickerFrom = (await getSimpleSwapCurrency(fromAsset, fromChain)).split('_')[0] // Just the ticker
-      tickerTo = (await getSimpleSwapCurrency(toAsset, toChain)).split('_')[0] // Just the ticker
-      
-      // Get network names for v3
-      const NETWORK_MAP = {
-        'ethereum': 'eth',
-        'bnb': 'bsc',
-        'polygon': 'matic',
-        'solana': 'sol',
-        'avalanche': 'avax',
-        'arbitrum': 'arbitrum',
-        'optimism': 'optimism',
-        'base': 'base'
-      }
-      networkFrom = NETWORK_MAP[fromChain?.toLowerCase()] || fromChain?.toLowerCase() || 'eth'
-      networkTo = NETWORK_MAP[toChain?.toLowerCase()] || toChain?.toLowerCase() || 'eth'
-      
-      // v3 API endpoint format
-      apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/estimates?fixed=false&tickerFrom=${tickerFrom}&tickerTo=${tickerTo}&networkFrom=${networkFrom}&networkTo=${networkTo}&amount=${normalizedAmount}`
-      
-      console.log('[SimpleSwap getExchangeRate] Using v3 API format:', {
-        fromAsset,
-        fromChain,
-        tickerFrom,
-        networkFrom,
-        toAsset,
-        toChain,
-        tickerTo,
-        networkTo,
-        amount: normalizedAmount,
-        isSameChain
-      })
-    } else {
-      // v1 API format: currency_from, currency_to (no network)
-      fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
-      toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
-      apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
-      
-      console.log('[SimpleSwap getExchangeRate] Using v1 API format:', {
-        fromAsset,
-        fromChain,
-        fromCurrency,
-        toAsset,
-        toChain,
-        toCurrency,
-        amount: normalizedAmount
-      })
-    }
+    console.log('[SimpleSwap getExchangeRate] Using v1 API format:', {
+      fromAsset,
+      fromChain,
+      fromCurrency,
+      toAsset,
+      toChain,
+      toCurrency,
+      amount: normalizedAmount,
+      isSameChain
+    })
     
     log('info', 'Getting exchange rate', {
       from: `${fromAsset}(${fromChain})`,
@@ -846,12 +808,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       // Log detailed error for debugging - this will show in Netlify function logs
       console.error('[SimpleSwap getExchangeRate] API Error Details:', {
         status: errorData.status,
-        fromCurrency: fromCurrency || tickerFrom,
-        toCurrency: toCurrency || tickerTo,
-        tickerFrom,
-        tickerTo,
-        networkFrom,
-        networkTo,
+        fromCurrency,
+        toCurrency,
         fromAsset,
         fromChain,
         toAsset,
@@ -860,9 +818,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         error: error.error || error.message,
         fullResponse: errorData.text?.substring(0, 1000), // Increased to see more of response
         apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***'),
-        useV3,
         isSameChain,
-        triedV1: !useV3,
         apiKeyLength: apiKey.length,
         apiKeyPrefix: apiKey.substring(0, 10) + '...'
       })
@@ -883,10 +839,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         if (errorMsg.toLowerCase().includes('pair') || errorMsg.toLowerCase().includes('not available') || errorMsg.toLowerCase().includes('not found')) {
           throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap API. Note: SimpleSwap's public API may not support all pairs that their website supports.`)
         } else {
-          const currencyInfo = useV3 
-            ? `tickerFrom=${tickerFrom}&networkFrom=${networkFrom} -> tickerTo=${tickerTo}&networkTo=${networkTo}`
-            : `currency_from=${fromCurrency} -> currency_to=${toCurrency}`
-          throw new Error(`SimpleSwap API error (${errorData.status}): ${errorMsg}. ${currencyInfo}`)
+          throw new Error(`SimpleSwap API error (${errorData.status}): ${errorMsg}. Currency codes: currency_from=${fromCurrency} -> currency_to=${toCurrency}`)
         }
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
