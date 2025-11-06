@@ -50,17 +50,13 @@ const CURRENCY_ADDRESS_MAP = {
 
 /**
  * Get Relay chain ID
- * Dynamically fetches chain IDs from Relay API if not cached
+ * Dynamically fetches chain IDs from Relay API and caches them
  */
 const getRelayChainId = async (chain) => {
-  // Return cached static mapping if available
-  if (CHAIN_ID_MAP[chain]) {
-    return CHAIN_ID_MAP[chain]
-  }
-  
-  // Try to fetch from API if cache is empty
+  // Fetch from API if cache is empty
   if (!chainIdCache) {
     try {
+      console.log('[Relay Link] Fetching chains from API...')
       const response = await fetch('https://api.relay.link/chains')
       const data = await response.json()
       chainIdCache = {}
@@ -70,39 +66,40 @@ const getRelayChainId = async (chain) => {
           const chainName = chainData.name?.toLowerCase()
           if (chainName) {
             chainIdCache[chainName] = chainData.id
+            // Also map common chain names
+            if (chainName === 'ethereum') chainIdCache['eth'] = chainData.id
+            if (chainName === 'bnb') chainIdCache['bsc'] = chainData.id
+            if (chainName === 'polygon') chainIdCache['matic'] = chainData.id
+            if (chainName === 'solana') chainIdCache['sol'] = chainData.id
           }
           if (chainData.displayName) {
             chainIdCache[chainData.displayName.toLowerCase()] = chainData.id
           }
         })
-      }
-      
-      // Check cache for Solana
-      const solanaId = chainIdCache['solana'] || chainIdCache['sol'] || 
-                      data.chains?.find(c => 
-                        c.name?.toLowerCase().includes('solana') || 
-                        c.displayName?.toLowerCase().includes('solana')
-                      )?.id
-      
-      if (solanaId && chain === 'solana') {
-        CHAIN_ID_MAP['solana'] = solanaId
-        return solanaId
+        
+        console.log('[Relay Link] Cached chain IDs:', Object.keys(chainIdCache).slice(0, 10))
       }
     } catch (error) {
       console.error('[Relay Link] Error fetching chains:', error)
+      // Fall back to static mapping on error
+      return CHAIN_ID_MAP[chain] || null
     }
   }
   
-  // Check cache
-  if (chainIdCache) {
-    const cachedId = chainIdCache[chain.toLowerCase()] || 
-                     chainIdCache[chain.toLowerCase().replace(' ', '')]
-    if (cachedId) {
-      return cachedId
-    }
+  // Check cache first (prioritize dynamic lookup)
+  const chainKey = chain.toLowerCase()
+  const cachedId = chainIdCache[chainKey] || 
+                   chainIdCache[chainKey.replace(' ', '')] ||
+                   chainIdCache[chainKey.replace('-', '')]
+  
+  if (cachedId) {
+    // Update static map for future reference
+    CHAIN_ID_MAP[chain] = cachedId
+    return cachedId
   }
   
-  return null
+  // Fall back to static mapping if not found in cache
+  return CHAIN_ID_MAP[chain] || null
 }
 
 /**
