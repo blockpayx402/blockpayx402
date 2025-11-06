@@ -88,9 +88,10 @@ const Swapper = () => {
           setFromChainTokens(formattedTokens)
           
           // Set default token if available
-          if (tokens.length > 0 && !fromAsset) {
-            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.symbol === 'BNB' || t.isNative) || tokens[0]
+          if (formattedTokens.length > 0 && !fromAsset) {
+            const defaultToken = formattedTokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.symbol === 'BNB' || t.isNative) || formattedTokens[0]
             setFromAsset(defaultToken.symbol)
+            console.log('[Swapper] Set default token:', defaultToken.symbol)
           }
         } else {
           console.warn('[Swapper] Chain not found or missing chainId:', fromChain, chain)
