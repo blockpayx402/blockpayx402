@@ -439,18 +439,35 @@ app.post('/api/exchange-rate', async (req, res) => {
   } catch (error) {
     console.error('[Exchange Rate Error]', error)
     console.error('[Exchange Rate Error Stack]', error.stack)
+    console.error('[Exchange Rate Request Body]', req.body)
     
     // Provide more specific error messages
     let errorMessage = 'Failed to get exchange rate. Please try again.'
     let statusCode = 500
     
     if (error.message) {
-      if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
+      if (error.message.includes('Chain not found')) {
+        errorMessage = `Chain not found: ${error.message}. Please check the chain ID or name.`
+        statusCode = 400
+      } else if (error.message.includes('Token') && error.message.includes('not found')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
         errorMessage = 'Relay Link API error. Please check your configuration.'
         statusCode = 401
-      } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
-        errorMessage = `This exchange pair is not available: ${req.body.fromAsset}(${req.body.fromChain}) -> ${req.body.toAsset}(${req.body.toChain}). Please try a different currency or chain.`
-        statusCode = 404
+      } else if (error.message.includes('max_amount_exceeded') || error.message.includes('exceeds maximum')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('min_amount') || error.message.includes('below minimum')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('pair_is_inactive') || error.message.includes('inactive') || error.message.includes('currently inactive')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('Relay API error')) {
+        // Relay API returned an error - pass it through
+        errorMessage = error.message
+        statusCode = 400
       } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
         errorMessage = 'Cannot connect to Relay Link API. Please check your internet connection and try again.'
         statusCode = 503
@@ -461,6 +478,7 @@ app.post('/api/exchange-rate', async (req, res) => {
     
     // Log the full error for debugging
     console.error('[Exchange Rate] Final error message:', errorMessage)
+    console.error('[Exchange Rate] Status code:', statusCode)
     
     res.status(statusCode).json({ 
       error: errorMessage,
