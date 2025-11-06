@@ -2,6 +2,8 @@
  * SimpleSwap API Integration
  * Production-ready integration with SimpleSwap for cross-chain swaps
  * API Documentation: https://api.simpleswap.io/
+ * 
+ * This implementation matches SimpleSwap's v1 API exactly as documented
  */
 
 import { BLOCKPAY_CONFIG } from '../config.js'
@@ -13,17 +15,13 @@ if (!BLOCKPAY_CONFIG.simpleswap.apiKey && process.env.NODE_ENV === 'production')
 }
 
 // Configuration constants
-const API_TIMEOUT = 20000 // 20 seconds (increased for SimpleSwap)
-const MAX_RETRIES = 2 // Reduced retries to avoid timeouts
-const RETRY_DELAY_BASE = 1000 // Base delay in ms
-const RETRY_DELAY_MAX = 5000 // Max delay in ms (reduced)
+const API_TIMEOUT = 20000 // 20 seconds
+const MAX_RETRIES = 2
+const RETRY_DELAY_BASE = 1000
+const RETRY_DELAY_MAX = 5000
 
 /**
  * Create a fetch request with timeout
- * @param {string} url - Request URL
- * @param {object} options - Fetch options
- * @param {number} timeout - Timeout in milliseconds
- * @returns {Promise<Response>} - Fetch response
  */
 const fetchWithTimeout = async (url, options = {}, timeout = API_TIMEOUT) => {
   const controller = new AbortController()
@@ -47,8 +45,6 @@ const fetchWithTimeout = async (url, options = {}, timeout = API_TIMEOUT) => {
 
 /**
  * Exponential backoff delay
- * @param {number} attempt - Current attempt number (0-indexed)
- * @returns {Promise<void>} - Promise that resolves after delay
  */
 const exponentialBackoff = async (attempt) => {
   const delay = Math.min(RETRY_DELAY_BASE * Math.pow(2, attempt), RETRY_DELAY_MAX)
@@ -56,42 +52,37 @@ const exponentialBackoff = async (attempt) => {
 }
 
 /**
- * Structured logging utility
- * @param {string} level - Log level (info, warn, error)
- * @param {string} message - Log message
- * @param {object} metadata - Additional metadata
+ * Simple logging helper
  */
-const log = (level, message, metadata = {}) => {
+const log = (level, message, data = {}) => {
   const timestamp = new Date().toISOString()
-  
-  if (level === 'error') {
-    console.error(`[${timestamp}] [SimpleSwap] ${message}`, metadata)
-  } else if (level === 'warn') {
-    console.warn(`[${timestamp}] [SimpleSwap] ${message}`, metadata)
-  } else {
-    console.log(`[${timestamp}] [SimpleSwap] ${message}`, metadata)
-  }
+  console[level](`[SimpleSwap ${timestamp}] ${message}`, data)
 }
 
 /**
  * Currency mapping for SimpleSwap
- * SimpleSwap uses currency codes like: bnb, usdt, eth, etc.
+ * SimpleSwap uses specific currency codes
  */
 const CURRENCY_MAP = {
-  // Native currencies
+  'BTC': 'btc',
   'ETH': 'eth',
   'BNB': 'bnb',
-  'MATIC': 'matic',
   'SOL': 'sol',
-  'BTC': 'btc',
+  'USDT': 'usdt',
+  'USDC': 'usdc',
+  'BUSD': 'busd',
+  'MATIC': 'matic',
+  'AVAX': 'avax',
+  'TRX': 'trx',
   'LTC': 'ltc',
   'XRP': 'xrp',
+  'ADA': 'ada',
+  'DOT': 'dot',
   'DOGE': 'doge',
 }
 
 /**
  * Network mapping for SimpleSwap
- * SimpleSwap uses network codes in currency format
  */
 const NETWORK_MAP = {
   'ethereum': 'eth',
@@ -99,6 +90,8 @@ const NETWORK_MAP = {
   'polygon': 'matic',
   'solana': 'sol',
   'bitcoin': 'btc',
+  'tron': 'trx',
+  'avalanche': 'avax',
 }
 
 // Cache for SimpleSwap currency list
@@ -108,7 +101,6 @@ const CURRENCY_CACHE_TTL = 3600000 // 1 hour
 
 /**
  * Fetch available currencies from SimpleSwap API
- * This gets the exact currency codes SimpleSwap uses
  */
 const fetchSimpleSwapCurrencies = async () => {
   try {
@@ -117,90 +109,83 @@ const fetchSimpleSwapCurrencies = async () => {
       log('warn', 'No API key for fetching currencies, using fallback mapping')
       return null
     }
-
-    // Try v3 first
-    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/get_currencies`
-    let headers = { 'Authorization': `Bearer ${apiKey}` }
     
-    let response = await fetchWithTimeout(apiUrl, { method: 'GET', headers }, 10000)
-    
-    // If v3 fails, try v1
-    if (!response.ok) {
-      apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_currencies?api_key=${encodeURIComponent(apiKey)}`
-      headers = {}
-      response = await fetchWithTimeout(apiUrl, { method: 'GET', headers }, 10000)
+    // Try v3 first, fallback to v1
+    let response
+    try {
+      response = await fetchWithTimeout(
+        `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/currencies`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        },
+        5000
+      )
+      if (response.ok) {
+        const data = await response.json()
+        currencyListCache = data
+        currencyListCacheTime = Date.now()
+        log('info', 'Fetched currencies from v3 API', { count: data?.length || 0 })
+        return data
+      }
+    } catch (e) {
+      // v3 failed, try v1
     }
+    
+    // Fallback to v1
+    response = await fetchWithTimeout(
+      `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_all_currencies?api_key=${encodeURIComponent(apiKey)}`,
+      { method: 'GET' },
+      5000
+    )
     
     if (response.ok) {
       const data = await response.json()
       currencyListCache = data
       currencyListCacheTime = Date.now()
-      log('info', 'Fetched SimpleSwap currency list', { count: Array.isArray(data) ? data.length : Object.keys(data).length })
+      log('info', 'Fetched currencies from v1 API', { count: Array.isArray(data) ? data.length : Object.keys(data || {}).length })
       return data
     }
   } catch (error) {
-    log('warn', 'Failed to fetch SimpleSwap currencies, using fallback', { error: error.message })
+    log('warn', 'Failed to fetch currencies from API', { error: error.message })
+    return null
   }
-  return null
 }
 
 /**
- * Get SimpleSwap currency code by searching the currency list
- * This uses the exact format SimpleSwap uses
+ * Search currency list for exact match
  */
-const getSimpleSwapCurrencyFromList = (currency, chain = null) => {
+const getSimpleSwapCurrencyFromList = (currency, chain) => {
   if (!currencyListCache) return null
   
   const upperCurrency = currency.toUpperCase()
   const chainLower = chain ? chain.toLowerCase() : null
   
-  // Try to find exact match in currency list
-  // Currency list format varies, could be array or object
-  let currencies = []
-  if (Array.isArray(currencyListCache)) {
-    currencies = currencyListCache
-  } else if (currencyListCache.currencies) {
-    currencies = currencyListCache.currencies
-  } else if (typeof currencyListCache === 'object') {
-    currencies = Object.values(currencyListCache)
-  }
+  // Handle array format (v3) or object format (v1)
+  const currencies = Array.isArray(currencyListCache) 
+    ? currencyListCache 
+    : Object.values(currencyListCache).flat()
   
-  // Search for matching currency
   for (const item of currencies) {
-    const itemSymbol = (item.symbol || item.code || item.currency || item.name || '').toUpperCase()
-    const itemNetwork = (item.network || item.chain || item.blockchain || '').toLowerCase()
-    const itemCode = item.code || item.currency || item.id || itemSymbol.toLowerCase()
+    const itemSymbol = (item.symbol || item.ticker || '').toUpperCase()
+    const itemCode = (item.code || item.itemCode || itemSymbol || '').toLowerCase()
+    const itemNetwork = (item.network || '').toLowerCase()
     
-    // Match by symbol
-    if (itemSymbol === upperCurrency || itemSymbol.includes(upperCurrency) || upperCurrency.includes(itemSymbol)) {
-      // If chain specified, match network too
-      if (chainLower) {
-        const networkMap = {
-          'ethereum': ['eth', 'ethereum', 'erc20', 'erc-20'],
-          'bnb': ['bsc', 'bep20', 'bep-20', 'binance', 'binance smart chain'],
-          'polygon': ['matic', 'polygon'],
-          'solana': ['sol', 'solana', 'spl'],
-        }
-        const expectedNetworks = networkMap[chainLower] || [chainLower]
-        
-        // If network matches or no network specified (might be default)
-        if (!itemNetwork || expectedNetworks.some(n => itemNetwork.includes(n) || n.includes(itemNetwork))) {
-          console.log('[SimpleSwap] Found currency match:', {
-            currency,
-            chain,
-            itemCode,
-            itemSymbol,
-            itemNetwork
-          })
+    // Match by symbol and network
+    if (itemSymbol === upperCurrency) {
+      // For BSC tokens, check if network matches
+      if (chainLower === 'bnb' || chainLower === 'bsc') {
+        if (itemNetwork === 'bsc' || itemNetwork === 'binance' || !itemNetwork) {
           return itemCode
         }
-      } else {
-        // No chain specified, return first match
-        console.log('[SimpleSwap] Found currency match (no chain):', {
-          currency,
-          itemCode,
-          itemSymbol
-        })
+      } else if (chainLower && itemNetwork) {
+        if (itemNetwork === NETWORK_MAP[chainLower] || itemNetwork === chainLower) {
+          return itemCode
+        }
+      } else if (!chainLower || !itemNetwork) {
         return itemCode
       }
     }
@@ -211,10 +196,7 @@ const getSimpleSwapCurrencyFromList = (currency, chain = null) => {
 
 /**
  * Get SimpleSwap currency code
- * First tries to fetch from SimpleSwap API, then falls back to mapping
- * @param {string} currency - Currency symbol
- * @param {string} chain - Chain name
- * @returns {string} - SimpleSwap currency code
+ * Matches SimpleSwap's exact format
  */
 const getSimpleSwapCurrency = async (currency, chain = null) => {
   if (!currency) return 'eth'
@@ -231,7 +213,6 @@ const getSimpleSwapCurrency = async (currency, chain = null) => {
       return fromList
     }
   } catch (error) {
-    // If fetching currencies fails, just use fallback mapping
     log('warn', 'Failed to get currency from list, using fallback', { 
       currency, 
       chain, 
@@ -252,27 +233,12 @@ const getSimpleSwapCurrency = async (currency, chain = null) => {
   if (chainLower && NETWORK_MAP[chainLower]) {
     const network = NETWORK_MAP[chainLower]
     
-    // SimpleSwap format varies by chain:
-    // - BSC tokens: USDT/BUSD use just "usdt"/"busd" (not "usdt_bsc")
-    // - Ethereum tokens: "usdt_eth" or "usdt"
-    // - Polygon tokens: "usdt_matic" or "usdt"
-    // - Solana tokens: "usdc_sol"
-    
-    // SimpleSwap format for tokens:
-    // - BSC tokens: USDT/BUSD use just "usdt"/"busd" (confirmed from website)
-    // - For same-chain swaps on BSC: BNB -> USDT uses "bnb" -> "usdt"
-    // - Ethereum tokens: "usdt_eth" or "usdt" (depends on context)
-    // - Polygon tokens: "usdt_matic" or "usdt"
-    // - Solana tokens: "usdc_sol"
-    
+    // BSC tokens: USDT/BUSD use just "usdt"/"busd" (confirmed from SimpleSwap website)
     if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
-      // BSC USDT/BUSD use just the currency code (confirmed from SimpleSwap website)
       return upperCurrency.toLowerCase()
     }
     
-    // For other networks, try currency_network format first
-    // But also try just currency code as fallback
-    // Format: currency_network (e.g., usdc_eth, usdc_sol)
+    // For other networks, try currency_network format
     return `${upperCurrency.toLowerCase()}_${network}`
   }
   
@@ -282,18 +248,40 @@ const getSimpleSwapCurrency = async (currency, chain = null) => {
 
 /**
  * Normalize amount to string with up to 8 decimals
+ * SimpleSwap expects amounts as strings
  */
 const normalizeAmount = (amount) => {
-  const num = typeof amount === 'string' ? Number(amount) : amount
-  if (!isFinite(num) || num <= 0) return '0'
+  const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+  if (!isFinite(num) || isNaN(num)) {
+    throw new Error(`Invalid amount: ${amount}`)
+  }
   return Number(num.toFixed(8)).toString()
 }
 
 /**
  * Create a new exchange transaction
- * SimpleSwap API: POST /api/v2/create-exchange
- * @param {object} orderData - Order data
- * @returns {Promise<object>} - Exchange transaction data
+ * SimpleSwap API v1: POST /create_exchange?api_key={key}
+ * 
+ * Request body (exact format from SimpleSwap docs):
+ * {
+ *   "fixed": false,
+ *   "currency_from": "btc",
+ *   "currency_to": "eth",
+ *   "amount": "0.2",
+ *   "address_to": "string",
+ *   "extra_id_to": "",
+ *   "user_refund_address": "string",
+ *   "user_refund_extra_id": "string"
+ * }
+ * 
+ * Response (exact format from SimpleSwap docs):
+ * {
+ *   "id": "string",
+ *   "address_from": "string",  // Deposit address
+ *   "amount_to": "string",
+ *   "status": "confirming",
+ *   ...
+ * }
  */
 export const createExchangeTransaction = async (orderData) => {
   const {
@@ -309,7 +297,6 @@ export const createExchangeTransaction = async (orderData) => {
 
   try {
     // Only block if it's the EXACT same currency on the same chain
-    // Allow same-chain swaps for different currencies (e.g., USDT -> BNB on BSC)
     if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
       throw new Error(`Cannot create exchange for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.`)
     }
@@ -333,38 +320,19 @@ export const createExchangeTransaction = async (orderData) => {
       throw new Error(validation.error)
     }
     
-    // Read API key - config already has fallback, so just use it
+    // Read API key
     const apiKey = (process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || '').trim()
     
-    // Debug logging
-    console.log('[SimpleSwap createExchangeTransaction] API key check:', {
-      hasEnvKey: !!process.env.SIMPLESWAP_API_KEY,
-      hasConfigKey: !!BLOCKPAY_CONFIG.simpleswap.apiKey,
-      configKeyLength: BLOCKPAY_CONFIG.simpleswap.apiKey ? BLOCKPAY_CONFIG.simpleswap.apiKey.length : 0,
-      finalKeyLength: apiKey.length,
-      configKeyPreview: BLOCKPAY_CONFIG.simpleswap.apiKey ? BLOCKPAY_CONFIG.simpleswap.apiKey.substring(0, 30) + '...' : 'none'
-    })
-    
     if (!apiKey || apiKey === '' || apiKey === 'undefined') {
-      log('error', 'API key not configured', {
-        envKey: !!process.env.SIMPLESWAP_API_KEY,
-        configKey: !!BLOCKPAY_CONFIG.simpleswap.apiKey,
-        configKeyValue: BLOCKPAY_CONFIG.simpleswap.apiKey ? BLOCKPAY_CONFIG.simpleswap.apiKey.substring(0, 20) + '...' : 'none',
-        BLOCKPAY_CONFIG_exists: !!BLOCKPAY_CONFIG,
-        simpleswap_exists: !!BLOCKPAY_CONFIG?.simpleswap
-      })
-      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
+      log('error', 'API key not configured')
+      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables.')
     }
 
-    // Get currency codes (await since it's now async)
+    // Get currency codes (exact format SimpleSwap expects)
     const fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
     
-    // Try v3 first, fallback to v1
-    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/create_exchange`
-    let useV3 = true
-    
-    // Normalize amount
+    // Normalize amount to string
     const payloadAmount = normalizeAmount(normalizedAmount)
     
     // Validate recipient address for destination chain
@@ -381,10 +349,15 @@ export const createExchangeTransaction = async (orderData) => {
     
     // Validate refund address if provided
     let validRefundAddress = null
+    let validRefundExtraId = null
     if (refundAddress) {
       const refundValidation = validateAddress(refundAddress.trim(), fromChain)
       if (refundValidation.valid) {
         validRefundAddress = refundAddress.trim()
+        // Use orderId as refund extra_id if provided
+        if (orderId) {
+          validRefundExtraId = orderId
+        }
       } else {
         log('warn', 'Refund address invalid for source chain, skipping', {
           refundAddress: refundAddress.substring(0, 10) + '...',
@@ -394,31 +367,26 @@ export const createExchangeTransaction = async (orderData) => {
       }
     }
     
-    // Prepare payload - v3 uses different format than v1
-    let payload
-    if (useV3) {
-      // SimpleSwap API v3 format
-      payload = {
-        fixed: false,
-        currency_from: fromCurrency,
-        currency_to: toCurrency,
-        amount: payloadAmount,
-        address_to: recipientAddress.trim(),
-        ...(validRefundAddress && { user_refund_address: validRefundAddress }),
-      }
-    } else {
-      // SimpleSwap API v1 format
-      payload = {
-        fixed: false,
-        currency_from: fromCurrency,
-        currency_to: toCurrency,
-        amount: payloadAmount,
-        address_to: recipientAddress.trim(),
-        ...(validRefundAddress && { user_refund_address: validRefundAddress }),
-      }
+    // Prepare payload - EXACT format from SimpleSwap v1 API docs
+    const payload = {
+      fixed: false,
+      currency_from: fromCurrency,
+      currency_to: toCurrency,
+      amount: payloadAmount,
+      address_to: recipientAddress.trim(),
+      extra_id_to: '', // Empty string if not needed
+      ...(validRefundAddress && { user_refund_address: validRefundAddress }),
+      ...(validRefundExtraId && { user_refund_extra_id: validRefundExtraId }),
     }
     
-    console.log('[SimpleSwap createExchangeTransaction] Request payload:', {
+    // Remove extra_id_to if empty (some APIs don't like empty strings)
+    if (payload.extra_id_to === '') {
+      delete payload.extra_id_to
+    }
+    
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
+    
+    console.log('[SimpleSwap createExchangeTransaction] Request:', {
       currency_from: fromCurrency,
       currency_to: toCurrency,
       amount: payloadAmount,
@@ -444,18 +412,8 @@ export const createExchangeTransaction = async (orderData) => {
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // SimpleSwap might use Authorization header or X-API-KEY
-        // Try both formats if needed
         const headers = {
           'Content-Type': 'application/json',
-        }
-        
-        // SimpleSwap API v3 uses Authorization header, v1 uses query parameter
-        if (useV3) {
-          headers['Authorization'] = `Bearer ${apiKey}`
-        } else {
-          // v1: api_key in query parameter
-          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
         }
         
         response = await fetchWithTimeout(apiUrl, {
@@ -471,7 +429,7 @@ export const createExchangeTransaction = async (orderData) => {
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
         
-        // Log detailed error for debugging
+        // Log detailed error
         console.error('[SimpleSwap createExchangeTransaction] API Error:', {
           status,
           fromCurrency,
@@ -483,20 +441,11 @@ export const createExchangeTransaction = async (orderData) => {
           payload: { ...payload, address_to: payload.address_to?.substring(0, 10) + '...' }
         })
         
-        // If v3 returns 404 or 401, try v1
-        if (useV3 && (status === 404 || status === 401) && attempt === 0) {
-          log('info', 'v3 not available, falling back to v1', { status, error: parsed.error || parsed.message })
-          useV3 = false
-          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/create_exchange?api_key=${encodeURIComponent(apiKey)}`
-          delete headers['Authorization']
-          continue
-        }
-        
         const isTransient = status >= 500
         const isRetryable = isTransient && attempt < MAX_RETRIES - 1
         
         if (isRetryable) {
-          log('warn', `Request failed, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, {
+          log('warn', `Exchange creation failed, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, {
             status,
             error: parsed.error || parsed.message,
             attempt: attempt + 1
@@ -509,7 +458,7 @@ export const createExchangeTransaction = async (orderData) => {
         break
       } catch (fetchError) {
         if (fetchError.message?.includes('timeout') && attempt < MAX_RETRIES - 1) {
-          log('warn', `Request timeout, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, { attempt: attempt + 1 })
+          log('warn', `Exchange creation timeout, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, { attempt: attempt + 1 })
           await exponentialBackoff(attempt)
           continue
         }
@@ -523,46 +472,43 @@ export const createExchangeTransaction = async (orderData) => {
       try {
         error = JSON.parse(errorData.text)
       } catch (e) {
-        error = { message: errorData.text || 'Unknown error' }
+        error = { message: errorData.text }
       }
-      
-      log('error', 'API request failed', {
-        status: errorData.status,
-        error: error.error || error.message,
-        from: `${fromAsset}(${fromChain})`,
-        to: `${toAsset}(${toChain})`,
-        apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***'),
-        payload: { ...payload, address_to: payload.address_to?.substring(0, 10) + '...' }
-      })
       
       // Handle specific error cases
       if (errorData.status === 401 || errorData.status === 403) {
-        throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
+        throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.description || error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY.`)
       } else if (errorData.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap.`)
+      } else if (errorData.status === 422) {
+        const errorMsg = error.description || error.message || errorData.text || 'Amount is out of range'
+        throw new Error(`SimpleSwap API error (422): ${errorMsg}`)
       } else if (errorData.status === 502) {
-        throw new Error(`SimpleSwap API gateway error (502): The service may be temporarily unavailable. Please try again in a few moments. If the issue persists, check SimpleSwap's status page.`)
+        throw new Error(`SimpleSwap API gateway error (502): The service may be temporarily unavailable. Please try again in a few moments.`)
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
       } else {
-        throw new Error(`SimpleSwap API error: ${errorData.status} - ${error.message || error.error || errorData.text}`)
+        throw new Error(`SimpleSwap API error: ${errorData.status} - ${error.description || error.message || errorData.text}`)
       }
     }
 
+    // Parse response - EXACT format from SimpleSwap v1 API docs
     const data = await response.json()
     log('info', 'Transaction created successfully', {
-      exchangeId: data.id || data.exchange_id,
-      depositAddressPrefix: (data.address_from || data.deposit_address || '').substring(0, 10) + '...'
+      exchangeId: data.id,
+      depositAddressPrefix: (data.address_from || '').substring(0, 10) + '...'
     })
 
-    // SimpleSwap API response format
+    // Map SimpleSwap response to our format
+    // SimpleSwap returns: address_from (deposit address), id (exchange ID), amount_to, etc.
     return {
-      depositAddress: data.address_from || data.deposit_address,
-      exchangeId: data.id || data.exchange_id,
-      estimatedAmount: data.amount_to || data.amount,
+      depositAddress: data.address_from, // SimpleSwap uses address_from for deposit address
+      exchangeId: data.id,
+      estimatedAmount: data.amount_to || data.expected_amount,
       exchangeRate: data.rate || null,
       validUntil: data.valid_until || null,
       flow: data.type || 'standard',
+      status: data.status || 'confirming',
     }
   } catch (error) {
     log('error', 'Failed to create exchange transaction', {
@@ -576,107 +522,95 @@ export const createExchangeTransaction = async (orderData) => {
 
 /**
  * Get exchange transaction status
- * SimpleSwap API: GET /api/v2/exchange/{id}
- * @param {string} exchangeId - SimpleSwap exchange transaction ID
- * @returns {Promise<object>} - Transaction status data
+ * SimpleSwap API v1: GET /get_exchange?api_key={key}&id={id}
+ * 
+ * Response format matches SimpleSwap docs exactly
  */
 export const getExchangeStatus = async (exchangeId) => {
   try {
-    if (!exchangeId || typeof exchangeId !== 'string' || exchangeId.trim() === '') {
+    if (!exchangeId || typeof exchangeId !== 'string') {
       throw new Error('Exchange ID is required')
     }
-    
-    // Read API key - config already has fallback, so just use it
+
     const apiKey = (process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || '').trim()
     
-    if (!apiKey || apiKey === '' || apiKey === 'undefined') {
-      log('error', 'API key not configured', {
-        envKey: !!process.env.SIMPLESWAP_API_KEY,
-        configKey: !!BLOCKPAY_CONFIG.simpleswap.apiKey
-      })
-      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
+    if (!apiKey || apiKey === '') {
+      throw new Error('SimpleSwap API key is not configured')
     }
 
-    // Try v3 first, fallback to v1
-    let apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/v3/get_exchange?id=${encodeURIComponent(exchangeId.trim())}`
-    let useV3 = true
+    const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_exchange?api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(exchangeId)}`
     
-    log('info', 'Getting transaction status', { exchangeId, useV3 })
-    
-    // SimpleSwap API v3 uses Authorization header, v1 uses query parameter
-    const headers = {
-      'Content-Type': 'application/json',
+    log('info', 'Getting exchange status', { exchangeId })
+
+    let response
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        response = await fetchWithTimeout(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }, API_TIMEOUT)
+
+        if (response.ok) break
+
+        const status = response.status
+        if (status >= 500 && attempt < MAX_RETRIES - 1) {
+          log('warn', `Status check failed, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, { status })
+          await exponentialBackoff(attempt)
+          continue
+        }
+        
+        break
+      } catch (fetchError) {
+        if (fetchError.message?.includes('timeout') && attempt < MAX_RETRIES - 1) {
+          await exponentialBackoff(attempt)
+          continue
+        }
+        throw fetchError
+      }
     }
-    
-    if (useV3) {
-      headers['Authorization'] = `Bearer ${apiKey}`
-    } else {
-      // v1: api_key in query parameter
-      apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_exchange?api_key=${encodeURIComponent(apiKey)}&id=${encodeURIComponent(exchangeId.trim())}`
-    }
-    
-    const response = await fetchWithTimeout(apiUrl, {
-      method: 'GET',
-      headers,
-    }, API_TIMEOUT)
 
     if (!response.ok) {
-      const errorText = await response.text()
-      let errorData
-      try {
-        errorData = JSON.parse(errorText)
-      } catch (e) {
-        errorData = { message: errorText }
-      }
+      const text = await response.text()
+      let error
+      try { error = JSON.parse(text) } catch { error = { message: text } }
       
-      log('error', 'Failed to get transaction status', {
-        status: response.status,
-        exchangeId,
-        error: errorData.message || errorText
-      })
-      
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Invalid SimpleSwap API key (${response.status}): ${errorData.message || errorText}. Please check your SIMPLESWAP_API_KEY in .env file.`)
-      } else if (response.status === 404) {
-        throw new Error(`Transaction not found: ${exchangeId}`)
-      } else {
-        throw new Error(`SimpleSwap API error: ${response.status} - ${errorData.message || errorText}`)
+      if (response.status === 404) {
+        throw new Error(`Exchange not found: ${exchangeId}`)
+      } else if (response.status === 401 || response.status === 403) {
+        throw new Error(`Invalid SimpleSwap API key: ${error.description || error.message}`)
       }
+      throw new Error(`SimpleSwap API error: ${response.status} - ${error.description || error.message || text}`)
     }
 
     const data = await response.json()
-    log('info', 'Transaction status retrieved', {
-      exchangeId,
-      status: data.status
-    })
-
-    // Map SimpleSwap status to BlockPay status
-    const statusMap = {
-      'waiting': 'awaiting_deposit',
-      'confirming': 'awaiting_deposit',
-      'exchanging': 'processing',
-      'sending': 'processing',
-      'finished': 'completed',
-      'failed': 'failed',
-      'refunded': 'failed',
-      'expired': 'failed',
+    
+    // Map SimpleSwap status to our status format
+    // SimpleSwap statuses: confirming, waiting, exchanging, finished, failed, refunded
+    let status = 'awaiting_deposit'
+    if (data.status === 'finished') {
+      status = 'completed'
+    } else if (data.status === 'failed' || data.status === 'refunded') {
+      status = 'failed'
+    } else if (data.status === 'exchanging') {
+      status = 'processing'
+    } else if (data.status === 'waiting' || data.status === 'confirming') {
+      status = 'awaiting_deposit'
     }
 
     return {
-      status: statusMap[data.status] || 'awaiting_deposit',
-      depositAddress: data.address_from,
-      depositTxHash: data.tx_from,
-      swapTxHash: data.tx_to,
-      fromAmount: data.amount_from,
-      toAmount: data.amount_to,
-      exchangeRate: data.rate,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+      status,
+      amount: data.amount_from || null,
+      toAmount: data.amount_to || null,
+      payinHash: data.tx_from || null,
+      payoutHash: data.tx_to || null,
+      exchangeId: data.id,
     }
   } catch (error) {
-    log('error', 'Error getting transaction status', {
-      exchangeId,
-      error: error.message
+    log('error', 'Failed to get exchange status', {
+      error: error.message,
+      exchangeId
     })
     throw error
   }
@@ -684,13 +618,9 @@ export const getExchangeStatus = async (exchangeId) => {
 
 /**
  * Get exchange rate estimate
- * SimpleSwap API: GET /api/v2/estimate
- * @param {string} fromAsset - Source asset symbol
- * @param {string} toAsset - Destination asset symbol
- * @param {string} fromChain - Source chain
- * @param {string} toChain - Destination chain
- * @param {number|string} amount - Amount to exchange
- * @returns {Promise<object>} - Exchange rate data
+ * SimpleSwap API v1: GET /get_estimated?api_key={key}&fixed=false&currency_from={from}&currency_to={to}&amount={amount}
+ * 
+ * Response: plain string with estimated amount
  */
 export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
@@ -700,7 +630,7 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       throw new Error(amountValidation.error)
     }
     
-    const apiKey = process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || ''
+    const apiKey = (process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || '').trim()
     
     if (!apiKey || apiKey === '') {
       log('error', 'API key is missing')
@@ -709,53 +639,38 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
 
     const normalizedAmount = normalizeAmount(amount)
     
-    // Check if this is a same-chain swap
-    const isSameChain = fromChain === toChain
-    
-    // ROOT PROBLEM: v3 API requires Bearer token and may not work with v1 API keys
-    // v1 API keys (UUID format) work with query parameter auth, but v3 might need different auth
-    // For now, use v1 API for everything since the API key is v1 format
-    // v1 API can handle same-chain swaps if we use the correct currency codes
-    let useV3 = false // Disable v3 for now - API key is v1 format
-    
-    // Always use v1 API format (API key is v1 format)
-    // v1 API uses: currency_from, currency_to with api_key as query parameter
+    // Get currency codes
     const fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
+    
+    // v1 API format: api_key as query parameter
     const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
     
-    console.log('[SimpleSwap getExchangeRate] Using v1 API format:', {
+    console.log('[SimpleSwap getExchangeRate] Request:', {
       fromAsset,
       fromChain,
       fromCurrency,
       toAsset,
       toChain,
       toCurrency,
-      amount: normalizedAmount,
-      isSameChain
+      amount: normalizedAmount
     })
     
     log('info', 'Getting exchange rate', {
       from: `${fromAsset}(${fromChain})`,
       to: `${toAsset}(${toChain})`,
       amount: normalizedAmount,
-      url: apiUrl.replace(apiKey, '***')
     })
 
-    // Retry on transient server errors with exponential backoff
+    // Retry on transient server errors
     let response
     let lastError = null
     
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // SimpleSwap API v3 uses Authorization header, v1 uses query parameter
         const headers = {
           'Content-Type': 'application/json',
         }
-        
-        // v1 API: api_key is already in query parameter, no Authorization header needed
-        // Remove Authorization header if it exists
-        delete headers['Authorization']
         
         response = await fetchWithTimeout(apiUrl, {
           method: 'GET',
@@ -768,8 +683,6 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         const text = await response.text()
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
-        
-        // No fallback needed - we're using v1 API directly
         
         const isTransient = status >= 500
         const isRetryable = isTransient && attempt < MAX_RETRIES - 1
@@ -805,8 +718,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         error = { message: errorData.text }
       }
       
-      // Log detailed error for debugging - this will show in Netlify function logs
-      console.error('[SimpleSwap getExchangeRate] API Error Details:', {
+      // Log detailed error
+      console.error('[SimpleSwap getExchangeRate] API Error:', {
         status: errorData.status,
         fromCurrency,
         toCurrency,
@@ -815,10 +728,9 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         toAsset,
         toChain,
         amount: normalizedAmount,
-        error: error.error || error.message,
-        fullResponse: errorData.text?.substring(0, 1000), // Increased to see more of response
+        error: error.description || error.error || error.message,
+        fullResponse: errorData.text?.substring(0, 1000),
         apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***'),
-        isSameChain,
         apiKeyLength: apiKey.length,
         apiKeyPrefix: apiKey.substring(0, 10) + '...'
       })
@@ -827,24 +739,22 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         status: errorData.status,
         from: `${fromAsset}(${fromChain})`,
         to: `${toAsset}(${toChain})`,
-        error: error.error || error.message
+        error: error.description || error.error || error.message
       })
       
       if (errorData.status === 401 || errorData.status === 403) {
-        throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY in .env file.`)
+        throw new Error(`Invalid SimpleSwap API key (${errorData.status}): ${error.description || error.message || errorData.text}. Please check your SIMPLESWAP_API_KEY.`)
       } else if (errorData.status === 404 || errorData.status === 400) {
-        // 400 or 404 might mean pair not available, but could also mean wrong currency format
-        const errorMsg = error.message || error.error || errorData.text || 'Unknown error'
-        // Check if it's a pair availability issue or format issue
+        const errorMsg = error.description || error.error || error.message || errorData.text || 'Unknown error'
         if (errorMsg.toLowerCase().includes('pair') || errorMsg.toLowerCase().includes('not available') || errorMsg.toLowerCase().includes('not found')) {
-          throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap API. Note: SimpleSwap's public API may not support all pairs that their website supports.`)
+          throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be supported by SimpleSwap API.`)
         } else {
           throw new Error(`SimpleSwap API error (${errorData.status}): ${errorMsg}. Currency codes: currency_from=${fromCurrency} -> currency_to=${toCurrency}`)
         }
       } else if (errorData.status >= 500) {
         throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly.`)
       } else {
-        throw new Error(`SimpleSwap API error: ${errorData.status} - ${error.message || error.error || errorData.text}`)
+        throw new Error(`SimpleSwap API error: ${errorData.status} - ${error.description || error.message || errorData.text}`)
       }
     }
 
@@ -872,34 +782,20 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         text,
         estimatedAmount
       })
-      throw new Error('Invalid response from SimpleSwap API: Could not find estimated amount in response')
+      throw new Error('Invalid response from SimpleSwap API: no estimated amount found')
     }
-
-    log('info', 'Exchange rate retrieved', {
-      from: `${fromAsset}(${fromChain})`,
-      to: `${toAsset}(${toChain})`,
-      estimatedAmount: estimatedAmount.toString()
-    })
 
     return {
-      estimatedAmount: estimatedAmount.toString(),
-      rate: null,
-      minAmount: null,
-      maxAmount: null,
+      estimatedAmount: parseFloat(estimatedAmount),
+      fromAmount: normalizedAmount,
+      exchangeRate: parseFloat(estimatedAmount) / parseFloat(normalizedAmount),
     }
   } catch (error) {
-    log('error', 'Error getting exchange rate', {
+    log('error', 'Failed to get exchange rate', {
+      error: error.message,
       from: `${fromAsset}(${fromChain})`,
-      to: `${toAsset}(${toChain})`,
-      error: error.message
+      to: `${toAsset}(${toChain})`
     })
     throw error
   }
 }
-
-export default {
-  createExchangeTransaction,
-  getExchangeStatus,
-  getExchangeRate,
-}
-
