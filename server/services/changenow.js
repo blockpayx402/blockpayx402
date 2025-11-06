@@ -4,10 +4,79 @@
  */
 
 import { BLOCKPAY_CONFIG, getChangeNowHeaders } from '../config.js'
+import { validateExchangeOrder, validateAmount, validateAddress } from '../utils/validation.js'
 
 // Validate API key on import
 if (!BLOCKPAY_CONFIG.changenow.apiKey && process.env.NODE_ENV === 'production') {
   console.warn('⚠️  WARNING: ChangeNOW API key not configured. Set CHANGENOW_API_KEY in .env file.')
+}
+
+// Configuration constants
+const API_TIMEOUT = 15000 // 15 seconds
+const MAX_RETRIES = 3
+const RETRY_DELAY_BASE = 500 // Base delay in ms
+const RETRY_DELAY_MAX = 5000 // Max delay in ms
+
+/**
+ * Create a fetch request with timeout
+ * @param {string} url - Request URL
+ * @param {object} options - Fetch options
+ * @param {number} timeout - Timeout in milliseconds
+ * @returns {Promise<Response>} - Fetch response
+ */
+const fetchWithTimeout = async (url, options = {}, timeout = API_TIMEOUT) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+    return response
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms`)
+    }
+    throw error
+  }
+}
+
+/**
+ * Exponential backoff delay
+ * @param {number} attempt - Current attempt number (0-indexed)
+ * @returns {Promise<void>} - Promise that resolves after delay
+ */
+const exponentialBackoff = async (attempt) => {
+  const delay = Math.min(RETRY_DELAY_BASE * Math.pow(2, attempt), RETRY_DELAY_MAX)
+  await new Promise(resolve => setTimeout(resolve, delay))
+}
+
+/**
+ * Structured logging utility
+ * @param {string} level - Log level (info, warn, error)
+ * @param {string} message - Log message
+ * @param {object} metadata - Additional metadata
+ */
+const log = (level, message, metadata = {}) => {
+  const timestamp = new Date().toISOString()
+  const logData = {
+    timestamp,
+    service: 'ChangeNOW',
+    level,
+    message,
+    ...metadata
+  }
+  
+  if (level === 'error') {
+    console.error(`[${timestamp}] [ChangeNOW] ${message}`, metadata)
+  } else if (level === 'warn') {
+    console.warn(`[${timestamp}] [ChangeNOW] ${message}`, metadata)
+  } else {
+    console.log(`[${timestamp}] [ChangeNOW] ${message}`, metadata)
+  }
 }
 
 /**
@@ -99,6 +168,16 @@ const getMinAmountV1 = async (fromAsset, toAsset, fromChain, toChain) => {
 /**
  * Create a new exchange transaction
  * Returns deposit address and order ID
+ * @param {object} orderData - Order data
+ * @param {string} orderData.fromChain - Source chain
+ * @param {string} orderData.fromAsset - Source asset
+ * @param {string} orderData.toChain - Destination chain
+ * @param {string} orderData.toAsset - Destination asset
+ * @param {number|string} orderData.amount - Amount to exchange
+ * @param {string} orderData.recipientAddress - Recipient address
+ * @param {string} [orderData.refundAddress] - Refund address (optional)
+ * @param {string} [orderData.orderId] - BlockPay order ID (optional)
+ * @returns {Promise<object>} - Exchange transaction data
  */
 export const createExchangeTransaction = async (orderData) => {
   const {
@@ -113,10 +192,18 @@ export const createExchangeTransaction = async (orderData) => {
   } = orderData
 
   try {
+    // Input validation
+    const validation = validateExchangeOrder(orderData)
+    if (!validation.valid) {
+      log('error', 'Invalid order data', { error: validation.error, orderData: { ...orderData, recipientAddress: recipientAddress?.substring(0, 10) + '...' } })
+      throw new Error(validation.error)
+    }
+    
     // Read API key dynamically from environment
     const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
     
     if (!apiKey || apiKey === '') {
+      log('error', 'API key not configured')
       throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file.')
     }
 
@@ -129,15 +216,19 @@ export const createExchangeTransaction = async (orderData) => {
     const payload = {
       from: fromCurrency,
       to: toCurrency,
-      address: recipientAddress,
+      address: recipientAddress.trim(),
       amount: normalizeAmount(amount),
-      ...(refundAddress && { refundAddress }),
+      ...(refundAddress && { refundAddress: refundAddress.trim() }),
       // Only include extraId if the currency supports it (Solana doesn't support extraId)
       ...(orderId && toCurrency !== 'sol' && toCurrency !== 'SOL' && { extraId: orderId }),
     }
 
-    console.log(`[ChangeNOW] Creating transaction (v1): ${apiUrl.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
-    console.log(`[ChangeNOW] Transaction payload:`, { ...payload, address: recipientAddress.substring(0, 10) + '...' })
+    log('info', 'Creating exchange transaction', {
+      from: `${fromAsset}(${fromChain})`,
+      to: `${toAsset}(${toChain})`,
+      amount: payload.amount,
+      recipientPrefix: recipientAddress.substring(0, 10) + '...'
+    })
 
     // Preflight: if amount is below min, bump to min
     try {
@@ -155,67 +246,100 @@ export const createExchangeTransaction = async (orderData) => {
       }
     }
 
-    // Retry on transient server errors
+    // Retry on transient server errors with exponential backoff
     let response
-    for (let attempt = 0; attempt < 2; attempt++) {
-      response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+    let lastError = null
+    
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        response = await fetchWithTimeout(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }, API_TIMEOUT)
 
-      if (response.ok) break
+        if (response.ok) break
 
-      // For 5xx or unknown_error, wait briefly and retry once
-      const status = response.status
-      const text = await response.text()
-      let parsed
-      try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
-      const isTransient = status >= 500 || parsed?.error === 'unknown_error'
-      if (attempt === 0 && isTransient) {
-        await new Promise(r => setTimeout(r, 600))
-        continue
+        const status = response.status
+        const text = await response.text()
+        let parsed
+        try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
+        
+        const isTransient = status >= 500 || parsed?.error === 'unknown_error'
+        const isRetryable = isTransient && attempt < MAX_RETRIES - 1
+        
+        if (isRetryable) {
+          log('warn', `Request failed, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, {
+            status,
+            error: parsed.error || parsed.message,
+            attempt: attempt + 1
+          })
+          await exponentialBackoff(attempt)
+          continue
+        }
+        
+        // Not retryable or last attempt - store error for handling below
+        lastError = { status, text, parsed }
+        break
+      } catch (fetchError) {
+        if (fetchError.message?.includes('timeout') && attempt < MAX_RETRIES - 1) {
+          log('warn', `Request timeout, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, { attempt: attempt + 1 })
+          await exponentialBackoff(attempt)
+          continue
+        }
+        throw fetchError
       }
-      // Put text back for the unified handler below
-      response = {
-        ok: false,
-        status,
-        async text() { return text },
-      }
-      break
     }
 
     if (!response.ok) {
-      const errorText = await response.text()
+      const errorData = lastError || { status: response.status, text: await response.text() }
       let error
       try {
-        error = JSON.parse(errorText)
+        error = JSON.parse(errorData.text)
       } catch (e) {
-        error = { message: errorText || 'Unknown error' }
+        error = { message: errorData.text || 'Unknown error' }
       }
       
-      console.error(`[ChangeNOW] v1 API error ${response.status}:`, error)
-      console.error(`[ChangeNOW] Request URL: ${apiUrl.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
-      console.error(`[ChangeNOW] Full error response:`, errorText)
+      log('error', 'API request failed', {
+        status: errorData.status,
+        error: error.error || error.message,
+        from: `${fromAsset}(${fromChain})`,
+        to: `${toAsset}(${toChain})`
+      })
       
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Invalid ChangeNOW API key (${response.status}): ${error.message || errorText}. Please check your CHANGENOW_API_KEY in .env file.`)
-      } else if (response.status === 404) {
+      // Handle specific error cases with user-friendly messages
+      if (errorData.status === 401 || errorData.status === 403) {
+        throw new Error(`Invalid ChangeNOW API key (${errorData.status}): ${error.message || errorData.text}. Please check your CHANGENOW_API_KEY in .env file.`)
+      } else if (errorData.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
-      } else if (response.status >= 500 || error?.error === 'unknown_error') {
+      } else if (errorData.status >= 500 || error?.error === 'unknown_error') {
         throw new Error(`ChangeNOW is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly or adjust the amount.`)
+      } else if (error.error === 'max_amount_exceeded') {
+        throw new Error(`Amount exceeds maximum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a smaller amount.`)
+      } else if (error.error === 'min_amount') {
+        const min = await getMinAmountV1(fromAsset, toAsset, fromChain, toChain)
+        if (min) {
+          throw new Error(`Amount is below minimum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Minimum is ${min}.`)
+        } else {
+          throw new Error(`Amount is below minimum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a larger amount.`)
+        }
+      } else if (error.error === 'pair_is_inactive') {
+        throw new Error(`Exchange pair is currently inactive: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
       } else {
-        throw new Error(`ChangeNOW v1 API error: ${response.status} - ${error.message || error.error || errorText}`)
+        throw new Error(`ChangeNOW v1 API error: ${errorData.status} - ${error.message || error.error || errorData.text}`)
       }
     }
 
     const data = await response.json()
-    console.log(`[ChangeNOW] v1 API transaction response:`, data)
+    log('info', 'Transaction created successfully', {
+      exchangeId: data.id || data.transactionId,
+      depositAddressPrefix: (data.payinAddress || data.address || '').substring(0, 10) + '...'
+    })
 
     // v1 API response format: { payinAddress, id, payoutAmount, rate, etc. }
-    return {
+    const result = {
       depositAddress: data.payinAddress || data.address || data.payin_address,
       exchangeId: data.id || data.transactionId || data.transaction_id,
       estimatedAmount: data.payoutAmount || data.amount || data.payout_amount,
@@ -223,35 +347,55 @@ export const createExchangeTransaction = async (orderData) => {
       validUntil: data.validUntil || data.valid_until || null,
       flow: data.flow || 'standard',
     }
+    
+    // Validate response data
+    if (!result.depositAddress || !result.exchangeId) {
+      log('error', 'Invalid response from ChangeNOW API', { data })
+      throw new Error('Invalid response from ChangeNOW API: missing required fields')
+    }
+    
+    return result
   } catch (error) {
-    console.error('Error creating ChangeNOW transaction:', error)
+    log('error', 'Failed to create exchange transaction', {
+      error: error.message,
+      from: `${fromAsset}(${fromChain})`,
+      to: `${toAsset}(${toChain})`
+    })
     throw error
   }
 }
 
 /**
  * Get exchange transaction status
+ * @param {string} exchangeId - ChangeNOW exchange transaction ID
+ * @returns {Promise<object>} - Transaction status data
  */
 export const getExchangeStatus = async (exchangeId) => {
   try {
+    // Validate exchange ID
+    if (!exchangeId || typeof exchangeId !== 'string' || exchangeId.trim() === '') {
+      throw new Error('Exchange ID is required')
+    }
+    
     // Read API key dynamically from environment
     const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
     
     if (!apiKey || apiKey === '') {
+      log('error', 'API key not configured')
       throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file.')
     }
 
     // Use v1 API format: GET /v1/transactions/{id}/{api_key}
-    const apiUrl = `https://api.changenow.io/v1/transactions/${exchangeId}/${apiKey}`
+    const apiUrl = `https://api.changenow.io/v1/transactions/${exchangeId.trim()}/${apiKey}`
     
-    console.log(`[ChangeNOW] Getting transaction status (v1): ${apiUrl.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
+    log('info', 'Getting transaction status', { exchangeId })
     
-    const response = await fetch(apiUrl, {
+    const response = await fetchWithTimeout(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-    })
+    }, API_TIMEOUT)
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -262,7 +406,11 @@ export const getExchangeStatus = async (exchangeId) => {
         errorData = { message: errorText }
       }
       
-      console.error(`[ChangeNOW] v1 API error ${response.status}:`, errorData)
+      log('error', 'Failed to get transaction status', {
+        status: response.status,
+        exchangeId,
+        error: errorData.message || errorText
+      })
       
       if (response.status === 401 || response.status === 403) {
         throw new Error(`Invalid ChangeNOW API key (${response.status}): ${errorData.message || errorText}. Please check your CHANGENOW_API_KEY in .env file.`)
@@ -274,7 +422,10 @@ export const getExchangeStatus = async (exchangeId) => {
     }
 
     const data = await response.json()
-    console.log(`[ChangeNOW] v1 API status response:`, data)
+    log('info', 'Transaction status retrieved', {
+      exchangeId,
+      status: data.status
+    })
 
     // Map ChangeNOW status to BlockPay status
     const statusMap = {
@@ -300,81 +451,113 @@ export const getExchangeStatus = async (exchangeId) => {
       updatedAt: data.updatedAt,
     }
   } catch (error) {
-    console.error('Error getting ChangeNOW status:', error)
+    log('error', 'Error getting transaction status', {
+      exchangeId,
+      error: error.message
+    })
     throw error
   }
 }
 
 /**
  * Get exchange rate estimate
+ * @param {string} fromAsset - Source asset symbol
+ * @param {string} toAsset - Destination asset symbol
+ * @param {string} fromChain - Source chain
+ * @param {string} toChain - Destination chain
+ * @param {number|string} amount - Amount to exchange
+ * @returns {Promise<object>} - Exchange rate data
  */
 export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
+    // Validate inputs
+    const amountValidation = validateAmount(amount)
+    if (!amountValidation.valid) {
+      throw new Error(amountValidation.error)
+    }
+    
     // Read API key dynamically from environment (not from cached config)
     const apiKey = process.env.CHANGENOW_API_KEY || BLOCKPAY_CONFIG.changenow.apiKey || ''
     
     // Check if API key is configured
     if (!apiKey || apiKey === '') {
-      console.error('[ChangeNOW] API key is missing!')
-      console.error('[ChangeNOW] process.env.CHANGENOW_API_KEY exists:', !!process.env.CHANGENOW_API_KEY)
-      console.error('[ChangeNOW] process.env.CHANGENOW_API_KEY length:', process.env.CHANGENOW_API_KEY?.length || 0)
-      console.error('[ChangeNOW] BLOCKPAY_CONFIG.changenow.apiKey exists:', !!BLOCKPAY_CONFIG.changenow.apiKey)
+      log('error', 'API key is missing')
       throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file.')
     }
-
-    // Debug: Log API key info (without exposing full key)
-    const apiKeyPrefix = apiKey.substring(0, 8)
-    const apiKeySuffix = apiKey.substring(apiKey.length - 4)
-    console.log(`[ChangeNOW] Using API key: ${apiKeyPrefix}...${apiKeySuffix} (length: ${apiKey.length})`)
-    console.log(`[ChangeNOW] API key source: ${process.env.CHANGENOW_API_KEY ? 'process.env' : 'BLOCKPAY_CONFIG'}`)
 
     // Use v1 API format: /v1/exchange-amount/{amount}/{from}_{to}?api_key={key}
     // Include network in currency code for tokens (e.g., usdc_eth, usdc_sol)
     const fromCurrency = getChangeNowCurrency(fromAsset, fromChain)
     const toCurrency = getChangeNowCurrency(toAsset, toChain)
-    const url = `https://api.changenow.io/v1/exchange-amount/${normalizeAmount(amount)}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
+    const normalizedAmount = normalizeAmount(amount)
+    const url = `https://api.changenow.io/v1/exchange-amount/${normalizedAmount}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
     
-    console.log(`[ChangeNOW] Getting exchange rate (v1): ${url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
+    log('info', 'Getting exchange rate', {
+      from: `${fromAsset}(${fromChain})`,
+      to: `${toAsset}(${toChain})`,
+      amount: normalizedAmount
+    })
 
-    // Retry on transient server errors
+    // Retry on transient server errors with exponential backoff
     let response
-    for (let attempt = 0; attempt < 2; attempt++) {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-      if (response.ok) break
-      const status = response.status
-      const text = await response.text()
-      let parsed
-      try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
-      const isTransient = status >= 500 || parsed?.error === 'unknown_error'
-      if (attempt === 0 && isTransient) {
-        await new Promise(r => setTimeout(r, 500))
-        continue
+    let lastError = null
+    
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        response = await fetchWithTimeout(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }, API_TIMEOUT)
+        
+        if (response.ok) break
+        
+        const status = response.status
+        const text = await response.text()
+        let parsed
+        try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
+        
+        const isTransient = status >= 500 || parsed?.error === 'unknown_error'
+        const isRetryable = isTransient && attempt < MAX_RETRIES - 1
+        
+        if (isRetryable) {
+          log('warn', `Rate request failed, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, {
+            status,
+            error: parsed.error || parsed.message,
+            attempt: attempt + 1
+          })
+          await exponentialBackoff(attempt)
+          continue
+        }
+        
+        lastError = { status, text, parsed }
+        break
+      } catch (fetchError) {
+        if (fetchError.message?.includes('timeout') && attempt < MAX_RETRIES - 1) {
+          log('warn', `Rate request timeout, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`, { attempt: attempt + 1 })
+          await exponentialBackoff(attempt)
+          continue
+        }
+        throw fetchError
       }
-      response = {
-        ok: false,
-        status,
-        async text() { return text },
-      }
-      break
     }
 
     if (!response.ok) {
-      const errorText = await response.text()
-      let errorData
+      const errorData = lastError || { status: response.status, text: await response.text() }
+      let error
       try {
-        errorData = JSON.parse(errorText)
+        error = JSON.parse(errorData.text)
       } catch (e) {
-        errorData = { message: errorText }
+        error = { message: errorData.text }
       }
       
-      console.error(`[ChangeNOW] v1 API error ${response.status}:`, errorData)
-      console.error(`[ChangeNOW] Request URL: ${url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
-      console.error(`[ChangeNOW] Full error response:`, errorText)
+      log('error', 'Failed to get exchange rate', {
+        status: errorData.status,
+        from: `${fromAsset}(${fromChain})`,
+        to: `${toAsset}(${toChain})`,
+        error: error.error || error.message
+      })
       
       // Handle specific v1 API errors
       if (errorData.error === 'max_amount_exceeded') {
@@ -401,14 +584,20 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     }
 
     const data = await response.json()
-    console.log(`[ChangeNOW] v1 API response:`, data)
-
+    
     // v1 API returns just a number (the estimated amount), not an object
     const estimatedAmount = typeof data === 'number' ? data : (data.estimatedAmount || data.amount || data)
     
     if (estimatedAmount === null || estimatedAmount === undefined || isNaN(estimatedAmount)) {
+      log('error', 'Invalid response from ChangeNOW API', { data })
       throw new Error('Invalid response from ChangeNOW v1 API')
     }
+
+    log('info', 'Exchange rate retrieved', {
+      from: `${fromAsset}(${fromChain})`,
+      to: `${toAsset}(${toChain})`,
+      estimatedAmount: estimatedAmount.toString()
+    })
 
     return {
       estimatedAmount: estimatedAmount.toString(),
@@ -417,7 +606,11 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       maxAmount: null,
     }
   } catch (error) {
-    console.error('[ChangeNOW] Error getting exchange rate:', error)
+    log('error', 'Error getting exchange rate', {
+      from: `${fromAsset}(${fromChain})`,
+      to: `${toAsset}(${toChain})`,
+      error: error.message
+    })
     throw error
   }
 }
@@ -442,17 +635,11 @@ export const validateExchangePair = async (fromAsset, toAsset, fromChain, toChai
     const testAmount = 1
     const url = `https://api.changenow.io/v1/exchange-amount/${testAmount}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
     
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
-    
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal
-      })
-      
-      clearTimeout(timeoutId)
+      }, 2000) // 2 second timeout for validation
       
       if (response.ok) {
         const data = await response.json()
@@ -467,15 +654,14 @@ export const validateExchangePair = async (fromAsset, toAsset, fromChain, toChai
         return null
       }
     } catch (fetchError) {
-      clearTimeout(timeoutId)
-      if (fetchError.name === 'AbortError') {
+      if (fetchError.message?.includes('timeout') || fetchError.name === 'AbortError') {
         // Timeout - skip validation
         return null
       }
       throw fetchError
     }
   } catch (error) {
-    console.warn('[ChangeNOW] Pair validation error (non-critical):', error.message)
+    log('warn', 'Pair validation error (non-critical)', { error: error.message })
     // Return null to indicate validation should be skipped
     return null
   }

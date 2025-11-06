@@ -9,7 +9,7 @@ import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
  * Generate a deposit address for cross-chain swap
- * This creates a temporary address via Relay Link that will receive funds, swap, and forward
+ * This creates a temporary address via ChangeNOW that will receive funds, swap, and forward
  */
 export const generateDepositAddress = async (orderData) => {
   const {
@@ -182,7 +182,7 @@ export const checkDepositStatus = async (exchangeId) => {
  */
 export const getExchangeStatusById = async (exchangeId) => {
   try {
-    return await getRelayStatus(exchangeId)
+    return await getExchangeStatus(exchangeId)
   } catch (error) {
     console.error('Error getting exchange status:', error)
     throw error
