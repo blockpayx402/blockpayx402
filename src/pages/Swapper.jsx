@@ -210,7 +210,9 @@ const Swapper = () => {
       setBalanceLoading(true)
       try {
         // Find the selected token to get its address and decimals
-        const selectedToken = fromChainTokens.find(t => t.symbol === fromAsset)
+        const selectedToken = fromChainTokens.find(t => 
+          t.symbol?.toUpperCase() === fromAsset.toUpperCase()
+        )
         const isNative = selectedToken?.isNative || 
                         ['ETH', 'BNB', 'MATIC', 'SOL'].includes(fromAsset.toUpperCase())
         

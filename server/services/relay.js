@@ -362,14 +362,24 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     const amountInSmallestUnit = Math.floor(parseFloat(amount) * Math.pow(10, decimals)).toString()
     
     console.log('[Relay] Requesting quote from API...')
+    console.log('[Relay] Quote request:', {
+      originChainId: originChainId.toString(),
+      destinationChainId: destinationChainId.toString(),
+      originTokenAddress: originToken.address || '0x0000000000000000000000000000000000000000',
+      destinationTokenAddress: destinationToken.address || '0x0000000000000000000000000000000000000000',
+      amount: amountInSmallestUnit,
+    })
+    
+    // Use Relay API /quotes endpoint
+    // Based on: https://docs.relay.link/references/api/overview
     const response = await fetch('https://api.relay.link/quotes', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        originChainId: originChainId.toString(),
-        destinationChainId: destinationChainId.toString(),
+        originChainId: parseInt(originChainId),
+        destinationChainId: parseInt(destinationChainId),
         originTokenAddress: originToken.address || '0x0000000000000000000000000000000000000000',
         destinationTokenAddress: destinationToken.address || '0x0000000000000000000000000000000000000000',
         amount: amountInSmallestUnit,
