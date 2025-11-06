@@ -320,6 +320,17 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     // Convert amount to smallest unit (wei, lamports, etc.) as string with only digits
     const amountInSmallestUnit = convertToSmallestUnit(amount, fromAsset, fromChain)
     
+    // Use chain-appropriate placeholder addresses
+    // For EVM chains, use zero address; for Solana, use system program address
+    const isEVMChain = (chain) => ['ethereum', 'bnb', 'polygon'].includes(chain.toLowerCase())
+    const isSolanaChain = (chain) => chain.toLowerCase() === 'solana'
+    
+    const evmPlaceholder = '0x0000000000000000000000000000000000000000'
+    const solanaPlaceholder = '11111111111111111111111111111111'
+    
+    const recipientPlaceholder = isSolanaChain(toChain) ? solanaPlaceholder : evmPlaceholder
+    const userPlaceholder = isSolanaChain(fromChain) ? solanaPlaceholder : evmPlaceholder
+    
     const payload = {
       originChainId,
       destinationChainId,
@@ -327,8 +338,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       destinationCurrency,
       amount: amountInSmallestUnit,
       tradeType: 'EXACT_INPUT',
-      recipient: '0x0000000000000000000000000000000000000000', // Placeholder, will be set in actual transaction
-      user: '0x0000000000000000000000000000000000000000', // Placeholder
+      recipient: recipientPlaceholder, // Chain-appropriate placeholder, will be set in actual transaction
+      user: userPlaceholder, // Chain-appropriate placeholder
       useDepositAddress: true,
     }
     
