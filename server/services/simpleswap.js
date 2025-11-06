@@ -194,7 +194,10 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
-    // SimpleSwap API endpoint - try v2 first, fallback to v1 if needed
+    // SimpleSwap API endpoint - try different formats
+    // Format 1: /api/v2/create-exchange (most common)
+    // Format 2: /api/v1/create-exchange (fallback)
+    // Format 3: /create-exchange (alternative)
     const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/api/v2/create-exchange`
     
     // Normalize amount
@@ -257,10 +260,13 @@ export const createExchangeTransaction = async (orderData) => {
           'Content-Type': 'application/json',
         }
         
-        // Add authentication - try Authorization header first (for JWT tokens)
+        // Add authentication - SimpleSwap might use different auth methods
+        // Try multiple formats to find what works
         if (apiKey && apiKey.length > 100) {
-          // Looks like a JWT/certificate - use Authorization header
+          // Looks like a JWT/certificate - try Authorization header
           headers['Authorization'] = `Bearer ${apiKey}`
+          // Also try as X-API-KEY in case it's expected there
+          headers['X-API-KEY'] = apiKey
         } else {
           // Regular API key - use X-API-KEY header
           headers['X-API-KEY'] = apiKey
