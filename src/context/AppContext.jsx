@@ -340,7 +340,16 @@ export const AppProvider = ({ children }) => {
     }
   }
 
-  const disconnectWallet = () => {
+  const disconnectWallet = async () => {
+    // Disconnect Solana wallet if connected
+    if (wallet?.chain === 'solana' && window.solana?.isConnected) {
+      try {
+        await window.solana.disconnect()
+      } catch (error) {
+        console.error('Error disconnecting Solana wallet:', error)
+      }
+    }
+    
     setWallet(null)
     toast.success('Wallet disconnected')
   }
