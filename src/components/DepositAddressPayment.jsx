@@ -12,7 +12,7 @@ const DepositAddressPayment = ({ request }) => {
   const [fromChain, setFromChain] = useState('bnb')
   const [fromAsset, setFromAsset] = useState('USDT')
   const [amount, setAmount] = useState('')
-  const [requiredAmount, setRequiredAmount] = useState(request.amount || '')
+  const [requiredAmount] = useState(request.amount || '') // Fixed from payment request
   const [calculatedAmount, setCalculatedAmount] = useState('')
   const [estimatedReceive, setEstimatedReceive] = useState('')
   const [refundAddress, setRefundAddress] = useState('')
@@ -20,7 +20,6 @@ const DepositAddressPayment = ({ request }) => {
   const [loading, setLoading] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [order, setOrder] = useState(null)
-  const [inputMode, setInputMode] = useState('send') // 'send' or 'receive'
   const debounceTimer = useRef(null)
 
   const availableChains = [
@@ -32,37 +31,15 @@ const DepositAddressPayment = ({ request }) => {
 
   const currentChainConfig = availableChains.find(c => c.value === fromChain)
 
-  // Calculate exchange rate when inputs change
+  // Auto-calculate send amount based on payment request amount
   useEffect(() => {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current)
     }
 
     const calculateRate = async () => {
-      if (inputMode === 'send' && amount && parseFloat(amount) > 0) {
-        setCalculating(true)
-        try {
-          const rateData = await ordersAPI.getExchangeRate({
-            fromChain,
-            fromAsset,
-            toChain: request.chain,
-            toAsset: request.currency,
-            amount: parseFloat(amount),
-            direction: 'forward'
-          })
-          setEstimatedReceive(rateData.estimatedToAmount && typeof rateData.estimatedToAmount === 'number' ? rateData.estimatedToAmount.toFixed(6) : (rateData.estimatedToAmount?.toString() || ''))
-        } catch (error) {
-          console.error('Error calculating rate:', error)
-          setEstimatedReceive('')
-          // Don't show toast for rate calculation errors - they're expected if API key is missing
-          // Only show error if it's a user-actionable error
-          if (error.message && !error.message.includes('API key')) {
-            console.warn('Rate calculation failed:', error.message)
-          }
-        } finally {
-          setCalculating(false)
-        }
-      } else if (inputMode === 'receive' && requiredAmount && parseFloat(requiredAmount) > 0) {
+      // Always use reverse calculation: payment request has fixed amount, calculate how much to send
+      if (requiredAmount && parseFloat(requiredAmount) > 0 && fromChain && fromAsset) {
         setCalculating(true)
         try {
           const rateData = await ordersAPI.getExchangeRate({
@@ -79,12 +56,14 @@ const DepositAddressPayment = ({ request }) => {
         } catch (error) {
           console.error('Error calculating rate:', error)
           setCalculatedAmount('')
+          setAmount('')
           const errorMsg = error.response?.data?.error || error.message || 'Failed to calculate required amount'
           // Only show toast if it's a meaningful error (not just API key missing)
           if (errorMsg.includes('API key')) {
             toast.error('SimpleSwap API key is not configured. Please contact support.')
-          } else {
-            toast.error(errorMsg)
+          } else if (!errorMsg.includes('API key')) {
+            // Only show non-API-key errors to avoid spam
+            console.warn('Rate calculation failed:', errorMsg)
           }
         } finally {
           setCalculating(false)
@@ -99,13 +78,14 @@ const DepositAddressPayment = ({ request }) => {
         clearTimeout(debounceTimer.current)
       }
     }
-  }, [amount, requiredAmount, fromChain, fromAsset, request.chain, request.currency, inputMode, request])
+  }, [requiredAmount, fromChain, fromAsset, request.chain, request.currency, request])
 
   const handleGenerateDepositAddress = async () => {
-    const sendAmount = inputMode === 'send' ? amount : calculatedAmount
+    // Use calculated amount (from reverse calculation based on payment request amount)
+    const sendAmount = calculatedAmount || amount
     
     if (!sendAmount || parseFloat(sendAmount) <= 0) {
-      toast.error('Please enter a valid amount')
+      toast.error('Please wait for the amount calculation to complete')
       return
     }
 
@@ -246,10 +226,9 @@ const DepositAddressPayment = ({ request }) => {
                 // Prefer USDT if available, otherwise first asset
                 const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
                 setFromAsset(preferredAsset)
-                // Clear calculated amounts when chain changes
+                // Clear calculated amounts when chain changes (will auto-recalculate)
                 setAmount('')
                 setCalculatedAmount('')
-                setEstimatedReceive('')
               }}
               className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
             >
@@ -278,104 +257,46 @@ const DepositAddressPayment = ({ request }) => {
         </div>
 
         <div className="space-y-4">
-          {/* Input Mode Toggle */}
-          <div className="flex items-center gap-2 p-2 glass-strong rounded-xl border border-white/10">
-            <button
-              onClick={() => {
-                setInputMode('send')
-                setAmount('')
-                setCalculatedAmount('')
-                setEstimatedReceive('')
-              }}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                inputMode === 'send'
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  : 'text-white/60 hover:text-white/80'
-              }`}
-            >
-              Enter Send Amount
-            </button>
-            <button
-              onClick={() => {
-                setInputMode('receive')
-                setRequiredAmount(request.amount || '')
-                setCalculatedAmount('')
-                setAmount('')
-              }}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                inputMode === 'receive'
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                  : 'text-white/60 hover:text-white/80'
-              }`}
-            >
-              Enter Required Amount
-            </button>
+          {/* Payment Request Amount (Fixed) */}
+          <div className="p-4 glass-strong rounded-xl border border-white/10 bg-white/[0.02]">
+            <p className="text-xs text-white/60 mb-1 tracking-tight">Payment Request Amount</p>
+            <p className="text-2xl font-semibold text-white tracking-tight">
+              {requiredAmount} {request.currency}
+            </p>
+            <p className="text-xs text-white/50 mt-1 tracking-tight">on {CHAINS[request.chain]?.name || request.chain}</p>
           </div>
 
-          {inputMode === 'send' ? (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
-                  Amount You'll Send ({fromAsset})
-                </label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={amount}
-                  onChange={(e) => {
-                    setAmount(e.target.value)
-                    setInputMode('send')
-                  }}
-                  placeholder="0.0"
-                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 text-sm"
-                />
-                {calculating && (
-                  <p className="text-xs text-blue-400 mt-2 flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Calculating...
-                  </p>
-                )}
-                {estimatedReceive && !calculating && (
-                  <p className="text-xs text-white/60 mt-2 tracking-tight">
-                    Recipient will receive approximately <span className="font-semibold text-white">{estimatedReceive} {request.currency}</span>
-                  </p>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
-                  Amount Needed ({request.currency})
-                </label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={requiredAmount}
-                  onChange={(e) => {
-                    setRequiredAmount(e.target.value)
-                    setInputMode('receive')
-                  }}
-                  placeholder={request.amount || "0.0"}
-                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 text-sm"
-                />
-                {calculating && (
-                  <p className="text-xs text-purple-400 mt-2 flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Calculating required amount...
-                  </p>
-                )}
-                {calculatedAmount && !calculating && (
-                  <div className="mt-3 p-3 glass-strong rounded-xl border border-purple-500/20 bg-purple-500/10">
-                    <p className="text-xs text-white/60 mb-1 tracking-tight">You need to send:</p>
-                    <p className="text-lg font-semibold text-purple-400 tracking-tight">
-                      {calculatedAmount} {fromAsset}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+          {/* Calculated Send Amount */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
+              Amount You'll Send ({fromAsset})
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={calculatedAmount || ''}
+                readOnly
+                placeholder={calculating ? "Calculating..." : "0.0"}
+                className="w-full px-4 py-3 glass-strong rounded-xl border border-blue-500/30 focus:border-blue-500/50 focus:outline-none transition-all bg-blue-500/10 text-white placeholder:text-white/30 text-sm font-semibold"
+              />
+              {calculating && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                </div>
+              )}
+            </div>
+            {calculating && (
+              <p className="text-xs text-blue-400 mt-2 flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Calculating how much {fromAsset} you need to send...
+              </p>
+            )}
+            {calculatedAmount && !calculating && (
+              <p className="text-xs text-white/60 mt-2 tracking-tight">
+                This will automatically exchange to <span className="font-semibold text-white">{requiredAmount} {request.currency}</span> and send to the recipient
+              </p>
+            )}
+          </div>
         </div>
 
         {showRefund && (
