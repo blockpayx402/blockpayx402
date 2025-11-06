@@ -144,6 +144,16 @@ export const ordersAPI = {
       return []
     }
   },
+
+  getExchangeRate: async (rateData) => {
+    try {
+      const response = await api.post('/exchange-rate', rateData)
+      return response.data
+    } catch (error) {
+      console.error('Error getting exchange rate:', error)
+      throw error
+    }
+  },
 }
 
 // Health check

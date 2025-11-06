@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { RefreshCw, CheckCircle2, ArrowRight, Loader2, Copy, ExternalLink } from 'lucide-react'
+import { RefreshCw, CheckCircle2, ArrowRight, Loader2, Copy, ExternalLink, ArrowUpDown } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
@@ -10,12 +10,18 @@ import { CHAINS } from '../services/blockchain'
 const DepositAddressPayment = ({ request }) => {
   const navigate = useNavigate()
   const [fromChain, setFromChain] = useState('bnb')
-  const [fromAsset, setFromAsset] = useState('BNB')
+  const [fromAsset, setFromAsset] = useState('USDT')
   const [amount, setAmount] = useState('')
+  const [requiredAmount, setRequiredAmount] = useState(request.amount || '')
+  const [calculatedAmount, setCalculatedAmount] = useState('')
+  const [estimatedReceive, setEstimatedReceive] = useState('')
   const [refundAddress, setRefundAddress] = useState('')
   const [showRefund, setShowRefund] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [calculating, setCalculating] = useState(false)
   const [order, setOrder] = useState(null)
+  const [inputMode, setInputMode] = useState('send') // 'send' or 'receive'
+  const debounceTimer = useRef(null)
 
   const availableChains = [
     { value: 'ethereum', label: 'Ethereum', assets: ['ETH', 'USDT', 'USDC'] },
@@ -26,8 +32,67 @@ const DepositAddressPayment = ({ request }) => {
 
   const currentChainConfig = availableChains.find(c => c.value === fromChain)
 
+  // Calculate exchange rate when inputs change
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+
+    const calculateRate = async () => {
+      if (inputMode === 'send' && amount && parseFloat(amount) > 0) {
+        setCalculating(true)
+        try {
+          const rateData = await ordersAPI.getExchangeRate({
+            fromChain,
+            fromAsset,
+            toChain: request.chain,
+            toAsset: request.currency,
+            amount: parseFloat(amount),
+            direction: 'forward'
+          })
+          setEstimatedReceive(rateData.estimatedToAmount?.toFixed(6) || '')
+        } catch (error) {
+          console.error('Error calculating rate:', error)
+          setEstimatedReceive('')
+        } finally {
+          setCalculating(false)
+        }
+      } else if (inputMode === 'receive' && requiredAmount && parseFloat(requiredAmount) > 0) {
+        setCalculating(true)
+        try {
+          const rateData = await ordersAPI.getExchangeRate({
+            fromChain,
+            fromAsset,
+            toChain: request.chain,
+            toAsset: request.currency,
+            amount: parseFloat(requiredAmount),
+            direction: 'reverse'
+          })
+          setCalculatedAmount(rateData.fromAmount?.toFixed(6) || '')
+          setAmount(rateData.fromAmount?.toFixed(6) || '')
+        } catch (error) {
+          console.error('Error calculating rate:', error)
+          setCalculatedAmount('')
+          toast.error(error.response?.data?.error || 'Failed to calculate required amount. Please check your settings.')
+        } finally {
+          setCalculating(false)
+        }
+      }
+    }
+
+    debounceTimer.current = setTimeout(calculateRate, 500)
+    
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current)
+      }
+    }
+  }, [amount, requiredAmount, fromChain, fromAsset, request.chain, request.currency, inputMode, request])
+
   const handleGenerateDepositAddress = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
+    const sendAmount = inputMode === 'send' ? amount : calculatedAmount
+    
+    if (!sendAmount || parseFloat(sendAmount) <= 0) {
       toast.error('Please enter a valid amount')
       return
     }
@@ -38,7 +103,7 @@ const DepositAddressPayment = ({ request }) => {
         requestId: request.id,
         fromChain,
         fromAsset,
-        amount: parseFloat(amount),
+        amount: parseFloat(sendAmount),
         refundAddress: refundAddress || null
       })
 
@@ -51,7 +116,8 @@ const DepositAddressPayment = ({ request }) => {
       }, 1500)
     } catch (error) {
       console.error('Error creating order:', error)
-      toast.error('Failed to generate deposit address. Please try again.')
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to generate deposit address. Please try again.'
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -154,7 +220,13 @@ const DepositAddressPayment = ({ request }) => {
               onChange={(e) => {
                 setFromChain(e.target.value)
                 const chain = availableChains.find(c => c.value === e.target.value)
-                setFromAsset(chain?.assets[0] || 'ETH')
+                // Prefer USDT if available, otherwise first asset
+                const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
+                setFromAsset(preferredAsset)
+                // Clear calculated amounts when chain changes
+                setAmount('')
+                setCalculatedAmount('')
+                setEstimatedReceive('')
               }}
               className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
             >
@@ -182,21 +254,105 @@ const DepositAddressPayment = ({ request }) => {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
-            Amount You'll Send ({fromAsset})
-          </label>
-          <input
-            type="number"
-            step="0.000001"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.0"
-            className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 text-sm"
-          />
-          <p className="text-xs text-white/50 mt-2 tracking-tight">
-            Recipient will receive equivalent in {request.currency}
-          </p>
+        <div className="space-y-4">
+          {/* Input Mode Toggle */}
+          <div className="flex items-center gap-2 p-2 glass-strong rounded-xl border border-white/10">
+            <button
+              onClick={() => {
+                setInputMode('send')
+                setAmount('')
+                setCalculatedAmount('')
+                setEstimatedReceive('')
+              }}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                inputMode === 'send'
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                  : 'text-white/60 hover:text-white/80'
+              }`}
+            >
+              Enter Send Amount
+            </button>
+            <button
+              onClick={() => {
+                setInputMode('receive')
+                setRequiredAmount(request.amount || '')
+                setCalculatedAmount('')
+                setAmount('')
+              }}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                inputMode === 'receive'
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                  : 'text-white/60 hover:text-white/80'
+              }`}
+            >
+              Enter Required Amount
+            </button>
+          </div>
+
+          {inputMode === 'send' ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
+                  Amount You'll Send ({fromAsset})
+                </label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={amount}
+                  onChange={(e) => {
+                    setAmount(e.target.value)
+                    setInputMode('send')
+                  }}
+                  placeholder="0.0"
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-blue-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 text-sm"
+                />
+                {calculating && (
+                  <p className="text-xs text-blue-400 mt-2 flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Calculating...
+                  </p>
+                )}
+                {estimatedReceive && !calculating && (
+                  <p className="text-xs text-white/60 mt-2 tracking-tight">
+                    Recipient will receive approximately <span className="font-semibold text-white">{estimatedReceive} {request.currency}</span>
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
+                  Amount Needed ({request.currency})
+                </label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={requiredAmount}
+                  onChange={(e) => {
+                    setRequiredAmount(e.target.value)
+                    setInputMode('receive')
+                  }}
+                  placeholder={request.amount || "0.0"}
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 text-sm"
+                />
+                {calculating && (
+                  <p className="text-xs text-purple-400 mt-2 flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Calculating required amount...
+                  </p>
+                )}
+                {calculatedAmount && !calculating && (
+                  <div className="mt-3 p-3 glass-strong rounded-xl border border-purple-500/20 bg-purple-500/10">
+                    <p className="text-xs text-white/60 mb-1 tracking-tight">You need to send:</p>
+                    <p className="text-lg font-semibold text-purple-400 tracking-tight">
+                      {calculatedAmount} {fromAsset}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {showRefund && (
@@ -228,7 +384,7 @@ const DepositAddressPayment = ({ request }) => {
 
         <button
           onClick={handleGenerateDepositAddress}
-          disabled={loading || !amount || parseFloat(amount) <= 0}
+          disabled={loading || calculating || (inputMode === 'send' ? (!amount || parseFloat(amount) <= 0) : (!calculatedAmount || parseFloat(calculatedAmount) <= 0))}
           className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl font-medium text-white hover:from-blue-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
