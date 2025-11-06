@@ -1,17 +1,15 @@
 /**
  * BlockPay Deposit Address Generation Service
  * Deposit address generation service
- * Supports SimpleSwap for cross-chain swaps
+ * Supports Relay Link for cross-chain swaps - fully dynamic, no hardcoded pairs
  */
 
-// Use SimpleSwap instead of ChangeNOW
-import { createExchangeTransaction, getExchangeStatus } from './simpleswap.js'
-// import { createExchangeTransaction, getExchangeStatus } from './changenow.js'
+import { createRelayTransaction, getRelayStatus } from './relay.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../config.js'
 
 /**
  * Generate a deposit address for cross-chain swap
- * This creates a temporary address via SimpleSwap that will receive funds, swap, and forward
+ * This creates a temporary address via Relay Link that will receive funds, swap, and forward
  */
 export const generateDepositAddress = async (orderData) => {
   const {
@@ -32,8 +30,8 @@ export const generateDepositAddress = async (orderData) => {
     if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
       throw new Error(`Cannot create exchange for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.`)
     }
-    // Skip pair validation - it causes false negatives for valid pairs
-        // SimpleSwap will return proper errors if pair is truly invalid
+    // Relay Link dynamically supports all chains and tokens it supports
+    // No need for pair validation - Relay will return proper errors if pair is invalid
 
     // Calculate BlockPay platform fee (with chain-specific recipient)
     const fee = calculatePlatformFee(amount, fromAsset, fromChain)
@@ -56,93 +54,38 @@ export const generateDepositAddress = async (orderData) => {
       safeFee.percent = 0.01
     }
 
-    // Try with multiple amount adjustments and retries for better reliability
-        // SimpleSwap can be sensitive to exact amounts, so we try several variations
-    const attemptAmounts = [
-      Math.max(amount * 0.01, amountAfterFee), // Ensure at least 1% of original amount
-      Math.max(amount * 0.01, Number((amountAfterFee * 0.998).toFixed(8))), // -0.2%
-      Math.max(amount * 0.01, Number((amountAfterFee * 0.995).toFixed(8))), // -0.5%
-      Math.max(amount * 0.01, Number((amountAfterFee * 0.99).toFixed(8))),  // -1%
-      Math.max(amount * 0.01, Number((amountAfterFee * 0.98).toFixed(8))),  // -2%
-    ]
-
+    // Create exchange transaction via Relay Link API
+    // Relay handles all chains and tokens dynamically - no hardcoded pairs
     let exchangeData = null
-    let lastError = null
-    let lastErrorStatus = null
-
-    for (const tryAmount of attemptAmounts) {
-      try {
-        // Create exchange transaction via SimpleSwap API
-        exchangeData = await createExchangeTransaction({
-          fromChain,
-          fromAsset,
-          toChain,
-          toAsset,
-          amount: tryAmount, // Amount after BlockPay fee (with adjustment)
-          recipientAddress,
-          refundAddress,
-          orderId,
-        })
-        // Success! Break out of retry loop
-        break
-      } catch (err) {
-        lastError = err
-        const msg = String(err?.message || '')
-        
-        // Extract status code if available
-        const statusMatch = msg.match(/error:\s*(\d+)/i) || msg.match(/status\s*(\d+)/i)
-        if (statusMatch) {
-          lastErrorStatus = parseInt(statusMatch[1])
-        }
-        
-        // Retry on transient errors or 5xx errors
-        const isTransient = 
-          msg.includes('temporarily unavailable') || 
-          msg.includes('unknown_error') ||
-          msg.includes('500') ||
-          msg.includes('502') ||
-          msg.includes('503') ||
-          (lastErrorStatus && lastErrorStatus >= 500)
-        
-        // Also retry on 400 errors that might be amount-related
-        const isAmountError = 
-          msg.includes('max_amount') ||
-          msg.includes('min_amount') ||
-          msg.includes('amount') ||
-          (lastErrorStatus === 400 && tryAmount !== attemptAmounts[attemptAmounts.length - 1]) // Not the last attempt
-        
-        // Don't retry on clear pair errors or auth errors
-        const isFatal = 
-          msg.includes('Invalid pair') ||
-          msg.includes('pair not available') ||
-          msg.includes('pair_is_inactive') ||
-          msg.includes('401') ||
-          msg.includes('403') ||
-          msg.includes('API key')
-        
-        if (isFatal) {
-          throw err
-        }
-        
-        // Continue to next amount if transient or amount-related
-        if (isTransient || isAmountError) {
-          console.log(`[DepositAddress] Retrying with adjusted amount: ${tryAmount} (was ${amountAfterFee})`)
-          continue
-        }
-        
-        // For other errors, throw immediately
-        throw err
+    
+    try {
+      exchangeData = await createRelayTransaction({
+        fromChain,
+        fromAsset,
+        toChain,
+        toAsset,
+        amount: amountAfterFee, // Amount after BlockPay fee
+        recipientAddress,
+        refundAddress,
+        orderId,
+      })
+    } catch (err) {
+      const msg = String(err?.message || '')
+      
+      // Provide helpful error messages
+      if (msg.includes('not found') || msg.includes('not supported')) {
+        throw new Error(`Relay Link does not support this pair: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
+      } else if (msg.includes('Could not execute')) {
+        throw new Error(`Relay Link cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be available.`)
+      } else if (msg.includes('Invalid address')) {
+        throw new Error(`Invalid address format for ${toChain}. Please check your recipient address.`)
       }
+      
+      throw err
     }
 
     if (!exchangeData) {
-      // Provide helpful error message
-      if (lastErrorStatus === 400) {
-        throw new Error(`Invalid request for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different amount or currency pair.`)
-      } else if (lastErrorStatus && lastErrorStatus >= 500) {
-        throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again in a few moments.`)
-      }
-      throw lastError || new Error(`Failed to generate deposit address for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again.`)
+      throw new Error(`Failed to generate deposit address for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again.`)
     }
 
     return {
@@ -159,12 +102,12 @@ export const generateDepositAddress = async (orderData) => {
     console.error('Error generating deposit address:', error)
     
     // Provide helpful error messages
-    if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-      throw new Error('Invalid SimpleSwap API key. Please check your server configuration. Set SIMPLESWAP_API_KEY in environment variables.')
-    } else if (error.message.includes('inactive') || error.message.includes('not available') || error.message.includes('404')) {
-      throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
-    } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-      throw new Error('Cannot connect to SimpleSwap API. Please check your internet connection and try again.')
+    if (error.message.includes('not found') || error.message.includes('not supported')) {
+      throw new Error(`Relay Link does not support this pair: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
+    } else if (error.message.includes('Could not execute')) {
+      throw new Error(`Relay Link cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be available.`)
+    } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch') || error.message.includes('timeout')) {
+      throw new Error('Cannot connect to Relay Link API. Please check your internet connection and try again.')
     }
     
     throw new Error(`Failed to generate deposit address: ${error.message}`)
@@ -172,19 +115,19 @@ export const generateDepositAddress = async (orderData) => {
 }
 
 /**
- * Check deposit status via SimpleSwap API
+ * Check deposit status via Relay Link API
  * This checks the actual status of the exchange transaction
  */
 export const checkDepositStatus = async (exchangeId) => {
   try {
-    const status = await getExchangeStatus(exchangeId)
+    const status = await getRelayStatus(exchangeId)
     return {
-      received: status.status !== 'waiting' && status.payinHash,
+      received: status.status !== 'awaiting_deposit' && status.status !== 'pending',
       amount: status.amount || null,
-      txHash: status.payinHash || null,
-      swapTxHash: status.payoutHash || null,
+      txHash: status.txHash || status.originTxHash || null,
+      swapTxHash: status.destinationTxHash || status.txHash || null,
       status: status.status || 'awaiting_deposit',
-      toAmount: status.payoutAmount || null,
+      toAmount: status.destinationAmount || status.amount || null,
       exchangeRate: null,
     }
   } catch (error) {
@@ -203,7 +146,7 @@ export const checkDepositStatus = async (exchangeId) => {
  */
 export const getExchangeStatusById = async (exchangeId) => {
   try {
-    return await getExchangeStatus(exchangeId)
+    return await getRelayStatus(exchangeId)
   } catch (error) {
     console.error('Error getting exchange status:', error)
     throw error

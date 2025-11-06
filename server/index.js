@@ -2,7 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { dbHelpers } from './database.js'
 import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from './services/depositAddress.js'
-import { getExchangeRate } from './services/simpleswap.js'
+import { getRelayExchangeRate } from './services/relay.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from './config.js'
 import { checkSetup, generateSetupInstructions } from './utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from './utils/security.js'
@@ -256,7 +256,7 @@ app.post('/api/create-order', async (req, res) => {
     // Generate order ID first
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
-    // Generate deposit address via SimpleSwap
+    // Generate deposit address via Relay Link
     const depositInfo = await generateDepositAddress({
       fromChain,
       fromAsset,
@@ -361,7 +361,7 @@ app.post('/api/exchange-rate', async (req, res) => {
     
     if (direction === 'forward') {
       // Calculate how much will be received for a given send amount
-      result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, fromAmount)
+      result = await getRelayExchangeRate(fromAsset, toAsset, fromChain, toChain, fromAmount)
       if (!result || !result.estimatedAmount) {
         throw new Error('Failed to get exchange rate estimate')
       }
@@ -379,7 +379,7 @@ app.post('/api/exchange-rate', async (req, res) => {
       // Iteratively refine the estimate
       while (iterations < maxIterations) {
         try {
-          result = await getExchangeRate(fromAsset, toAsset, fromChain, toChain, currentFromAmount)
+          result = await getRelayExchangeRate(fromAsset, toAsset, fromChain, toChain, currentFromAmount)
           if (!result || !result.estimatedAmount) {
             throw new Error('Failed to get exchange rate estimate')
           }
@@ -478,7 +478,7 @@ app.get('/api/status/:orderId', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' })
     }
     
-    // If order has exchange ID, sync status from SimpleSwap
+    // If order has exchange ID, sync status from Relay Link
     if (order.exchangeId) {
       try {
         const exchangeStatus = await getExchangeStatusById(order.exchangeId)
@@ -500,7 +500,7 @@ app.get('/api/status/:orderId', async (req, res) => {
           order.swapTxHash = updatedOrder.swapTxHash
         }
       } catch (error) {
-        console.error('Error syncing status from SimpleSwap:', error)
+        console.error('Error syncing status from Relay Link:', error)
         // Continue with cached status if sync fails
       }
     }
@@ -545,11 +545,11 @@ app.post('/api/cleanup', (req, res) => {
   }
 })
 
-// SimpleSwap Webhook Handler (for real-time status updates) - Currently not used
-app.post('/api/webhooks/simpleswap', express.raw({ type: 'application/json' }), async (req, res) => {
+// Relay Link Webhook Handler (for real-time status updates) - Currently not used
+app.post('/api/webhooks/relay', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     // Verify webhook signature if configured
-    const signature = req.headers['x-simpleswap-signature']
+    const signature = req.headers['x-relay-signature']
     // TODO: Verify signature with BLOCKPAY_CONFIG.webhook.secret
     
     const webhookData = JSON.parse(req.body.toString())
@@ -562,7 +562,7 @@ app.post('/api/webhooks/simpleswap', express.raw({ type: 'application/json' }), 
     const order = orders.find(o => o.exchangeId === exchangeId)
     
     if (order) {
-      // Map SimpleSwap status to BlockPay status
+      // Map Relay Link status to BlockPay status
       const statusMap = {
         'waiting': 'awaiting_deposit',
         'confirming': 'awaiting_deposit',
@@ -643,7 +643,7 @@ app.listen(PORT, () => {
   }
   
   console.log(`\n🔗 Configuration:`)
-  console.log(`   SimpleSwap API: ${BLOCKPAY_CONFIG.simpleswap.apiKey ? '✅ Configured' : '❌ NOT CONFIGURED'}`)
+  console.log(`   Relay Link API: ✅ Configured (no API key required)`)
   console.log(`   Fee Recipient: ${BLOCKPAY_CONFIG.fees.feeRecipientAddress && BLOCKPAY_CONFIG.fees.feeRecipientAddress !== '0x0000000000000000000000000000000000000000' ? '✅ Configured' : '❌ NOT CONFIGURED'}`)
   
   if (!setupStatus.ready) {

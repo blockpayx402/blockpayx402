@@ -643,7 +643,7 @@ const Swapper = () => {
 
           <div className="flex items-center gap-2 text-xs text-white/50">
             <CheckCircle2 className="w-4 h-4 text-green-400" />
-            <span>Powered by SimpleSwap • Instant exchange • Direct to recipient</span>
+            <span>Powered by Relay Link • All chains & tokens supported • Direct to recipient</span>
           </div>
         </div>
       </motion.div>
