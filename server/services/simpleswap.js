@@ -224,9 +224,24 @@ const getSimpleSwapCurrency = async (currency, chain = null) => {
   const upperCurrency = currency.toUpperCase()
   const chainLower = chain ? chain.toLowerCase() : null
   
-  // Native currencies don't need network suffix
+  // Native currencies - use exact codes SimpleSwap expects
   if (CURRENCY_MAP[upperCurrency]) {
-    return CURRENCY_MAP[upperCurrency]
+    const code = CURRENCY_MAP[upperCurrency]
+    
+    // Special handling for BNB on BSC - SimpleSwap uses "bnb" not "bnb_bsc"
+    if (upperCurrency === 'BNB' && chainLower === 'bnb') {
+      return 'bnb'
+    }
+    
+    // For native currencies on their home chain, just return the code
+    if ((upperCurrency === 'ETH' && chainLower === 'ethereum') ||
+        (upperCurrency === 'BNB' && chainLower === 'bnb') ||
+        (upperCurrency === 'MATIC' && chainLower === 'polygon') ||
+        (upperCurrency === 'SOL' && chainLower === 'solana')) {
+      return code
+    }
+    
+    return code
   }
   
   // For tokens, include network if specified
@@ -331,6 +346,16 @@ export const createExchangeTransaction = async (orderData) => {
     // Get currency codes (exact format SimpleSwap expects)
     const fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
+    
+    // Log currency codes for debugging
+    console.log('[SimpleSwap createExchangeTransaction] Currency codes:', {
+      fromAsset,
+      fromChain,
+      fromCurrency,
+      toAsset,
+      toChain,
+      toCurrency
+    })
     
     // Normalize amount to string
     const payloadAmount = normalizeAmount(normalizedAmount)
@@ -653,7 +678,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       toAsset,
       toChain,
       toCurrency,
-      amount: normalizedAmount
+      amount: normalizedAmount,
+      apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***')
     })
     
     log('info', 'Getting exchange rate', {
