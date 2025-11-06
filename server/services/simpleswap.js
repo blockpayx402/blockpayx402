@@ -186,20 +186,26 @@ export const createExchangeTransaction = async (orderData) => {
     // Read API key dynamically from environment
     // Check both environment variable and config fallback
     const envKey = process.env.SIMPLESWAP_API_KEY
-    const configKey = BLOCKPAY_CONFIG.simpleswap.apiKey
+    // Read config dynamically to ensure we get the latest value
+    const configKey = (process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || '').trim()
     const apiKey = envKey || configKey || ''
     
-    log('debug', 'API key check', {
-      hasEnvKey: !!envKey,
-      hasConfigKey: !!configKey,
-      keyLength: apiKey.length
+    // Debug logging
+    console.log('[SimpleSwap] API key check:', {
+      hasEnvKey: !!envKey && envKey.length > 0,
+      hasConfigKey: !!configKey && configKey.length > 0,
+      configKeyLength: configKey ? configKey.length : 0,
+      finalKeyLength: apiKey.length,
+      configKeyPreview: configKey ? configKey.substring(0, 30) + '...' : 'none'
     })
     
-    if (!apiKey || apiKey === '' || apiKey === 'undefined') {
+    if (!apiKey || apiKey === '' || apiKey === 'undefined' || apiKey.trim() === '') {
       log('error', 'API key not configured', {
         envKey: !!envKey,
         configKey: !!configKey,
-        configKeyValue: configKey ? configKey.substring(0, 20) + '...' : 'none'
+        configKeyValue: configKey ? configKey.substring(0, 20) + '...' : 'none',
+        BLOCKPAY_CONFIG_exists: !!BLOCKPAY_CONFIG,
+        simpleswap_exists: !!BLOCKPAY_CONFIG?.simpleswap
       })
       throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
     }
@@ -382,10 +388,16 @@ export const getExchangeStatus = async (exchangeId) => {
       throw new Error('Exchange ID is required')
     }
     
-    // Read API key dynamically from environment
+    // Read API key dynamically from environment or config
     const envKey = process.env.SIMPLESWAP_API_KEY
-    const configKey = BLOCKPAY_CONFIG.simpleswap.apiKey
-    const apiKey = envKey || configKey || ''
+    const configKey = BLOCKPAY_CONFIG?.simpleswap?.apiKey
+    const apiKey = (envKey || configKey || '').trim()
+    
+    console.log('[SimpleSwap getExchangeStatus] API key check:', {
+      hasEnvKey: !!envKey && envKey.length > 0,
+      hasConfigKey: !!configKey && configKey.length > 0,
+      finalKeyLength: apiKey.length
+    })
     
     if (!apiKey || apiKey === '' || apiKey === 'undefined') {
       log('error', 'API key not configured', {
