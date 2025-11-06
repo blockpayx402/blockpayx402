@@ -763,6 +763,15 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
         
+        // If v3 returns 404 or 401, try v1
+        if (useV3 && (status === 404 || status === 401) && attempt === 0) {
+          log('info', 'v3 not available, falling back to v1', { status, error: parsed.error || parsed.message })
+          useV3 = false
+          apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
+          delete headers['Authorization']
+          continue
+        }
+        
         const isTransient = status >= 500
         const isRetryable = isTransient && attempt < MAX_RETRIES - 1
         
