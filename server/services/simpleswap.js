@@ -566,31 +566,29 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       }
     }
 
-    const data = await response.json()
-    
-    log('info', 'SimpleSwap estimate response', { data, responseKeys: Object.keys(data) })
-    
-    // SimpleSwap API v1 estimate response format
-    // Could be: { amount_to, amount_from, rate } or { estimated_amount, rate } or just a number
+    // SimpleSwap API v1 returns the estimated amount as a plain string
+    const text = await response.text()
     let estimatedAmount = null
     
-    if (typeof data === 'number') {
-      estimatedAmount = data
-    } else if (data.amount_to) {
-      estimatedAmount = data.amount_to
-    } else if (data.estimated_amount) {
-      estimatedAmount = data.estimated_amount
-    } else if (data.amount) {
-      estimatedAmount = data.amount
-    } else if (data.to_amount) {
-      estimatedAmount = data.to_amount
+    try {
+      // Try parsing as JSON first (in case it's wrapped)
+      const parsed = JSON.parse(text)
+      if (typeof parsed === 'string') {
+        estimatedAmount = parsed
+      } else if (typeof parsed === 'number') {
+        estimatedAmount = parsed.toString()
+      } else {
+        estimatedAmount = parsed
+      }
+    } catch {
+      // If not JSON, it's a plain string
+      estimatedAmount = text.trim()
     }
     
-    if (estimatedAmount === null || estimatedAmount === undefined || isNaN(estimatedAmount)) {
+    if (!estimatedAmount || estimatedAmount === '' || isNaN(parseFloat(estimatedAmount))) {
       log('error', 'Invalid response from SimpleSwap API - no amount found', { 
-        data, 
-        dataType: typeof data,
-        responseKeys: Object.keys(data || {})
+        text,
+        estimatedAmount
       })
       throw new Error('Invalid response from SimpleSwap API: Could not find estimated amount in response')
     }
@@ -598,15 +596,14 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     log('info', 'Exchange rate retrieved', {
       from: `${fromAsset}(${fromChain})`,
       to: `${toAsset}(${toChain})`,
-      estimatedAmount: estimatedAmount.toString(),
-      rate: data.rate || null
+      estimatedAmount: estimatedAmount.toString()
     })
 
     return {
       estimatedAmount: estimatedAmount.toString(),
-      rate: data.rate || null,
-      minAmount: data.min_amount || data.minAmount || null,
-      maxAmount: data.max_amount || data.maxAmount || null,
+      rate: null,
+      minAmount: null,
+      maxAmount: null,
     }
   } catch (error) {
     log('error', 'Error getting exchange rate', {
