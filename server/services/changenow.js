@@ -220,10 +220,49 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       'x-partner-id': headers['x-partner-id'] || 'not set'
     })
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: 'GET',
       headers: headers,
     })
+
+    // If v2 API returns 401/403, fallback to v1 API (which works with your API key)
+    if ((response.status === 401 || response.status === 403) && BLOCKPAY_CONFIG.changenow.apiUrl.includes('/v2')) {
+      console.log('[ChangeNOW] v2 API returned 401/403, falling back to v1 API...')
+      
+      // Try v1 API format: /v1/exchange-amount/{amount}/{from}_{to}?api_key={key}
+      const fromCurrency = getChangeNowCurrency(fromAsset)
+      const toCurrency = getChangeNowCurrency(toAsset)
+      const v1Url = `https://api.changenow.io/v1/exchange-amount/${amount}/${fromCurrency}_${toCurrency}?api_key=${apiKey}`
+      
+      console.log(`[ChangeNOW] Trying v1 API: ${v1Url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
+      
+      try {
+        response = await fetch(v1Url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (response.ok) {
+          const v1Data = await response.json()
+          console.log(`[ChangeNOW] v1 API success:`, v1Data)
+          
+          // v1 API returns just a number (the estimated amount), not an object
+          const estimatedAmount = typeof v1Data === 'number' ? v1Data : (v1Data.estimatedAmount || v1Data.amount || v1Data)
+          
+          return {
+            estimatedAmount: estimatedAmount.toString(),
+            rate: null, // v1 doesn't provide rate
+            minAmount: null,
+            maxAmount: null,
+          }
+        }
+      } catch (v1Error) {
+        console.error('[ChangeNOW] v1 API fallback also failed:', v1Error)
+        // Continue to throw the original v2 error
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text()
