@@ -83,6 +83,15 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
 
     const requiredAmount = parseFloat(amount) || 0
     const tolerance = Math.max(0.0001, requiredAmount * 0.01) // 1% tolerance or 0.0001, whichever is larger
+    
+    console.log(`💰 Verification parameters:`, {
+      chain,
+      recipientAddress,
+      requiredAmount,
+      currency,
+      tolerance,
+      sinceTimestamp: sinceTimestamp ? new Date(sinceTimestamp).toISOString() : null
+    })
 
     if (currency === 'native' || !currency) {
       // Check native token transactions
@@ -155,8 +164,18 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
       const currentBlock = await provider.getBlockNumber()
       const startBlock = Math.max(0, currentBlock - 1000)
       
+      console.log(`🔍 Querying ${currency} transfers on ${chainConfig.name}:`, {
+        tokenAddress: token.address,
+        recipientAddress,
+        currentBlock,
+        startBlock,
+        blockRange: currentBlock - startBlock
+      })
+      
       const filter = tokenContract.filters.Transfer(null, recipientAddress)
       const events = await tokenContract.queryFilter(filter, startBlock, 'latest')
+      
+      console.log(`📊 Found ${events.length} Transfer events to ${recipientAddress}`)
 
       for (const event of events) {
         // Check if event occurred after request creation
@@ -168,6 +187,14 @@ export const checkRecentEVMTransactions = async (chain, recipientAddress, amount
         }
 
         const value = parseFloat(ethers.formatUnits(event.args.value, token.decimals))
+        
+        console.log(`🔍 Checking token transfer:`, {
+          value,
+          requiredAmount,
+          tolerance,
+          matches: value >= requiredAmount - tolerance,
+          event: event.transactionHash
+        })
         
         // Check if amount matches (within tolerance)
         if (value >= requiredAmount - tolerance) {
