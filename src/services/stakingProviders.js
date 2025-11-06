@@ -27,33 +27,47 @@ export async function fetchRealStakingPools(chain) {
     
     const chainVariants = chainMap[chainName] || [chainName]
     
-    // Native staking tokens per chain
-    const nativeStakingTokens = {
-      'Ethereum': ['ETH', 'stETH', 'rETH', 'cbETH'],
+    // Native staking tokens per chain (prioritize these)
+    const nativeTokens = {
+      'Ethereum': ['ETH'],
       'Binance': ['BNB'],
       'BSC': ['BNB'],
-      'Polygon': ['MATIC', 'stMATIC'],
-      'Solana': ['SOL', 'mSOL', 'JitoSOL', 'stSOL']
+      'Polygon': ['MATIC'],
+      'Solana': ['SOL']
     }
     
-    const stakingTokens = nativeStakingTokens[chainName] || nativeStakingTokens[chainVariants[0]] || []
+    // Staking derivatives (secondary options)
+    const stakingDerivatives = {
+      'Ethereum': ['stETH', 'rETH', 'cbETH'],
+      'Polygon': ['stMATIC'],
+      'Solana': ['mSOL', 'JitoSOL', 'stSOL']
+    }
+    
+    const nativeTokensList = nativeTokens[chainName] || nativeTokens[chainVariants[0]] || []
+    const derivativesList = stakingDerivatives[chainName] || stakingDerivatives[chainVariants[0]] || []
     
     const filtered = data.data.filter(p => {
       const chainMatch = !chainName || chainVariants.some(v => 
         (p.chain || '').toLowerCase().includes(v.toLowerCase())
       )
       
-      // Only include actual staking pools, not DeFi liquidity pools
-      const isStakingPool = 
-        // Must be a native staking token or known staking derivative
-        stakingTokens.some(token => 
-          (p.symbol || '').toUpperCase() === token.toUpperCase() ||
-          (p.symbol || '').toUpperCase().includes(token)
-        ) ||
-        // Or project name suggests staking
-        ['lido', 'rocket', 'stake', 'staked', 'validator', 'native'].some(keyword =>
-          (p.project || '').toLowerCase().includes(keyword)
-        )
+      // Prioritize native token pools
+      const isNativeToken = nativeTokensList.some(token => 
+        (p.symbol || '').toUpperCase() === token.toUpperCase()
+      )
+      
+      // Also include staking derivatives
+      const isStakingDerivative = derivativesList.some(token => 
+        (p.symbol || '').toUpperCase() === token.toUpperCase() ||
+        (p.symbol || '').toUpperCase().includes(token)
+      )
+      
+      // Include known staking projects
+      const isStakingProject = ['lido', 'rocket', 'stake', 'staked', 'validator', 'native', 'binance', 'polygon', 'solana'].some(keyword =>
+        (p.project || '').toLowerCase().includes(keyword)
+      )
+      
+      const isStakingPool = isNativeToken || isStakingDerivative || isStakingProject
       
       // Exclude liquidity pools (pairs like USDT-ETH, COAI-USDT, etc.)
       const isLiquidityPool = 
@@ -73,8 +87,19 @@ export async function fetchRealStakingPools(chain) {
       return chainMatch && isStakingPool && !isLiquidityPool && realisticAPY && hasValue
     })
     
-    // Sort by APY descending to show best pools first
-    filtered.sort((a, b) => (b.apy || 0) - (a.apy || 0))
+    // Sort: native tokens first, then by APY descending
+    filtered.sort((a, b) => {
+      const aIsNative = nativeTokensList.some(token => 
+        (a.symbol || '').toUpperCase() === token.toUpperCase()
+      )
+      const bIsNative = nativeTokensList.some(token => 
+        (b.symbol || '').toUpperCase() === token.toUpperCase()
+      )
+      
+      if (aIsNative && !bIsNative) return -1
+      if (!aIsNative && bIsNative) return 1
+      return (b.apy || 0) - (a.apy || 0)
+    })
 
     // Map to UI shape
     const mapped = filtered.slice(0, 20).map(p => ({
