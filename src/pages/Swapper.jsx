@@ -353,10 +353,28 @@ const Swapper = () => {
       if (fromAmount && parseFloat(fromAmount) > 0 && fromChain && fromAsset && toChain && toAsset) {
         setCalculating(true)
         try {
-          const rateData = await ordersAPI.getExchangeRate({
+          // Get chain IDs from available chains
+          const fromChainData = availableChains.find(c => c.value === fromChain || c.chainId?.toString() === fromChain)
+          const toChainData = availableChains.find(c => c.value === toChain || c.chainId?.toString() === toChain)
+          
+          // Use chainId if available, otherwise use chain name/value
+          const fromChainId = fromChainData?.chainId?.toString() || fromChain
+          const toChainId = toChainData?.chainId?.toString() || toChain
+          
+          console.log('[Swapper] Getting exchange rate:', {
             fromChain,
+            fromChainId,
             fromAsset,
             toChain,
+            toChainId,
+            toAsset,
+            amount: fromAmount
+          })
+          
+          const rateData = await ordersAPI.getExchangeRate({
+            fromChain: fromChainId, // Send chainId instead of name
+            fromAsset,
+            toChain: toChainId, // Send chainId instead of name
             toAsset,
             amount: parseFloat(fromAmount),
             direction: 'forward'
