@@ -177,35 +177,38 @@ const convertToSmallestUnit = (amount, asset, chain) => {
 
 /**
  * Get Relay currency address
+ * Relay Link uses token contract addresses for EVM chains and mint addresses for Solana
  */
 const getRelayCurrencyAddress = (asset, chain) => {
-  // For native currencies, use zero address
+  const assetUpper = asset.toUpperCase()
+  const chainLower = chain.toLowerCase()
+  
+  // For native currencies on EVM chains, use zero address
   const nativeCurrencies = {
     'ethereum': ['ETH'],
     'bnb': ['BNB'],
     'polygon': ['MATIC'],
-    'solana': ['SOL'],
   }
   
-  if (nativeCurrencies[chain]?.includes(asset.toUpperCase())) {
+  if (nativeCurrencies[chainLower]?.includes(assetUpper)) {
     return '0x0000000000000000000000000000000000000000'
   }
   
-  // For Solana, use token mint addresses
-  if (chain === 'solana') {
-    if (asset.toUpperCase() === 'SOL') {
-      return 'So11111111111111111111111111111111111111112'
+  // For Solana native currency, use wrapped SOL address
+  if (chainLower === 'solana') {
+    if (assetUpper === 'SOL') {
+      return 'So11111111111111111111111111111111111111112' // Wrapped SOL
     }
-    if (asset.toUpperCase() === 'USDT') {
+    if (assetUpper === 'USDT') {
       return 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
     }
-    if (asset.toUpperCase() === 'USDC') {
+    if (assetUpper === 'USDC') {
       return 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
     }
   }
   
   // For EVM chains, use token contract addresses
-  const key = `${asset.toUpperCase()}_${chain}`
+  const key = `${assetUpper}_${chainLower}`
   const addressMap = {
     'USDT_ethereum': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
     'USDC_ethereum': '0xA0b86991c6218b36c1d19D4a2e9Eb0c3606eB48',
@@ -215,7 +218,14 @@ const getRelayCurrencyAddress = (asset, chain) => {
     'USDC_polygon': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
   }
   
-  return addressMap[key] || CURRENCY_ADDRESS_MAP[asset.toUpperCase()] || asset
+  const address = addressMap[key] || CURRENCY_ADDRESS_MAP[assetUpper]
+  
+  if (!address) {
+    console.warn(`[Relay Link] Unknown currency address for ${assetUpper} on ${chainLower}, using asset name as fallback`)
+    return asset
+  }
+  
+  return address
 }
 
 /**
