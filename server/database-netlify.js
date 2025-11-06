@@ -92,7 +92,16 @@ const saveToEnv = async () => {
 }
 
 // Initialize on import (async)
-loadFromEnv().catch(() => {})
+// Note: This loads asynchronously, but database operations will work
+// because we check if data exists and create fresh if needed
+let dbLoaded = false
+loadFromEnv().then(() => {
+  dbLoaded = true
+  console.log('Database initialization complete')
+}).catch((err) => {
+  console.log('Database initialization failed, using fresh database:', err.message)
+  dbLoaded = true // Mark as loaded even if failed, so we don't block
+})
 
 // Helper functions matching dbHelpers interface
 export const dbHelpers = {
