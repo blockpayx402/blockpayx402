@@ -268,43 +268,113 @@ export const getRelayStatus = async (exchangeId) => {
  */
 export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
-    const client = await getRelayClient()
+    console.log('[Relay] Getting exchange rate:', { fromAsset, toAsset, fromChain, toChain, amount })
     
-    // Get chains
-    const originChain = await getChainByName(fromChain)
-    const destinationChain = await getChainByName(toChain)
+    // Get chains directly from API instead of SDK to ensure we have all chains
+    const chains = await getAllRelayChains()
+    const originChain = chains.find(c => {
+      const cId = c.chainId || c.id || c.chain_id
+      const cName = (c.name || c.displayName || '').toLowerCase()
+      return cId?.toString() === fromChain.toString() || 
+             cName === fromChain.toLowerCase() ||
+             c.symbol?.toLowerCase() === fromChain.toLowerCase()
+    })
     
-    // Get tokens
-    const originToken = await getTokenBySymbol(fromAsset, originChain)
-    const destinationToken = await getTokenBySymbol(toAsset, destinationChain)
+    const destinationChain = chains.find(c => {
+      const cId = c.chainId || c.id || c.chain_id
+      const cName = (c.name || c.displayName || '').toLowerCase()
+      return cId?.toString() === toChain.toString() || 
+             cName === toChain.toLowerCase() ||
+             c.symbol?.toLowerCase() === toChain.toLowerCase()
+    })
     
-    // Use placeholder address for estimation
-    const placeholderAddress = originChain.chainId === 792703809 || originChain.id === 792703809
+    if (!originChain) {
+      throw new Error(`Chain not found: ${fromChain}`)
+    }
+    if (!destinationChain) {
+      throw new Error(`Chain not found: ${toChain}`)
+    }
+    
+    const originChainId = originChain.chainId || originChain.id || originChain.chain_id
+    const destinationChainId = destinationChain.chainId || destinationChain.id || destinationChain.chain_id
+    
+    console.log('[Relay] Chain IDs:', { originChainId, destinationChainId })
+    
+    // Get tokens for both chains
+    const originTokens = await getAllRelayTokens(originChainId)
+    const destinationTokens = await getAllRelayTokens(destinationChainId)
+    
+    const originToken = originTokens.find(t => 
+      t.symbol?.toUpperCase() === fromAsset.toUpperCase()
+    )
+    const destinationToken = destinationTokens.find(t => 
+      t.symbol?.toUpperCase() === toAsset.toUpperCase()
+    )
+    
+    if (!originToken) {
+      throw new Error(`Token ${fromAsset} not found on ${fromChain}`)
+    }
+    if (!destinationToken) {
+      throw new Error(`Token ${toAsset} not found on ${toChain}`)
+    }
+    
+    console.log('[Relay] Token addresses:', {
+      originToken: originToken.address,
+      destinationToken: destinationToken.address
+    })
+    
+    // Use Relay API directly for quote (more reliable than SDK)
+    const placeholderAddress = (originChainId === 792703809 || originChainId === '792703809')
       ? '11111111111111111111111111111111' // Solana placeholder
       : '0x0000000000000000000000000000000000000000' // EVM placeholder
     
-    // Get quote for estimation
-    const quote = await client.getQuote({
-      fromChainId: originChain.chainId || originChain.id,
-      toChainId: destinationChain.chainId || destinationChain.id,
-      fromTokenAddress: originToken.address,
-      toTokenAddress: destinationToken.address,
-      amount: amount.toString(),
-      userAddress: placeholderAddress,
-      recipientAddress: placeholderAddress,
+    // Convert amount to smallest unit
+    const decimals = originToken.decimals || 18
+    const amountInSmallestUnit = Math.floor(parseFloat(amount) * Math.pow(10, decimals)).toString()
+    
+    console.log('[Relay] Requesting quote from API...')
+    const response = await fetch('https://api.relay.link/quotes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        originChainId: originChainId.toString(),
+        destinationChainId: destinationChainId.toString(),
+        originTokenAddress: originToken.address || '0x0000000000000000000000000000000000000000',
+        destinationTokenAddress: destinationToken.address || '0x0000000000000000000000000000000000000000',
+        amount: amountInSmallestUnit,
+        destinationAmount: null,
+        user: placeholderAddress,
+        recipient: placeholderAddress,
+      }),
     })
     
-    // Extract destination amount from quote (handle different response formats)
-    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount
-    
-    if (!quote || !destinationAmount) {
-      throw new Error('Invalid response from Relay SDK: missing destination amount')
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error')
+      console.error('[Relay] Quote API error:', response.status, errorText)
+      throw new Error(`Relay API error: ${response.status} - ${errorText}`)
     }
     
+    const quote = await response.json()
+    console.log('[Relay] Quote response:', JSON.stringify(quote).substring(0, 300))
+    
+    // Extract destination amount
+    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount || quote.estimatedAmount
+    
+    if (!destinationAmount) {
+      console.error('[Relay] No destination amount in quote:', quote)
+      throw new Error('Invalid response from Relay API: missing destination amount')
+    }
+    
+    // Convert back from smallest unit
+    const destDecimals = destinationToken.decimals || 18
+    const estimatedAmount = parseFloat(destinationAmount) / Math.pow(10, destDecimals)
+    
     return {
-      estimatedAmount: parseFloat(destinationAmount),
+      estimatedAmount: estimatedAmount,
       fromAmount: parseFloat(amount),
-      exchangeRate: parseFloat(destinationAmount) / parseFloat(amount),
+      exchangeRate: estimatedAmount / parseFloat(amount),
     }
   } catch (error) {
     console.error('[Relay SDK] Error getting exchange rate:', error)
