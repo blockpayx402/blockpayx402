@@ -370,8 +370,12 @@ export const AppProvider = ({ children }) => {
     let checkCount = 0
     let lastErrorCount = 0
 
-    // Check payment every 10 seconds for faster detection
+    // Check payment every 15 seconds to reduce rate limit issues
+    // Add a small random delay to stagger requests from different monitoring intervals
+    const randomDelay = Math.random() * 2000 // 0-2 seconds random delay per request
     const interval = setInterval(async () => {
+      // Add random delay to stagger concurrent requests from different monitoring intervals
+      await new Promise(resolve => setTimeout(resolve, randomDelay))
       try {
         checkCount++
         console.log(`🔍 [Check #${checkCount}] Verifying payment for request: ${requestId}`)
