@@ -10,12 +10,13 @@ import { BLOCKPAY_CONFIG } from '../config.js'
  * Chain ID mapping for Relay Link
  * Note: Relay Link uses its own chain ID system
  * These IDs should match Relay Link's chain IDs from /chains endpoint
+ * IMPORTANT: Relay Link does NOT support Solana - only EVM chains
  */
 const CHAIN_ID_MAP = {
   'ethereum': 1,
   'bnb': 56,
   'polygon': 137,
-  'solana': 245022934, // Solana chain ID (may need to be verified via /chains endpoint)
+  // 'solana': NOT SUPPORTED by Relay Link - Relay only supports EVM chains
   'bitcoin': 0, // Not supported by Relay
 }
 
@@ -49,6 +50,10 @@ const CURRENCY_ADDRESS_MAP = {
  * Get Relay chain ID
  */
 const getRelayChainId = (chain) => {
+  // Relay Link does not support Solana - only EVM chains
+  if (chain === 'solana') {
+    throw new Error('Solana is not supported by Relay Link. Relay Link only supports EVM chains (Ethereum, BNB Chain, Polygon, etc.). Please use a different source or destination chain.')
+  }
   return CHAIN_ID_MAP[chain] || null
 }
 
