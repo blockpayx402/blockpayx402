@@ -185,3 +185,26 @@ export const healthCheck = async () => {
   }
 }
 
+// Relay API - Get chains and tokens dynamically
+export const relayAPI = {
+  getChains: async () => {
+    try {
+      const response = await api.get('/relay/chains')
+      return response.data.chains || []
+    } catch (error) {
+      console.error('Error fetching Relay chains:', error)
+      return []
+    }
+  },
+
+  getTokens: async (chainId) => {
+    try {
+      const response = await api.get(`/relay/tokens/${chainId}`)
+      return response.data.tokens || []
+    } catch (error) {
+      console.error('Error fetching Relay tokens:', error)
+      return []
+    }
+  },
+}
+

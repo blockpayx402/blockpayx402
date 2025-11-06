@@ -658,3 +658,42 @@ app.listen(PORT, () => {
   
   console.log(`${'='.repeat(60)}\n`)
 })
+
+// Get all Relay chains (for frontend)
+app.get('/api/relay/chains', async (req, res) => {
+  try {
+    const chains = await getAllRelayChains()
+    // Format chains for frontend
+    const formattedChains = chains.map(chain => ({
+      value: chain.name?.toLowerCase() || chain.id?.toString() || chain.chainId?.toString(),
+      label: chain.name || `Chain ${chain.chainId || chain.id}`,
+      chainId: chain.chainId || chain.id,
+      symbol: chain.symbol || chain.nativeCurrency?.symbol,
+      decimals: chain.decimals || chain.nativeCurrency?.decimals || 18,
+    }))
+    res.json({ chains: formattedChains })
+  } catch (error) {
+    console.error('[API] Error fetching chains:', error)
+    res.status(500).json({ error: 'Failed to fetch chains', chains: [] })
+  }
+})
+
+// Get all tokens for a chain (for frontend)
+app.get('/api/relay/tokens/:chainId', async (req, res) => {
+  try {
+    const { chainId } = req.params
+    const tokens = await getAllRelayTokens(chainId)
+    // Format tokens for frontend
+    const formattedTokens = tokens.map(token => ({
+      symbol: token.symbol || token.name,
+      address: token.address || token.contractAddress,
+      decimals: token.decimals || 18,
+      name: token.name,
+      isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000',
+    }))
+    res.json({ tokens: formattedTokens })
+  } catch (error) {
+    console.error('[API] Error fetching tokens:', error)
+    res.status(500).json({ error: 'Failed to fetch tokens', tokens: [] })
+  }
+})
