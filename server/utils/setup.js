@@ -26,17 +26,30 @@ export const checkSetup = () => {
   }
 
   // Check Fee Configuration
-  if (!BLOCKPAY_CONFIG.fees.feeRecipientAddress || BLOCKPAY_CONFIG.fees.feeRecipientAddress === '0x0000000000000000000000000000000000000000') {
+  const hasEVMRecipient = BLOCKPAY_CONFIG.fees.feeRecipients.ethereum && 
+                          BLOCKPAY_CONFIG.fees.feeRecipients.ethereum !== '0x0000000000000000000000000000000000000000'
+  const hasSolRecipient = BLOCKPAY_CONFIG.fees.feeRecipients.solana && 
+                          BLOCKPAY_CONFIG.fees.feeRecipients.solana !== ''
+  
+  if (!hasEVMRecipient && !hasSolRecipient) {
     warnings.push({
       type: 'warning',
-      message: 'Fee recipient address not configured',
-      fix: 'Set BLOCKPAY_FEE_RECIPIENT in .env to collect platform fees'
+      message: 'Fee recipient addresses not configured',
+      fix: 'Set BLOCKPAY_FEE_RECIPIENT_EVM and BLOCKPAY_FEE_RECIPIENT_SOL in .env to collect platform fees'
     })
   } else {
-    info.push({
-      type: 'success',
-      message: `Fee recipient: ${BLOCKPAY_CONFIG.fees.feeRecipientAddress}`
-    })
+    if (hasEVMRecipient) {
+      info.push({
+        type: 'success',
+        message: `EVM Fee recipient: ${BLOCKPAY_CONFIG.fees.feeRecipients.ethereum}`
+      })
+    }
+    if (hasSolRecipient) {
+      info.push({
+        type: 'success',
+        message: `Solana Fee recipient: ${BLOCKPAY_CONFIG.fees.feeRecipients.solana}`
+      })
+    }
   }
 
   // Check Partner ID (optional but recommended)
@@ -58,7 +71,10 @@ export const checkSetup = () => {
       minFee: BLOCKPAY_CONFIG.fees.minFeeUSD,
       maxFee: BLOCKPAY_CONFIG.fees.maxFeeUSD,
       hasApiKey: !!BLOCKPAY_CONFIG.changenow.apiKey,
-      hasFeeRecipient: !!BLOCKPAY_CONFIG.fees.feeRecipientAddress && BLOCKPAY_CONFIG.fees.feeRecipientAddress !== '0x0000000000000000000000000000000000000000'
+      hasFeeRecipient: (!!BLOCKPAY_CONFIG.fees.feeRecipients.ethereum && BLOCKPAY_CONFIG.fees.feeRecipients.ethereum !== '0x0000000000000000000000000000000000000000') ||
+                       (!!BLOCKPAY_CONFIG.fees.feeRecipients.solana && BLOCKPAY_CONFIG.fees.feeRecipients.solana !== ''),
+      evmFeeRecipient: BLOCKPAY_CONFIG.fees.feeRecipients.ethereum,
+      solFeeRecipient: BLOCKPAY_CONFIG.fees.feeRecipients.solana
     }
   }
 }

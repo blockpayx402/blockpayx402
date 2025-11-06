@@ -28,8 +28,8 @@ export const generateDepositAddress = async (orderData) => {
   }
 
   try {
-    // Calculate BlockPay platform fee
-    const fee = calculatePlatformFee(amount, fromAsset)
+    // Calculate BlockPay platform fee (with chain-specific recipient)
+    const fee = calculatePlatformFee(amount, fromAsset, fromChain)
     
     // Adjust amount to account for platform fee
     // The fee will be deducted from the final amount received by the seller

@@ -26,8 +26,17 @@ export const BLOCKPAY_CONFIG = {
     minFeeUSD: parseFloat(process.env.BLOCKPAY_MIN_FEE_USD || '0.10'),
     // Maximum fee amount (in USD equivalent, 0 = no limit)
     maxFeeUSD: parseFloat(process.env.BLOCKPAY_MAX_FEE_USD || '0'),
-    // Fee recipient address (where fees are collected)
-    feeRecipientAddress: process.env.BLOCKPAY_FEE_RECIPIENT || '',
+    // Fee recipient addresses (chain-specific)
+    feeRecipients: {
+      // EVM chains (Ethereum, BNB, Polygon)
+      ethereum: process.env.BLOCKPAY_FEE_RECIPIENT_EVM || process.env.BLOCKPAY_FEE_RECIPIENT || '0xfe9D33653B41BBE16ddc6C89edF1C089E27Aea78',
+      bnb: process.env.BLOCKPAY_FEE_RECIPIENT_EVM || process.env.BLOCKPAY_FEE_RECIPIENT || '0xfe9D33653B41BBE16ddc6C89edF1C089E27Aea78',
+      polygon: process.env.BLOCKPAY_FEE_RECIPIENT_EVM || process.env.BLOCKPAY_FEE_RECIPIENT || '0xfe9D33653B41BBE16ddc6C89edF1C089E27Aea78',
+      // Solana
+      solana: process.env.BLOCKPAY_FEE_RECIPIENT_SOL || '7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn',
+    },
+    // Legacy: single fee recipient (for backward compatibility)
+    feeRecipientAddress: process.env.BLOCKPAY_FEE_RECIPIENT || process.env.BLOCKPAY_FEE_RECIPIENT_EVM || '0xfe9D33653B41BBE16ddc6C89edF1C089E27Aea78',
     // Fee collection chain (which chain to collect fees on)
     feeChain: process.env.BLOCKPAY_FEE_CHAIN || 'ethereum',
   },
@@ -72,9 +81,10 @@ export const BLOCKPAY_CONFIG = {
  * Calculate BlockPay platform fee
  * @param {number} amount - Transaction amount
  * @param {string} currency - Currency symbol
+ * @param {string} chain - Blockchain chain (optional, defaults to ethereum)
  * @returns {Object} Fee details
  */
-export const calculatePlatformFee = (amount, currency = 'USD') => {
+export const calculatePlatformFee = (amount, currency = 'USD', chain = 'ethereum') => {
   const config = BLOCKPAY_CONFIG.fees
   const feePercent = config.platformFeePercent
   
@@ -91,12 +101,15 @@ export const calculatePlatformFee = (amount, currency = 'USD') => {
     feeAmount = config.maxFeeUSD
   }
   
+  // Get chain-specific fee recipient
+  const recipientAddress = config.feeRecipients[chain] || config.feeRecipientAddress
+  
   return {
     amount: feeAmount,
     percent: feePercent * 100,
     currency,
-    recipientAddress: config.feeRecipientAddress,
-    chain: config.feeChain,
+    recipientAddress,
+    chain: chain || config.feeChain,
   }
 }
 
