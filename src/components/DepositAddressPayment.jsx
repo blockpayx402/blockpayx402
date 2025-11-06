@@ -61,6 +61,11 @@ const DepositAddressPayment = ({ request }) => {
           // Only show toast if it's a meaningful error (not just API key missing)
           if (errorMsg.includes('API key')) {
             toast.error('SimpleSwap API key is not configured. Please contact support.')
+          } else if (errorMsg.includes('pair not available') || errorMsg.includes('not supported')) {
+            // Show user-friendly message for unsupported pairs
+            toast.error(`This swap pair (${fromAsset} on ${fromChain} → ${request.currency} on ${request.chain}) may not be available. Try a different payment method or contact support.`, {
+              duration: 6000
+            })
           } else if (!errorMsg.includes('API key')) {
             // Only show non-API-key errors to avoid spam
             console.warn('Rate calculation failed:', errorMsg)
