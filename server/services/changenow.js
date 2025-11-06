@@ -109,8 +109,23 @@ export const createExchangeTransaction = async (orderData) => {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }))
-      throw new Error(error.message || `ChangeNOW API error: ${response.status}`)
+      const errorText = await response.text()
+      let error
+      try {
+        error = JSON.parse(errorText)
+      } catch (e) {
+        error = { message: errorText || 'Unknown error' }
+      }
+      
+      // If v2 API returns 401/403, try v1 API fallback for creating transactions
+      if ((response.status === 401 || response.status === 403) && apiUrl.includes('/v2')) {
+        console.log('[ChangeNOW] v2 API returned 401/403 for create transaction, this endpoint may require v2 access')
+        // Note: v1 API doesn't have a direct equivalent for creating transactions
+        // We'll throw the error but with a clearer message
+        throw new Error(`ChangeNOW API requires v2 permissions for creating transactions. Please contact ChangeNOW support to enable v2 API access for your key. Error: ${error.message || errorText}`)
+      }
+      
+      throw new Error(error.message || error.error || `ChangeNOW API error: ${response.status}`)
     }
 
     const data = await response.json()
@@ -251,12 +266,39 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
           // v1 API returns just a number (the estimated amount), not an object
           const estimatedAmount = typeof v1Data === 'number' ? v1Data : (v1Data.estimatedAmount || v1Data.amount || v1Data)
           
+          if (estimatedAmount === null || estimatedAmount === undefined || isNaN(estimatedAmount)) {
+            throw new Error('Invalid response from ChangeNOW v1 API')
+          }
+          
           return {
             estimatedAmount: estimatedAmount.toString(),
             rate: null, // v1 doesn't provide rate
             minAmount: null,
             maxAmount: null,
           }
+        } else {
+          // v1 API also failed, check what error it returned
+          const v1ErrorText = await response.text()
+          let v1ErrorData
+          try {
+            v1ErrorData = JSON.parse(v1ErrorText)
+          } catch (e) {
+            v1ErrorData = { message: v1ErrorText }
+          }
+          
+          console.error(`[ChangeNOW] v1 API error ${response.status}:`, v1ErrorData)
+          
+          // Handle specific v1 API errors
+          if (v1ErrorData.error === 'max_amount_exceeded') {
+            throw new Error(`Amount exceeds maximum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a smaller amount.`)
+          } else if (v1ErrorData.error === 'min_amount') {
+            throw new Error(`Amount is below minimum limit: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a larger amount.`)
+          } else if (v1ErrorData.error === 'pair_is_inactive') {
+            throw new Error(`Exchange pair is currently inactive: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
+          }
+          
+          // Throw the v1 error
+          throw new Error(`ChangeNOW v1 API error: ${response.status} - ${v1ErrorData.message || v1ErrorData.error || v1ErrorText}`)
         }
       } catch (v1Error) {
         console.error('[ChangeNOW] v1 API fallback also failed:', v1Error)

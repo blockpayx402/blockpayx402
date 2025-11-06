@@ -509,6 +509,15 @@ app.post('/api/exchange-rate', async (req, res) => {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
         errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in Netlify environment variables.'
         statusCode = 401
+      } else if (error.message.includes('max_amount_exceeded') || error.message.includes('exceeds maximum')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('min_amount') || error.message.includes('below minimum')) {
+        errorMessage = error.message
+        statusCode = 400
+      } else if (error.message.includes('pair_is_inactive') || error.message.includes('inactive')) {
+        errorMessage = error.message
+        statusCode = 400
       } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
         errorMessage = `This exchange pair is not available: ${req.body.fromAsset}(${req.body.fromChain}) -> ${req.body.toAsset}(${req.body.toChain}). Please try a different currency or chain.`
         statusCode = 404
