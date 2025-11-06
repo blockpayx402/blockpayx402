@@ -122,13 +122,8 @@ const getSimpleSwapCurrency = (currency, chain = null) => {
   if (chainLower && NETWORK_MAP[chainLower]) {
     const network = NETWORK_MAP[chainLower]
     
-    // For BSC tokens, SimpleSwap might use just the currency code
-    if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
-      // Try without network suffix first for BSC tokens
-      return upperCurrency.toLowerCase()
-    }
-    
-    // For other networks, use currency_network format
+    // For tokens on any network, use currency_network format
+    // SimpleSwap requires network specification for tokens
     return `${upperCurrency.toLowerCase()}_${network}`
   }
   
@@ -506,6 +501,17 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     const fromCurrency = getSimpleSwapCurrency(fromAsset, fromChain)
     const toCurrency = getSimpleSwapCurrency(toAsset, toChain)
     const normalizedAmount = normalizeAmount(amount)
+    
+    console.log('[SimpleSwap getExchangeRate] Currency mapping:', {
+      fromAsset,
+      fromChain,
+      fromCurrency,
+      toAsset,
+      toChain,
+      toCurrency,
+      amount: normalizedAmount
+    })
+    
     // SimpleSwap API v1 endpoint: /get_estimated with api_key as query parameter
     const apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
     
