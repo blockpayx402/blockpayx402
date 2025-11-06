@@ -27,13 +27,50 @@ export async function fetchRealStakingPools(chain) {
     
     const chainVariants = chainMap[chainName] || [chainName]
     
+    // Native staking tokens per chain
+    const nativeStakingTokens = {
+      'Ethereum': ['ETH', 'stETH', 'rETH', 'cbETH'],
+      'Binance': ['BNB'],
+      'BSC': ['BNB'],
+      'Polygon': ['MATIC', 'stMATIC'],
+      'Solana': ['SOL', 'mSOL', 'JitoSOL', 'stSOL']
+    }
+    
+    const stakingTokens = nativeStakingTokens[chainName] || nativeStakingTokens[chainVariants[0]] || []
+    
     const filtered = data.data.filter(p => {
       const chainMatch = !chainName || chainVariants.some(v => 
         (p.chain || '').toLowerCase().includes(v.toLowerCase())
       )
-      // Include pools with meaningful APY (> 0.1%) and reasonable TVL
-      const hasValue = (p.apy || 0) > 0.1 && (p.tvlUsd || 0) > 1000
-      return chainMatch && hasValue
+      
+      // Only include actual staking pools, not DeFi liquidity pools
+      const isStakingPool = 
+        // Must be a native staking token or known staking derivative
+        stakingTokens.some(token => 
+          (p.symbol || '').toUpperCase() === token.toUpperCase() ||
+          (p.symbol || '').toUpperCase().includes(token)
+        ) ||
+        // Or project name suggests staking
+        ['lido', 'rocket', 'stake', 'staked', 'validator', 'native'].some(keyword =>
+          (p.project || '').toLowerCase().includes(keyword)
+        )
+      
+      // Exclude liquidity pools (pairs like USDT-ETH, COAI-USDT, etc.)
+      const isLiquidityPool = 
+        (p.symbol || '').includes('-') ||
+        (p.symbol || '').includes('/') ||
+        (p.symbol || '').toLowerCase().includes('lp') ||
+        (p.poolMeta?.category || '').toLowerCase().includes('liquidity') ||
+        (p.poolMeta?.category || '').toLowerCase().includes('farm')
+      
+      // Realistic APY range for staking (0.1% to 30%)
+      const apy = Number(p.apy || 0)
+      const realisticAPY = apy >= 0.1 && apy <= 30
+      
+      // Must have meaningful TVL
+      const hasValue = (p.tvlUsd || 0) > 1000
+      
+      return chainMatch && isStakingPool && !isLiquidityPool && realisticAPY && hasValue
     })
     
     // Sort by APY descending to show best pools first
