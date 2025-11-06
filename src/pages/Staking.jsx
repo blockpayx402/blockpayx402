@@ -239,8 +239,12 @@ const Staking = () => {
               <p className="text-sm text-white/60 tracking-tight">APY</p>
               <TrendingUp className="w-5 h-5 text-green-400" />
             </div>
-            <p className="text-2xl font-bold mb-1">{Number(currentPool.apy || 0).toFixed(2)}%</p>
-            <p className="text-xs text-white/40">Annual percentage yield</p>
+            <p className="text-2xl font-bold mb-1">
+              {poolsLoading ? '...' : (currentPool.apy || stakingData.apy || 0).toFixed(2)}%
+            </p>
+            <p className="text-xs text-white/40">
+              {poolsLoading ? 'Loading pools...' : currentPool.name ? `${currentPool.name} APY` : 'Annual percentage yield'}
+            </p>
           </motion.div>
         </div>
 
