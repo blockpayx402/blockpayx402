@@ -258,12 +258,20 @@ const getSimpleSwapCurrency = async (currency, chain = null) => {
     // - Polygon tokens: "usdt_matic" or "usdt"
     // - Solana tokens: "usdc_sol"
     
+    // SimpleSwap format for tokens:
+    // - BSC tokens: USDT/BUSD use just "usdt"/"busd" (confirmed from website)
+    // - For same-chain swaps on BSC: BNB -> USDT uses "bnb" -> "usdt"
+    // - Ethereum tokens: "usdt_eth" or "usdt" (depends on context)
+    // - Polygon tokens: "usdt_matic" or "usdt"
+    // - Solana tokens: "usdc_sol"
+    
     if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
-      // BSC USDT/BUSD use just the currency code
+      // BSC USDT/BUSD use just the currency code (confirmed from SimpleSwap website)
       return upperCurrency.toLowerCase()
     }
     
-    // For other networks, try currency_network format
+    // For other networks, try currency_network format first
+    // But also try just currency code as fallback
     // Format: currency_network (e.g., usdc_eth, usdc_sol)
     return `${upperCurrency.toLowerCase()}_${network}`
   }
@@ -787,6 +795,22 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
       } catch (e) {
         error = { message: errorData.text }
       }
+      
+      // Log detailed error for debugging
+      console.error('[SimpleSwap getExchangeRate] API Error:', {
+        status: errorData.status,
+        fromCurrency,
+        toCurrency,
+        fromAsset,
+        fromChain,
+        toAsset,
+        toChain,
+        amount: normalizedAmount,
+        error: error.error || error.message,
+        fullResponse: errorData.text?.substring(0, 500),
+        apiUrl: apiUrl.replace(apiKey.substring(0, 20), '***'),
+        useV3
+      })
       
       log('error', 'Failed to get exchange rate', {
         status: errorData.status,
