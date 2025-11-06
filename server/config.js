@@ -11,7 +11,7 @@ export const BLOCKPAY_CONFIG = {
   // ChangeNOW API Configuration
   changenow: {
     apiKey: process.env.CHANGENOW_API_KEY || '',
-    apiUrl: 'https://api.changenow.io/v2',
+    apiUrl: 'https://api.changenow.io/v1',
     // Partner ID for affiliate tracking
     partnerId: process.env.CHANGENOW_PARTNER_ID || '',
     // Default affiliate fee (0.4% is ChangeNOW default, can be customized)
