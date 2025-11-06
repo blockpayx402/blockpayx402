@@ -32,18 +32,34 @@ const Staking = () => {
   })
 
   const [stakingPools, setStakingPools] = useState([])
+  const [poolsLoading, setPoolsLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     const load = async () => {
+      setPoolsLoading(true)
       const pools = await fetchRealStakingPools(selectedChain)
-      if (!cancelled) setStakingPools(pools)
+      if (!cancelled) {
+        setStakingPools(pools)
+        // Update APY in stats if we have a pool
+        if (pools.length > 0 && pools[0].apy) {
+          setStakingData(prev => ({ ...prev, apy: pools[0].apy }))
+        }
+      }
+      setPoolsLoading(false)
     }
     load()
     return () => { cancelled = true }
   }, [selectedChain])
 
-  const currentPool = stakingPools[0] || { symbol: selectedChain?.toUpperCase?.() || '', apy: 0, minStake: 0, lockPeriod: 0 }
+  const currentPool = stakingPools[0] || { 
+    symbol: selectedChain?.toUpperCase?.() || '', 
+    apy: 0, 
+    minStake: 0, 
+    lockPeriod: 0,
+    name: `Loading ${selectedChain} pools...`,
+    link: null
+  }
 
   const handleStake = async () => {
     if (!wallet?.connected) {
@@ -242,8 +258,12 @@ const Staking = () => {
                 <Lock className="w-6 h-6 text-primary-400" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold tracking-tight">Stake</h3>
-                <p className="text-sm text-white/60">Uses real providers via DeFiLlama links</p>
+                <h3 className="text-xl font-semibold tracking-tight">
+                  {currentPool.name || 'Stake'}
+                </h3>
+                <p className="text-sm text-white/60">
+                  {poolsLoading ? 'Loading pools...' : currentPool.project ? `${currentPool.project} - Click to stake` : 'Select a pool to stake'}
+                </p>
               </div>
             </div>
 
@@ -271,7 +291,9 @@ const Staking = () => {
               <div className="glass-strong rounded-xl p-4 border border-white/10">
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-white/60">APY</span>
-                  <span className="font-medium text-green-400">{Number(currentPool.apy || 0).toFixed(2)}%</span>
+                  <span className="font-medium text-green-400">
+                    {poolsLoading ? '...' : (currentPool.apy || 0).toFixed(2)}%
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-white/60">Lock Period</span>

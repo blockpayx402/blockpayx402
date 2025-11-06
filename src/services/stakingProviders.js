@@ -17,12 +17,27 @@ export async function fetchRealStakingPools(chain) {
     const data = await res.json()
     if (!data?.data || !Array.isArray(data.data)) return []
 
-    // Filter pools by chain and include common core tokens
-    const coreSymbols = new Set(['ETH', 'SOL', 'MATIC', 'BNB', 'stETH', 'rETH', 'stMATIC', 'mSOL', 'JitoSOL'])
-    const filtered = data.data.filter(p =>
-      (!chainName || p.chain === chainName) &&
-      (coreSymbols.has(p.symbol) || coreSymbols.has(p.project) || /eth|sol|matic|bnb/i.test(p.symbol))
-    )
+    // Filter pools by chain - be more inclusive for better results
+    const chainMap = {
+      'Ethereum': ['Ethereum', 'ethereum'],
+      'Binance': ['BSC', 'Binance', 'bsc', 'binance'],
+      'Polygon': ['Polygon', 'polygon'],
+      'Solana': ['Solana', 'solana']
+    }
+    
+    const chainVariants = chainMap[chainName] || [chainName]
+    
+    const filtered = data.data.filter(p => {
+      const chainMatch = !chainName || chainVariants.some(v => 
+        (p.chain || '').toLowerCase().includes(v.toLowerCase())
+      )
+      // Include pools with meaningful APY (> 0.1%) and reasonable TVL
+      const hasValue = (p.apy || 0) > 0.1 && (p.tvlUsd || 0) > 1000
+      return chainMatch && hasValue
+    })
+    
+    // Sort by APY descending to show best pools first
+    filtered.sort((a, b) => (b.apy || 0) - (a.apy || 0))
 
     // Map to UI shape
     const mapped = filtered.slice(0, 20).map(p => ({
