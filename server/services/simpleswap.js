@@ -184,11 +184,24 @@ export const createExchangeTransaction = async (orderData) => {
     }
     
     // Read API key dynamically from environment
-    const apiKey = process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || ''
+    // Check both environment variable and config fallback
+    const envKey = process.env.SIMPLESWAP_API_KEY
+    const configKey = BLOCKPAY_CONFIG.simpleswap.apiKey
+    const apiKey = envKey || configKey || ''
     
-    if (!apiKey || apiKey === '') {
-      log('error', 'API key not configured')
-      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in your .env file.')
+    log('debug', 'API key check', {
+      hasEnvKey: !!envKey,
+      hasConfigKey: !!configKey,
+      keyLength: apiKey.length
+    })
+    
+    if (!apiKey || apiKey === '' || apiKey === 'undefined') {
+      log('error', 'API key not configured', {
+        envKey: !!envKey,
+        configKey: !!configKey,
+        configKeyValue: configKey ? configKey.substring(0, 20) + '...' : 'none'
+      })
+      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
     }
 
     // Get currency codes
@@ -369,11 +382,17 @@ export const getExchangeStatus = async (exchangeId) => {
       throw new Error('Exchange ID is required')
     }
     
-    const apiKey = process.env.SIMPLESWAP_API_KEY || BLOCKPAY_CONFIG.simpleswap.apiKey || ''
+    // Read API key dynamically from environment
+    const envKey = process.env.SIMPLESWAP_API_KEY
+    const configKey = BLOCKPAY_CONFIG.simpleswap.apiKey
+    const apiKey = envKey || configKey || ''
     
-    if (!apiKey || apiKey === '') {
-      log('error', 'API key not configured')
-      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in your .env file.')
+    if (!apiKey || apiKey === '' || apiKey === 'undefined') {
+      log('error', 'API key not configured', {
+        envKey: !!envKey,
+        configKey: !!configKey
+      })
+      throw new Error('SimpleSwap API key is not configured. Please set SIMPLESWAP_API_KEY in Netlify environment variables or check server configuration.')
     }
 
     // SimpleSwap API v1 endpoint: /get_exchange with api_key as query parameter
