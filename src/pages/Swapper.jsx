@@ -175,7 +175,7 @@ const Swapper = () => {
   // Fetch wallet balance when chain/asset changes
   useEffect(() => {
     const fetchBalance = async () => {
-      if (!wallet?.connected || !wallet?.address) {
+      if (!wallet?.connected || !wallet?.address || !fromAsset || !fromChain) {
         setWalletBalance('0.0')
         return
       }
@@ -191,43 +191,115 @@ const Swapper = () => {
       const walletChainType = wallet.chain || (wallet.provider === 'phantom' || wallet.provider === 'solflare' ? 'solana' : 'evm')
       const selectedChainType = chainMap[fromChain] || 'evm'
       
-      // Only fetch balance if chains match
-      if (walletChainType !== selectedChainType) {
+      // Only fetch balance if chains match and currency is selected
+      if (walletChainType !== selectedChainType || !fromChain || !fromAsset) {
         setWalletBalance('0.0')
         return
       }
       
       setBalanceLoading(true)
       try {
+        // Find the selected token to get its address and decimals
+        const selectedToken = fromChainTokens.find(t => t.symbol === fromAsset)
+        const isNative = selectedToken?.isNative || 
+                        ['ETH', 'BNB', 'MATIC', 'SOL'].includes(fromAsset.toUpperCase())
+        
         if (walletChainType === 'solana' && wallet.address) {
           const { CHAINS } = await import('../services/blockchain')
           const rpcUrl = CHAINS.solana?.rpcUrls?.[0] || CHAINS.solana?.rpcUrl
           
-          if (rpcUrl) {
-            const response = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getBalance',
-                params: [wallet.address]
+          if (isNative || fromAsset.toUpperCase() === 'SOL') {
+            // Native SOL balance
+            if (rpcUrl) {
+              const response = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'getBalance',
+                  params: [wallet.address]
+                })
               })
-            })
-            
-            const data = await response.json()
-            if (data.result) {
-              const sol = data.result.value / 1_000_000_000
-              setWalletBalance(sol.toFixed(6))
+              
+              const data = await response.json()
+              if (data.result) {
+                const decimals = selectedToken?.decimals || 9
+                const balance = data.result.value / Math.pow(10, decimals)
+                setWalletBalance(balance.toFixed(6))
+              }
+            }
+          } else if (selectedToken?.address) {
+            // SPL Token balance
+            try {
+              const solana = await import('@solana/web3.js')
+              const connection = new solana.Connection(rpcUrl || 'https://api.mainnet-beta.solana.com')
+              const publicKey = new solana.PublicKey(wallet.address)
+              const tokenMint = new solana.PublicKey(selectedToken.address)
+              
+              // Get token accounts
+              const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
+                mint: tokenMint
+              })
+              
+              if (tokenAccounts.value.length > 0) {
+                const balance = tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount
+                const decimals = tokenAccounts.value[0].account.data.parsed.info.tokenAmount.decimals
+                setWalletBalance(balance.toFixed(6))
+              } else {
+                setWalletBalance('0.0')
+              }
+            } catch (error) {
+              console.error('Error fetching SPL token balance:', error)
+              setWalletBalance('0.0')
             }
           }
         } else if (walletChainType === 'evm' && wallet.address && typeof window.ethereum !== 'undefined') {
-          const balance = await window.ethereum.request({
-            method: 'eth_getBalance',
-            params: [wallet.address, 'latest'],
-          })
-          const balanceInEth = (parseInt(balance, 16) / Math.pow(10, 18)).toFixed(6)
-          setWalletBalance(balanceInEth)
+          if (isNative || ['ETH', 'BNB', 'MATIC'].includes(fromAsset.toUpperCase())) {
+            // Native token balance
+            const balance = await window.ethereum.request({
+              method: 'eth_getBalance',
+              params: [wallet.address, 'latest'],
+            })
+            const decimals = selectedToken?.decimals || 18
+            const balanceInTokens = (parseInt(balance, 16) / Math.pow(10, decimals)).toFixed(6)
+            setWalletBalance(balanceInTokens)
+          } else if (selectedToken?.address) {
+            // ERC20 token balance
+            try {
+              const { ethers } = await import('ethers')
+              const provider = new ethers.BrowserProvider(window.ethereum)
+              
+              // ERC20 balanceOf ABI
+              const erc20Abi = [
+                {
+                  constant: true,
+                  inputs: [{ name: '_owner', type: 'address' }],
+                  name: 'balanceOf',
+                  outputs: [{ name: 'balance', type: 'uint256' }],
+                  type: 'function'
+                },
+                {
+                  constant: true,
+                  inputs: [],
+                  name: 'decimals',
+                  outputs: [{ name: '', type: 'uint8' }],
+                  type: 'function'
+                }
+              ]
+              
+              const tokenContract = new ethers.Contract(selectedToken.address, erc20Abi, provider)
+              const balance = await tokenContract.balanceOf(wallet.address)
+              const decimals = selectedToken.decimals || await tokenContract.decimals().catch(() => 18)
+              const balanceInTokens = ethers.formatUnits(balance, decimals)
+              setWalletBalance(parseFloat(balanceInTokens).toFixed(6))
+            } catch (error) {
+              console.error('Error fetching ERC20 token balance:', error)
+              setWalletBalance('0.0')
+            }
+          } else {
+            setWalletBalance('0.0')
+          }
         }
       } catch (error) {
         console.error('Error fetching wallet balance:', error)
@@ -238,7 +310,7 @@ const Swapper = () => {
     }
     
     fetchBalance()
-  }, [wallet, fromChain, fromAsset])
+  }, [wallet, fromChain, fromAsset, fromChainTokens])
 
   // Auto-calculate "to" amount when "from" amount changes
   useEffect(() => {
@@ -537,7 +609,7 @@ const Swapper = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs text-white/60 tracking-tight">Amount</label>
-                    {wallet?.connected && walletBalance && parseFloat(walletBalance) > 0 && (
+                    {wallet?.connected && fromAsset && walletBalance && parseFloat(walletBalance) > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-white/50">Available: {walletBalance} {fromAsset}</span>
                         <button
