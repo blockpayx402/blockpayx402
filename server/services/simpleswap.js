@@ -712,7 +712,10 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     // For same-chain swaps, we MUST use v3 API with tickerFrom/tickerTo/networkFrom/networkTo
     // v1 API doesn't support network-specific currencies for same-chain swaps
     const isSameChain = fromChain === toChain
-    const useV3 = isSameChain || true // Always use v3 for now (better network support)
+    
+    // Try v3 first for same-chain swaps, but fallback to v1 if API key doesn't support v3
+    // v3 requires Bearer token auth, v1 uses query parameter
+    let useV3 = isSameChain // Only use v3 for same-chain swaps initially
     
     let apiUrl
     let fromCurrency, toCurrency
@@ -807,10 +810,16 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         let parsed
         try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
         
-        // If v3 returns 404 or 401, try v1 (only for cross-chain swaps, not same-chain)
-        if (useV3 && !isSameChain && (status === 404 || status === 401) && attempt === 0) {
-          log('info', 'v3 not available, falling back to v1', { status, error: parsed.error || parsed.message })
+        // If v3 returns 404 or 401, try v1 (for both same-chain and cross-chain)
+        // This handles cases where API key doesn't support v3 or v3 doesn't support the pair
+        if (useV3 && (status === 404 || status === 401) && attempt === 0) {
+          log('info', 'v3 not available (401/404), falling back to v1', { 
+            status, 
+            error: parsed.error || parsed.message,
+            isSameChain 
+          })
           // Fallback to v1 format
+          useV3 = false
           fromCurrency = await getSimpleSwapCurrency(fromAsset, fromChain)
           toCurrency = await getSimpleSwapCurrency(toAsset, toChain)
           apiUrl = `${BLOCKPAY_CONFIG.simpleswap.apiUrl}/get_estimated?api_key=${encodeURIComponent(apiKey)}&fixed=false&currency_from=${fromCurrency}&currency_to=${toCurrency}&amount=${normalizedAmount}`
