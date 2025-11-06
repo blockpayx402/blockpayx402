@@ -58,22 +58,36 @@ export const validateAmount = (amount, min = null, max = null) => {
     return { valid: false, error: 'Amount is required' }
   }
   
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount
+  // Convert to number - handle both string and number inputs
+  let num
+  if (typeof amount === 'string') {
+    const trimmed = amount.trim()
+    if (trimmed === '') {
+      return { valid: false, error: 'Amount is required' }
+    }
+    num = parseFloat(trimmed)
+  } else {
+    num = Number(amount)
+  }
   
+  // Check if valid number
   if (!isFinite(num) || isNaN(num)) {
-    return { valid: false, error: 'Amount must be a valid number' }
+    return { valid: false, error: `Amount must be a valid number. Received: ${amount} (type: ${typeof amount})` }
   }
   
+  // Check if positive
   if (num <= 0) {
-    return { valid: false, error: 'Amount must be greater than zero' }
+    return { valid: false, error: `Amount must be greater than zero. Received: ${num}` }
   }
   
+  // Check minimum
   if (min !== null && num < min) {
-    return { valid: false, error: `Amount must be at least ${min}` }
+    return { valid: false, error: `Amount must be at least ${min}. Received: ${num}` }
   }
   
+  // Check maximum
   if (max !== null && num > max) {
-    return { valid: false, error: `Amount must not exceed ${max}` }
+    return { valid: false, error: `Amount must not exceed ${max}. Received: ${num}` }
   }
   
   return { valid: true }

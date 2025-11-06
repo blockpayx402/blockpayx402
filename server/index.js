@@ -217,6 +217,18 @@ app.post('/api/create-order', async (req, res) => {
       refundAddress
     } = req.body
 
+    // Validate required fields
+    if (!amount || amount === '' || amount === null || amount === undefined) {
+      return res.status(400).json({ error: 'Amount is required' })
+    }
+    
+    // Convert amount to number
+    const amountNum = typeof amount === 'string' ? parseFloat(amount.trim()) : Number(amount)
+    
+    if (!isFinite(amountNum) || isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).json({ error: `Invalid amount: ${amount}. Amount must be a positive number greater than zero.` })
+    }
+
     // Get the payment request
     const request = dbHelpers.getRequestById(requestId)
     if (!request) {
@@ -224,7 +236,7 @@ app.post('/api/create-order', async (req, res) => {
     }
 
     // Calculate platform fee (with chain-specific recipient)
-    const fee = calculatePlatformFee(parseFloat(amount), fromAsset, fromChain)
+    const fee = calculatePlatformFee(amountNum, fromAsset, fromChain)
 
     // Generate order ID first
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
@@ -235,7 +247,7 @@ app.post('/api/create-order', async (req, res) => {
       fromAsset,
       toChain: request.chain,
       toAsset: request.currency,
-      amount: parseFloat(amount),
+      amount: amountNum,
       recipientAddress: request.recipient,
       refundAddress,
       orderId

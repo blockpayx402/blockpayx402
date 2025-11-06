@@ -192,10 +192,25 @@ export const createExchangeTransaction = async (orderData) => {
   } = orderData
 
   try {
+    // Ensure amount is a number before validation
+    const normalizedAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
+    
+    // Create normalized order data for validation
+    const normalizedOrderData = {
+      ...orderData,
+      amount: normalizedAmount
+    }
+    
     // Input validation
-    const validation = validateExchangeOrder(orderData)
+    const validation = validateExchangeOrder(normalizedOrderData)
     if (!validation.valid) {
-      log('error', 'Invalid order data', { error: validation.error, orderData: { ...orderData, recipientAddress: recipientAddress?.substring(0, 10) + '...' } })
+      log('error', 'Invalid order data', { 
+        error: validation.error, 
+        originalAmount: amount,
+        normalizedAmount: normalizedAmount,
+        amountType: typeof amount,
+        orderData: { ...orderData, recipientAddress: recipientAddress?.substring(0, 10) + '...' } 
+      })
       throw new Error(validation.error)
     }
     
@@ -213,11 +228,14 @@ export const createExchangeTransaction = async (orderData) => {
     const toCurrency = getChangeNowCurrency(toAsset, toChain)
     const apiUrl = `https://api.changenow.io/v1/transactions/${apiKey}`
     
+    // Use normalized amount for payload
+    const payloadAmount = normalizeAmount(normalizedAmount)
+    
     const payload = {
       from: fromCurrency,
       to: toCurrency,
       address: recipientAddress.trim(),
-      amount: normalizeAmount(amount),
+      amount: payloadAmount,
       ...(refundAddress && { refundAddress: refundAddress.trim() }),
       // Only include extraId if the currency supports it (Solana doesn't support extraId)
       ...(orderId && toCurrency !== 'sol' && toCurrency !== 'SOL' && { extraId: orderId }),
