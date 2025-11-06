@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, RefreshCw, Loader2, ArrowUpDown, CheckCircle2, Copy, ExternalLink, Wallet, Maximize2 } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Loader2, ArrowUpDown, CheckCircle2, Copy, ExternalLink, Wallet, Maximize2, AlertCircle } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
@@ -557,18 +557,48 @@ const Swapper = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-white/50 mb-4">
-              <CheckCircle2 className="w-4 h-4 text-green-400" />
-              <span>Auto-swap enabled • Direct to recipient</span>
-            </div>
+            {!isDirectSwap && (
+              <div className="flex items-center gap-2 text-xs text-white/50 mb-4">
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                <span>Auto-swap enabled • Direct to recipient</span>
+              </div>
+            )}
 
-            <button
-              onClick={() => navigate(`/status/${order.id}`)}
-              className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Track Swap Status
-            </button>
+            {!isDirectSwap && (
+              <button
+                onClick={() => navigate(`/status/${order.id}`)}
+                className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Track Swap Status
+              </button>
+            )}
+            
+            {isDirectSwap && (
+              <div className="space-y-3">
+                <p className="text-sm text-white/70 text-center">
+                  For same-chain swaps, please use a DEX aggregator like:
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={`https://app.uniswap.org/#/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}&chainId=${order.chainId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
+                  >
+                    Uniswap
+                  </a>
+                  <a
+                    href={`https://pancakeswap.finance/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
+                  >
+                    PancakeSwap
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
