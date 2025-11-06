@@ -50,6 +50,13 @@ app.get('/api/health', (req, res) => {
 // Setup status endpoint
 app.get('/api/setup', (req, res) => {
   try {
+    // Debug: Log environment variable status (without exposing the key)
+    const apiKeyExists = !!process.env.CHANGENOW_API_KEY
+    const apiKeyLength = process.env.CHANGENOW_API_KEY ? process.env.CHANGENOW_API_KEY.length : 0
+    const apiKeyPrefix = process.env.CHANGENOW_API_KEY ? process.env.CHANGENOW_API_KEY.substring(0, 8) : 'missing'
+    console.log(`[Setup Debug] CHANGENOW_API_KEY exists: ${apiKeyExists}, length: ${apiKeyLength}, prefix: ${apiKeyPrefix}...`)
+    console.log(`[Setup Debug] BLOCKPAY_CONFIG.changenow.apiKey exists: ${!!BLOCKPAY_CONFIG.changenow.apiKey}, length: ${BLOCKPAY_CONFIG.changenow.apiKey?.length || 0}`)
+    
     const setupStatus = checkSetup()
     res.json({
       ...setupStatus,
@@ -323,6 +330,11 @@ app.post('/api/create-order', async (req, res) => {
 // Get exchange rate estimate (for calculating required send amount)
 app.post('/api/exchange-rate', async (req, res) => {
   try {
+    // Debug: Log API key status
+    const apiKeyExists = !!process.env.CHANGENOW_API_KEY
+    const apiKeyLength = process.env.CHANGENOW_API_KEY ? process.env.CHANGENOW_API_KEY.length : 0
+    console.log(`[Exchange Rate Debug] CHANGENOW_API_KEY exists: ${apiKeyExists}, length: ${apiKeyLength}`)
+    console.log(`[Exchange Rate Debug] BLOCKPAY_CONFIG.changenow.apiKey exists: ${!!BLOCKPAY_CONFIG.changenow.apiKey}, length: ${BLOCKPAY_CONFIG.changenow.apiKey?.length || 0}`)
     const {
       fromChain,
       fromAsset,

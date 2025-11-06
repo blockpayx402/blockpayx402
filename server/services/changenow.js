@@ -183,8 +183,16 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
   try {
     // Check if API key is configured
     if (!BLOCKPAY_CONFIG.changenow.apiKey || BLOCKPAY_CONFIG.changenow.apiKey === '') {
+      console.error('[ChangeNOW] API key is missing!')
+      console.error('[ChangeNOW] process.env.CHANGENOW_API_KEY exists:', !!process.env.CHANGENOW_API_KEY)
+      console.error('[ChangeNOW] process.env.CHANGENOW_API_KEY length:', process.env.CHANGENOW_API_KEY?.length || 0)
       throw new Error('ChangeNOW API key is not configured. Please set CHANGENOW_API_KEY in your .env file.')
     }
+
+    // Debug: Log API key info (without exposing full key)
+    const apiKeyPrefix = BLOCKPAY_CONFIG.changenow.apiKey.substring(0, 8)
+    const apiKeySuffix = BLOCKPAY_CONFIG.changenow.apiKey.substring(BLOCKPAY_CONFIG.changenow.apiKey.length - 4)
+    console.log(`[ChangeNOW] Using API key: ${apiKeyPrefix}...${apiKeySuffix} (length: ${BLOCKPAY_CONFIG.changenow.apiKey.length})`)
 
     const apiUrl = `${BLOCKPAY_CONFIG.changenow.apiUrl}/exchange/estimated-amount`
     
@@ -199,10 +207,17 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
 
     const url = `${apiUrl}?${params}`
     console.log(`[ChangeNOW] Getting exchange rate: ${url}`)
+    
+    const headers = getChangeNowHeaders()
+    console.log(`[ChangeNOW] Request headers:`, {
+      'Content-Type': headers['Content-Type'],
+      'x-api-key': headers['x-api-key'] ? `${headers['x-api-key'].substring(0, 8)}...${headers['x-api-key'].substring(headers['x-api-key'].length - 4)}` : 'missing',
+      'x-partner-id': headers['x-partner-id'] || 'not set'
+    })
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: getChangeNowHeaders(),
+      headers: headers,
     })
 
     if (!response.ok) {
