@@ -15,6 +15,7 @@ import {
 import { useApp } from '../context/AppContext'
 import { CHAINS } from '../services/blockchain'
 import { toast } from 'react-hot-toast'
+import { fetchRealStakingPools } from '../services/stakingProviders'
 
 const Staking = () => {
   const { wallet, isLoading } = useApp()
@@ -30,59 +31,19 @@ const Staking = () => {
     stakingPools: []
   })
 
-  // Mock staking pools data (in production, fetch from blockchain)
-  const stakingPools = [
-    {
-      id: 'eth-main',
-      chain: 'ethereum',
-      name: 'Ethereum Staking',
-      symbol: 'ETH',
-      apy: 4.5,
-      minStake: 0.1,
-      lockPeriod: 30, // days
-      totalStaked: 1250.5,
-      totalRewards: 56.25,
-      description: 'Stake ETH and earn rewards'
-    },
-    {
-      id: 'bnb-main',
-      chain: 'bnb',
-      name: 'BNB Chain Staking',
-      symbol: 'BNB',
-      apy: 6.2,
-      minStake: 0.5,
-      lockPeriod: 14,
-      totalStaked: 890.3,
-      totalRewards: 55.2,
-      description: 'Stake BNB and earn rewards'
-    },
-    {
-      id: 'polygon-main',
-      chain: 'polygon',
-      name: 'Polygon Staking',
-      symbol: 'MATIC',
-      apy: 8.1,
-      minStake: 10,
-      lockPeriod: 7,
-      totalStaked: 5420.8,
-      totalRewards: 438.08,
-      description: 'Stake MATIC and earn rewards'
-    },
-    {
-      id: 'solana-main',
-      chain: 'solana',
-      name: 'Solana Staking',
-      symbol: 'SOL',
-      apy: 7.3,
-      minStake: 1,
-      lockPeriod: 21,
-      totalStaked: 2340.2,
-      totalRewards: 170.83,
-      description: 'Stake SOL and earn rewards'
-    }
-  ]
+  const [stakingPools, setStakingPools] = useState([])
 
-  const currentPool = stakingPools.find(pool => pool.chain === selectedChain) || stakingPools[0]
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const pools = await fetchRealStakingPools(selectedChain)
+      if (!cancelled) setStakingPools(pools)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [selectedChain])
+
+  const currentPool = stakingPools[0] || { symbol: selectedChain?.toUpperCase?.() || '', apy: 0, minStake: 0, lockPeriod: 0 }
 
   const handleStake = async () => {
     if (!wallet?.connected) {
@@ -103,11 +64,11 @@ const Staking = () => {
 
     setStakeLoading(true)
     try {
-      // In production, this would interact with the blockchain
-      // For now, simulate the transaction
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      toast.success(`Successfully staked ${amount} ${currentPool.symbol}!`)
+      // Redirect to provider pool URL for now
+      if (currentPool?.link) {
+        window.open(currentPool.link, '_blank', 'noopener')
+      }
+      toast.success(`Opening provider for staking ${amount} ${currentPool.symbol}`)
       setStakeAmount('')
       setStakingData(prev => ({
         ...prev,
@@ -140,10 +101,11 @@ const Staking = () => {
 
     setUnstakeLoading(true)
     try {
-      // In production, this would interact with the blockchain
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      toast.success(`Successfully unstaked ${amount} ${currentPool.symbol}!`)
+      // Redirect to provider site; exact unstake flow depends on provider
+      if (currentPool?.link) {
+        window.open(currentPool.link, '_blank', 'noopener')
+      }
+      toast.success(`Opening provider to manage your stake`)
       setUnstakeAmount('')
       setStakingData(prev => ({
         ...prev,
@@ -198,13 +160,13 @@ const Staking = () => {
         <div className="glass rounded-2xl p-6 border border-white/10 mb-6">
           <p className="text-sm text-white/60 mb-4 tracking-tight">Select Chain</p>
           <div className="flex gap-3 flex-wrap">
-            {stakingPools.map((pool) => {
-              const chainConfig = CHAINS[pool.chain]
-              const isSelected = selectedChain === pool.chain
+            {(['ethereum','bnb','polygon','solana']).map((chainKey) => {
+              const chainConfig = CHAINS[chainKey]
+              const isSelected = selectedChain === chainKey
               return (
                 <button
-                  key={pool.id}
-                  onClick={() => setSelectedChain(pool.chain)}
+                  key={chainKey}
+                  onClick={() => setSelectedChain(chainKey)}
                   className={`px-6 py-3 rounded-xl border transition-all ${
                     isSelected
                       ? 'bg-primary-500/20 text-primary-400 border-primary-500/30'
@@ -212,7 +174,7 @@ const Staking = () => {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{chainConfig?.name || pool.name}</span>
+                    <span className="font-medium">{chainConfig?.name}</span>
                     {isSelected && <CheckCircle2 className="w-4 h-4" />}
                   </div>
                 </button>
@@ -261,7 +223,7 @@ const Staking = () => {
               <p className="text-sm text-white/60 tracking-tight">APY</p>
               <TrendingUp className="w-5 h-5 text-green-400" />
             </div>
-            <p className="text-2xl font-bold mb-1">{currentPool.apy}%</p>
+            <p className="text-2xl font-bold mb-1">{Number(currentPool.apy || 0).toFixed(2)}%</p>
             <p className="text-xs text-white/40">Annual percentage yield</p>
           </motion.div>
         </div>
@@ -281,7 +243,7 @@ const Staking = () => {
               </div>
               <div>
                 <h3 className="text-xl font-semibold tracking-tight">Stake</h3>
-                <p className="text-sm text-white/60">Lock your tokens to earn rewards</p>
+                <p className="text-sm text-white/60">Uses real providers via DeFiLlama links</p>
               </div>
             </div>
 
@@ -309,7 +271,7 @@ const Staking = () => {
               <div className="glass-strong rounded-xl p-4 border border-white/10">
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-white/60">APY</span>
-                  <span className="font-medium text-green-400">{currentPool.apy}%</span>
+                  <span className="font-medium text-green-400">{Number(currentPool.apy || 0).toFixed(2)}%</span>
                 </div>
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-white/60">Lock Period</span>
