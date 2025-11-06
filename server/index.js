@@ -10,19 +10,17 @@ import { checkGitSecurity, validateApiKeySecurity } from './utils/security.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 
-// Serve static files if in production (for combined deployment)
 if (process.env.NODE_ENV === 'production') {
   import('path').then(({ default: path }) => {
     const distPath = path.join(process.cwd(), 'dist')
     try {
       app.use(express.static(distPath))
     } catch (error) {
-      // dist folder doesn't exist, that's okay
+   
     }
   }).catch(() => {})
 }
 
-// Middleware
 app.use(cors({
   origin: [
     'http://localhost:5173', 
@@ -330,6 +328,13 @@ app.post('/api/exchange-rate', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' })
     }
 
+    // Check if it's the same currency on the same chain - no exchange needed
+    if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
+      return res.status(400).json({ 
+        error: `Cannot calculate exchange rate for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.` 
+      })
+    }
+
     let fromAmount = parseFloat(amount)
     let estimatedToAmount = null
     let requiredFromAmount = null
@@ -501,7 +506,7 @@ app.get('/api/status/:orderId', async (req, res) => {
   }
 })
 
-// Get orders by request ID
+
 app.get('/api/orders/:requestId', (req, res) => {
   try {
     const orders = dbHelpers.getOrdersByRequestId(req.params.requestId)
@@ -512,7 +517,6 @@ app.get('/api/orders/:requestId', (req, res) => {
   }
 })
 
-// Cleanup expired requests endpoint (for manual cleanup if needed)
 app.post('/api/cleanup', (req, res) => {
   try {
     const deleted = dbHelpers.deleteExpiredRequests()

@@ -422,6 +422,13 @@ app.post('/api/exchange-rate', async (req, res) => {
       return res.status(400).json({ error: 'Missing required parameters' })
     }
 
+    // Check if it's the same currency on the same chain - no exchange needed
+    if (fromChain === toChain && fromAsset.toUpperCase() === toAsset.toUpperCase()) {
+      return res.status(400).json({ 
+        error: `Cannot calculate exchange rate for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.` 
+      })
+    }
+
     let fromAmount = parseFloat(amount)
     let estimatedToAmount = null
     let requiredFromAmount = null
