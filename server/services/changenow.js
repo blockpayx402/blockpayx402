@@ -112,13 +112,37 @@ export const createExchangeTransaction = async (orderData) => {
     console.log(`[ChangeNOW] Creating transaction (v1): ${apiUrl.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
     console.log(`[ChangeNOW] Transaction payload:`, { ...payload, address: recipientAddress.substring(0, 10) + '...' })
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    })
+    // Retry on transient server errors
+    let response
+    for (let attempt = 0; attempt < 2; attempt++) {
+      response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) break
+
+      // For 5xx or unknown_error, wait briefly and retry once
+      const status = response.status
+      const text = await response.text()
+      let parsed
+      try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
+      const isTransient = status >= 500 || parsed?.error === 'unknown_error'
+      if (attempt === 0 && isTransient) {
+        await new Promise(r => setTimeout(r, 600))
+        continue
+      }
+      // Put text back for the unified handler below
+      response = {
+        ok: false,
+        status,
+        async text() { return text },
+      }
+      break
+    }
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -137,6 +161,8 @@ export const createExchangeTransaction = async (orderData) => {
         throw new Error(`Invalid ChangeNOW API key (${response.status}): ${error.message || errorText}. Please check your CHANGENOW_API_KEY in .env file.`)
       } else if (response.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+      } else if (response.status >= 500 || error?.error === 'unknown_error') {
+        throw new Error(`ChangeNOW is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly or adjust the amount.`)
       } else {
         throw new Error(`ChangeNOW v1 API error: ${response.status} - ${error.message || error.error || errorText}`)
       }
@@ -267,12 +293,32 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
     
     console.log(`[ChangeNOW] Getting exchange rate (v1): ${url.replace(apiKey, apiKey.substring(0, 8) + '...')}`)
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    // Retry on transient server errors
+    let response
+    for (let attempt = 0; attempt < 2; attempt++) {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      if (response.ok) break
+      const status = response.status
+      const text = await response.text()
+      let parsed
+      try { parsed = JSON.parse(text) } catch { parsed = { message: text } }
+      const isTransient = status >= 500 || parsed?.error === 'unknown_error'
+      if (attempt === 0 && isTransient) {
+        await new Promise(r => setTimeout(r, 500))
+        continue
+      }
+      response = {
+        ok: false,
+        status,
+        async text() { return text },
+      }
+      break
+    }
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -299,6 +345,8 @@ export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, am
         throw new Error(`Invalid ChangeNOW API key (${response.status}): ${detailedError}. Please check your CHANGENOW_API_KEY in .env file.`)
       } else if (response.status === 404) {
         throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
+      } else if (response.status >= 500 || errorData?.error === 'unknown_error') {
+        throw new Error(`ChangeNOW is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again shortly or adjust the amount.`)
       } else {
         throw new Error(`ChangeNOW v1 API error: ${response.status} - ${errorData.message || errorData.error || errorText}`)
       }
