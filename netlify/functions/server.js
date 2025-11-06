@@ -10,7 +10,7 @@ import cors from 'cors'
 import { dbHelpers } from '../../server/database-netlify.js'
 import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from '../../server/services/depositAddress.js'
 import { getExchangeRate } from '../../server/services/simpleswap.js'
-import { calculatePlatformFee, BLOCKPAY_CONFIG, getChangeNowHeaders } from '../../server/config.js'
+import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../../server/config.js'
 import { checkSetup, generateSetupInstructions } from '../../server/utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from '../../server/utils/security.js'
 
@@ -47,19 +47,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Test ChangeNOW API key endpoint
+// Test SimpleSwap API key endpoint
 app.get('/api/test-api-key', async (req, res) => {
   try {
-    const apiKey = process.env.CHANGENOW_API_KEY
-    const configApiKey = BLOCKPAY_CONFIG.changenow.apiKey
+    const apiKey = process.env.SIMPLESWAP_API_KEY
+    const configApiKey = BLOCKPAY_CONFIG.simpleswap.apiKey
     
-    // Test with a simple ChangeNOW endpoint that validates the key
-    const testUrl = 'https://api.changenow.io/v2/exchange/currencies'
-    const testHeaders = getChangeNowHeaders()
-    
-    console.log('[Test API Key] Testing ChangeNOW API key...')
-    console.log('[Test API Key] process.env.CHANGENOW_API_KEY exists:', !!apiKey)
-    console.log('[Test API Key] BLOCKPAY_CONFIG.changenow.apiKey exists:', !!configApiKey)
+    console.log('[Test API Key] Testing SimpleSwap API key...')
+    console.log('[Test API Key] process.env.SIMPLESWAP_API_KEY exists:', !!apiKey)
+    console.log('[Test API Key] BLOCKPAY_CONFIG.simpleswap.apiKey exists:', !!configApiKey)
     
     if (!apiKey || !configApiKey) {
       return res.status(500).json({
@@ -117,11 +113,11 @@ app.get('/api/test-api-key', async (req, res) => {
 app.get('/api/setup', (req, res) => {
   try {
     // Debug: Log environment variable status (without exposing the key)
-    const apiKeyExists = !!process.env.CHANGENOW_API_KEY
-    const apiKeyLength = process.env.CHANGENOW_API_KEY ? process.env.CHANGENOW_API_KEY.length : 0
-    const apiKeyPrefix = process.env.CHANGENOW_API_KEY ? process.env.CHANGENOW_API_KEY.substring(0, 8) : 'missing'
-    console.log(`[Setup Debug] CHANGENOW_API_KEY exists: ${apiKeyExists}, length: ${apiKeyLength}, prefix: ${apiKeyPrefix}...`)
-    console.log(`[Setup Debug] BLOCKPAY_CONFIG.changenow.apiKey exists: ${!!BLOCKPAY_CONFIG.changenow.apiKey}, length: ${BLOCKPAY_CONFIG.changenow.apiKey?.length || 0}`)
+    const apiKeyExists = !!process.env.SIMPLESWAP_API_KEY
+    const apiKeyLength = process.env.SIMPLESWAP_API_KEY ? process.env.SIMPLESWAP_API_KEY.length : 0
+    const apiKeyPrefix = process.env.SIMPLESWAP_API_KEY ? process.env.SIMPLESWAP_API_KEY.substring(0, 8) : 'missing'
+    console.log(`[Setup Debug] SIMPLESWAP_API_KEY exists: ${apiKeyExists}, length: ${apiKeyLength}, prefix: ${apiKeyPrefix}...`)
+    console.log(`[Setup Debug] BLOCKPAY_CONFIG.simpleswap.apiKey exists: ${!!BLOCKPAY_CONFIG.simpleswap.apiKey}, length: ${BLOCKPAY_CONFIG.simpleswap.apiKey?.length || 0}`)
     
     const setupStatus = checkSetup()
     res.json({
@@ -332,7 +328,7 @@ app.post('/api/create-order', async (req, res) => {
     // Generate order ID first
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
-    // Generate deposit address via ChangeNOW
+    // Generate deposit address via SimpleSwap
     const depositInfo = await generateDepositAddress({
       fromChain,
       fromAsset,
@@ -382,13 +378,13 @@ app.post('/api/create-order', async (req, res) => {
     
     if (error.message) {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-        errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in Netlify environment variables.'
+        errorMessage = 'Invalid SimpleSwap API key. Please check your server configuration. Set SIMPLESWAP_API_KEY in Netlify environment variables.'
         statusCode = 401
       } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404') || error.message.includes('inactive')) {
         errorMessage = error.message.includes('inactive') ? error.message : `This exchange pair is not available: ${fromAsset}(${fromChain}) -> ${req.body?.toAsset || req.body?.requestId ? 'target currency' : 'unknown'}. Please try a different currency or chain.`
         statusCode = 400
       } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-        errorMessage = 'Cannot connect to ChangeNOW API. Please check your internet connection and try again.'
+        errorMessage = 'Cannot connect to SimpleSwap API. Please check your internet connection and try again.'
         statusCode = 503
       } else {
         errorMessage = error.message
@@ -409,10 +405,10 @@ app.post('/api/create-order', async (req, res) => {
 app.post('/api/exchange-rate', async (req, res) => {
   try {
     // Debug: Log API key status
-    const apiKeyExists = !!process.env.CHANGENOW_API_KEY
-    const apiKeyLength = process.env.CHANGENOW_API_KEY ? process.env.CHANGENOW_API_KEY.length : 0
-    console.log(`[Exchange Rate Debug] CHANGENOW_API_KEY exists: ${apiKeyExists}, length: ${apiKeyLength}`)
-    console.log(`[Exchange Rate Debug] BLOCKPAY_CONFIG.changenow.apiKey exists: ${!!BLOCKPAY_CONFIG.changenow.apiKey}, length: ${BLOCKPAY_CONFIG.changenow.apiKey?.length || 0}`)
+    const apiKeyExists = !!process.env.SIMPLESWAP_API_KEY
+    const apiKeyLength = process.env.SIMPLESWAP_API_KEY ? process.env.SIMPLESWAP_API_KEY.length : 0
+    console.log(`[Exchange Rate Debug] SIMPLESWAP_API_KEY exists: ${apiKeyExists}, length: ${apiKeyLength}`)
+    console.log(`[Exchange Rate Debug] BLOCKPAY_CONFIG.simpleswap.apiKey exists: ${!!BLOCKPAY_CONFIG.simpleswap.apiKey}, length: ${BLOCKPAY_CONFIG.simpleswap.apiKey?.length || 0}`)
     const {
       fromChain,
       fromAsset,
@@ -441,7 +437,7 @@ app.post('/api/exchange-rate', async (req, res) => {
       estimatedToAmount = result.estimatedAmount
     } else {
       // Calculate how much needs to be sent to receive a specific amount
-      // ChangeNOW doesn't have a direct reverse endpoint, so we estimate iteratively
+      // SimpleSwap doesn't have a direct reverse endpoint, so we estimate iteratively
       const targetToAmount = parseFloat(amount)
       
       // Start with an initial estimate (assume similar value currencies)
@@ -519,7 +515,7 @@ app.post('/api/exchange-rate', async (req, res) => {
     
     if (error.message) {
       if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-        errorMessage = 'Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in Netlify environment variables.'
+        errorMessage = 'Invalid SimpleSwap API key. Please check your server configuration. Set SIMPLESWAP_API_KEY in Netlify environment variables.'
         statusCode = 401
       } else if (error.message.includes('max_amount_exceeded') || error.message.includes('exceeds maximum')) {
         errorMessage = error.message
@@ -537,7 +533,7 @@ app.post('/api/exchange-rate', async (req, res) => {
         errorMessage = `This exchange pair is not available: ${req.body.fromAsset}(${req.body.fromChain}) -> ${req.body.toAsset}(${req.body.toChain}). Please try a different currency or chain.`
         statusCode = 404
       } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-        errorMessage = 'Cannot connect to ChangeNOW API. Please check your internet connection and try again.'
+        errorMessage = 'Cannot connect to SimpleSwap API. Please check your internet connection and try again.'
         statusCode = 503
       } else {
         errorMessage = error.message
@@ -554,7 +550,7 @@ app.post('/api/exchange-rate', async (req, res) => {
   }
 })
 
-// Get order status (with real-time sync from ChangeNOW)
+// Get order status (with real-time sync from SimpleSwap)
 app.get('/api/status/:orderId', async (req, res) => {
   try {
     const order = dbHelpers.getOrderById(req.params.orderId)
@@ -563,7 +559,7 @@ app.get('/api/status/:orderId', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' })
     }
     
-    // If order has exchange ID, sync status from ChangeNOW
+    // If order has exchange ID, sync status from SimpleSwap
     if (order.exchangeId) {
       try {
         const exchangeStatus = await getExchangeStatusById(order.exchangeId)
@@ -585,7 +581,7 @@ app.get('/api/status/:orderId', async (req, res) => {
           order.swapTxHash = updatedOrder.swapTxHash
         }
       } catch (error) {
-        console.error('Error syncing status from ChangeNOW:', error)
+        console.error('Error syncing status from SimpleSwap:', error)
         // Continue with cached status if sync fails
       }
     }

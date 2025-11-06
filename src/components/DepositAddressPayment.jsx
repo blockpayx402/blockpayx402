@@ -82,7 +82,7 @@ const DepositAddressPayment = ({ request }) => {
           const errorMsg = error.response?.data?.error || error.message || 'Failed to calculate required amount'
           // Only show toast if it's a meaningful error (not just API key missing)
           if (errorMsg.includes('API key')) {
-            toast.error('ChangeNOW API key is not configured. Please contact support.')
+            toast.error('SimpleSwap API key is not configured. Please contact support.')
           } else {
             toast.error(errorMsg)
           }
@@ -133,7 +133,7 @@ const DepositAddressPayment = ({ request }) => {
       
       // Show specific error message
       if (errorMessage.includes('API key')) {
-        toast.error('ChangeNOW API key is not configured. Please contact the administrator to add CHANGENOW_API_KEY to Netlify environment variables.', {
+        toast.error('SimpleSwap API key is not configured. Please contact the administrator to add SIMPLESWAP_API_KEY to Netlify environment variables.', {
           duration: 6000
         })
       } else {

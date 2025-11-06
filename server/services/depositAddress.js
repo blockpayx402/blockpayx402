@@ -28,7 +28,7 @@ export const generateDepositAddress = async (orderData) => {
 
   try {
     // Skip pair validation - it causes false negatives for valid pairs
-    // ChangeNOW will return proper errors if pair is truly invalid
+        // SimpleSwap will return proper errors if pair is truly invalid
 
     // Calculate BlockPay platform fee (with chain-specific recipient)
     const fee = calculatePlatformFee(amount, fromAsset, fromChain)
@@ -52,7 +52,7 @@ export const generateDepositAddress = async (orderData) => {
     }
 
     // Try with multiple amount adjustments and retries for better reliability
-    // ChangeNOW can be sensitive to exact amounts, so we try several variations
+        // SimpleSwap can be sensitive to exact amounts, so we try several variations
     const attemptAmounts = [
       Math.max(amount * 0.01, amountAfterFee), // Ensure at least 1% of original amount
       Math.max(amount * 0.01, Number((amountAfterFee * 0.998).toFixed(8))), // -0.2%
@@ -67,7 +67,7 @@ export const generateDepositAddress = async (orderData) => {
 
     for (const tryAmount of attemptAmounts) {
       try {
-        // Create exchange transaction via ChangeNOW API
+        // Create exchange transaction via SimpleSwap API
         exchangeData = await createExchangeTransaction({
           fromChain,
           fromAsset,
@@ -135,7 +135,7 @@ export const generateDepositAddress = async (orderData) => {
       if (lastErrorStatus === 400) {
         throw new Error(`Invalid request for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different amount or currency pair.`)
       } else if (lastErrorStatus && lastErrorStatus >= 500) {
-        throw new Error(`ChangeNOW is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again in a few moments.`)
+        throw new Error(`SimpleSwap is temporarily unavailable for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again in a few moments.`)
       }
       throw lastError || new Error(`Failed to generate deposit address for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again.`)
     }
@@ -155,11 +155,11 @@ export const generateDepositAddress = async (orderData) => {
     
     // Provide helpful error messages
     if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-      throw new Error('Invalid ChangeNOW API key. Please check your server configuration. Set CHANGENOW_API_KEY in environment variables.')
+      throw new Error('Invalid SimpleSwap API key. Please check your server configuration. Set SIMPLESWAP_API_KEY in environment variables.')
     } else if (error.message.includes('inactive') || error.message.includes('not available') || error.message.includes('404')) {
       throw new Error(`Exchange pair not available: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
     } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-      throw new Error('Cannot connect to ChangeNOW API. Please check your internet connection and try again.')
+      throw new Error('Cannot connect to SimpleSwap API. Please check your internet connection and try again.')
     }
     
     throw new Error(`Failed to generate deposit address: ${error.message}`)
@@ -167,7 +167,7 @@ export const generateDepositAddress = async (orderData) => {
 }
 
 /**
- * Check deposit status via ChangeNOW API
+ * Check deposit status via SimpleSwap API
  * This checks the actual status of the exchange transaction
  */
 export const checkDepositStatus = async (exchangeId) => {

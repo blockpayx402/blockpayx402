@@ -264,7 +264,7 @@ const PaymentRequest = () => {
                 </label>
                 <p className="text-xs text-white/70 leading-relaxed tracking-tight">
                   Buyers can pay in any currency (BTC, BNB, ETH, etc.) and it will automatically exchange to {formData.currency} and send directly to your address. 
-                  Powered by ChangeNOW for instant cross-chain payments.
+                  Powered by SimpleSwap for instant cross-chain payments.
                 </p>
               </div>
             </div>
