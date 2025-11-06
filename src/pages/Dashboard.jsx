@@ -25,7 +25,7 @@ const Dashboard = () => {
 
   const stats = [
     { 
-      label: 'Total Revenue', 
+      label: 'Total Volume', 
       value: `$${statsData.totalRevenue}`, 
       change: `+${statsData.completedPayments}`, 
       icon: DollarSign, 
