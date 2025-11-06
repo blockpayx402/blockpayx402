@@ -47,6 +47,72 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+// Test ChangeNOW API key endpoint
+app.get('/api/test-api-key', async (req, res) => {
+  try {
+    const apiKey = process.env.CHANGENOW_API_KEY
+    const configApiKey = BLOCKPAY_CONFIG.changenow.apiKey
+    
+    // Test with a simple ChangeNOW endpoint that validates the key
+    const testUrl = 'https://api.changenow.io/v2/exchange/currencies'
+    const testHeaders = getChangeNowHeaders()
+    
+    console.log('[Test API Key] Testing ChangeNOW API key...')
+    console.log('[Test API Key] process.env.CHANGENOW_API_KEY exists:', !!apiKey)
+    console.log('[Test API Key] BLOCKPAY_CONFIG.changenow.apiKey exists:', !!configApiKey)
+    
+    if (!apiKey || !configApiKey) {
+      return res.status(500).json({
+        error: 'API key not found',
+        details: {
+          envVar: !!apiKey,
+          config: !!configApiKey
+        }
+      })
+    }
+    
+    const response = await fetch(testUrl, {
+      method: 'GET',
+      headers: testHeaders,
+    })
+    
+    const responseText = await response.text()
+    let responseData
+    try {
+      responseData = JSON.parse(responseText)
+    } catch (e) {
+      responseData = { raw: responseText }
+    }
+    
+    if (response.ok) {
+      res.json({
+        success: true,
+        message: 'API key is valid',
+        status: response.status,
+        apiKeyLength: apiKey.length,
+        apiKeyPrefix: apiKey.substring(0, 8),
+        currenciesCount: Array.isArray(responseData) ? responseData.length : 'N/A'
+      })
+    } else {
+      res.status(response.status).json({
+        success: false,
+        error: 'API key validation failed',
+        status: response.status,
+        apiKeyLength: apiKey.length,
+        apiKeyPrefix: apiKey.substring(0, 8),
+        response: responseData
+      })
+    }
+  } catch (error) {
+    console.error('[Test API Key] Error:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test API key',
+      message: error.message
+    })
+  }
+})
+
 // Setup status endpoint
 app.get('/api/setup', (req, res) => {
   try {
