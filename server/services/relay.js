@@ -305,15 +305,15 @@ const getRelayCurrencyAddress = async (asset, chain) => {
  */
 export const getExchangeRate = async (fromAsset, toAsset, fromChain, toChain, amount) => {
   try {
-    const originChainId = getRelayChainId(fromChain)
-    const destinationChainId = getRelayChainId(toChain)
+    const originChainId = await getRelayChainId(fromChain)
+    const destinationChainId = await getRelayChainId(toChain)
     
     if (!originChainId || !destinationChainId) {
       throw new Error(`Unsupported chain: ${fromChain} or ${toChain}`)
     }
     
-    const originCurrency = getRelayCurrencyAddress(fromAsset, fromChain)
-    const destinationCurrency = getRelayCurrencyAddress(toAsset, toChain)
+    const originCurrency = await getRelayCurrencyAddress(fromAsset, fromChain)
+    const destinationCurrency = await getRelayCurrencyAddress(toAsset, toChain)
     
     const apiUrl = 'https://api.relay.link/quote'
     
@@ -437,8 +437,8 @@ export const createRelayTransaction = async (orderData) => {
       throw new Error(`Unsupported chain: ${fromChain} or ${toChain}`)
     }
     
-    const originCurrency = getRelayCurrencyAddress(fromAsset, fromChain)
-    const destinationCurrency = getRelayCurrencyAddress(toAsset, toChain)
+    const originCurrency = await getRelayCurrencyAddress(fromAsset, fromChain)
+    const destinationCurrency = await getRelayCurrencyAddress(toAsset, toChain)
     
     const apiUrl = 'https://api.relay.link/quote'
     
