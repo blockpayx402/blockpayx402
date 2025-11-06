@@ -184,8 +184,77 @@ export const AppProvider = ({ children }) => {
     }
   }, [])
 
-  const connectWallet = async () => {
+  const connectWallet = async (chain = 'auto') => {
     try {
+      // Try Solana wallet first if explicitly requested or if no EVM wallet
+      if (chain === 'solana' || (chain === 'auto' && typeof window.ethereum === 'undefined')) {
+        // Check for Phantom wallet
+        if (window.solana && window.solana.isPhantom) {
+          try {
+            const response = await window.solana.connect()
+            const address = response.publicKey.toString()
+            
+            // Get SOL balance
+            const balance = await getSolanaBalance(address)
+            
+            const walletData = {
+              address,
+              balance,
+              provider: 'phantom',
+              chain: 'solana',
+              connected: true
+            }
+            
+            setWallet(walletData)
+            toast.success('Phantom wallet connected!')
+            return true
+          } catch (error) {
+            if (error.code === 4001) {
+              toast.error('Phantom connection rejected')
+              return false
+            }
+            throw error
+          }
+        }
+        
+        // Check for Solflare
+        if (window.solflare) {
+          try {
+            await window.solflare.connect()
+            const address = window.solflare.publicKey?.toString()
+            
+            if (address) {
+              const balance = await getSolanaBalance(address)
+              
+              const walletData = {
+                address,
+                balance,
+                provider: 'solflare',
+                chain: 'solana',
+                connected: true
+              }
+              
+              setWallet(walletData)
+              toast.success('Solflare wallet connected!')
+              return true
+            }
+          } catch (error) {
+            if (error.code === 4001) {
+              toast.error('Solflare connection rejected')
+              return false
+            }
+            throw error
+          }
+        }
+        
+        // If no Solana wallet found and chain is solana, show error
+        if (chain === 'solana') {
+          toast.error('No Solana wallet found. Please install Phantom or Solflare.')
+          return false
+        }
+      }
+      
+      // Try EVM wallet (MetaMask, etc.)
       if (typeof window.ethereum !== 'undefined') {
         // Request account access
         const accounts = await window.ethereum.request({
@@ -200,6 +269,7 @@ export const AppProvider = ({ children }) => {
             address,
             balance,
             provider: 'metamask',
+            chain: 'evm',
             connected: true
           }
           
@@ -207,23 +277,24 @@ export const AppProvider = ({ children }) => {
           toast.success('Wallet connected successfully!')
           return true
         }
-      } else {
-        // Fallback: simulate wallet connection for demo
-        const demoAddress = '0x' + Array.from({ length: 40 }, () => 
-          Math.floor(Math.random() * 16).toString(16)
-        ).join('')
-        
-        const walletData = {
-          address: demoAddress,
-          balance: '0.0',
-          provider: 'demo',
-          connected: true
-        }
-        
-        setWallet(walletData)
-        toast.success('Demo wallet connected! Install MetaMask for real wallet support.')
-        return true
       }
+      
+      // Fallback: simulate wallet connection for demo
+      const demoAddress = '0x' + Array.from({ length: 40 }, () => 
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('')
+      
+      const walletData = {
+        address: demoAddress,
+        balance: '0.0',
+        provider: 'demo',
+        chain: 'evm',
+        connected: true
+      }
+      
+      setWallet(walletData)
+      toast.success('Demo wallet connected! Install MetaMask or Phantom for real wallet support.')
+      return true
     } catch (error) {
       console.error('Wallet connection error:', error)
       if (error.code === 4001) {
@@ -232,6 +303,40 @@ export const AppProvider = ({ children }) => {
         toast.error('Failed to connect wallet')
       }
       return false
+    }
+  }
+  
+  const getSolanaBalance = async (address) => {
+    try {
+      const { CHAINS } = await import('../services/blockchain')
+      const rpcUrl = CHAINS.solana?.rpcUrls?.[0] || CHAINS.solana?.rpcUrl
+      
+      if (!rpcUrl) {
+        return '0.0'
+      }
+      
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getBalance',
+          params: [address]
+        })
+      })
+      
+      const data = await response.json()
+      if (data.result) {
+        // Convert lamports to SOL (1 SOL = 1,000,000,000 lamports)
+        const sol = data.result.value / 1_000_000_000
+        return sol.toFixed(4)
+      }
+      
+      return '0.0'
+    } catch (error) {
+      console.error('Error fetching Solana balance:', error)
+      return '0.0'
     }
   }
 

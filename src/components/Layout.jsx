@@ -157,13 +157,19 @@ const Layout = ({ children }) => {
 
 const WalletConnectButton = () => {
   const { wallet, connectWallet, disconnectWallet } = useApp()
+  const [showWalletMenu, setShowWalletMenu] = useState(false)
 
   const handleClick = async () => {
     if (wallet?.connected) {
-      disconnectWallet()
+      await disconnectWallet()
     } else {
-      await connectWallet()
+      setShowWalletMenu(true)
     }
+  }
+  
+  const handleConnect = async (chain) => {
+    setShowWalletMenu(false)
+    await connectWallet(chain)
   }
 
   const formatAddress = (address) => {
@@ -172,29 +178,57 @@ const WalletConnectButton = () => {
   }
 
   return (
-    <motion.button
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.2 }}
-      onClick={handleClick}
-      className={`px-6 py-2.5 rounded-2xl text-sm font-medium transition-all duration-300 flex items-center gap-2.5 ${
-        wallet?.connected
-          ? 'bg-white text-black shadow-soft-lg hover:shadow-soft-lg hover:bg-white/90'
-          : 'glass border border-white/[0.12] text-white/90 hover:bg-white/[0.06] hover:border-white/[0.16]'
-      }`}
-    >
-      {wallet?.connected ? (
-        <>
-          <span className="font-medium tracking-tight">{formatAddress(wallet.address)}</span>
-          <span className="w-2 h-2 bg-green-400 rounded-full shadow-sm shadow-green-400/50"></span>
-        </>
-      ) : (
-        <>
-          <Wallet className="w-4 h-4" />
-          <span className="tracking-tight">Connect Wallet</span>
-        </>
-      )}
-    </motion.button>
+    <div className="relative">
+      <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.2 }}
+        onClick={handleClick}
+        className={`px-6 py-2.5 rounded-2xl text-sm font-medium transition-all duration-300 flex items-center gap-2.5 ${
+          wallet?.connected
+            ? 'bg-white text-black shadow-soft-lg hover:shadow-soft-lg hover:bg-white/90'
+            : 'glass border border-white/[0.12] text-white/90 hover:bg-white/[0.06] hover:border-white/[0.16]'
+        }`}
+      >
+        {wallet?.connected ? (
+          <>
+            <span className="font-medium tracking-tight">{formatAddress(wallet.address)}</span>
+            <span className="w-2 h-2 bg-green-400 rounded-full shadow-sm shadow-green-400/50"></span>
+          </>
+        ) : (
+          <>
+            <Wallet className="w-4 h-4" />
+            <span className="tracking-tight">Connect Wallet</span>
+          </>
+        )}
+      </motion.button>
+      
+      <AnimatePresence>
+        {showWalletMenu && !wallet?.connected && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute top-full right-0 mt-2 glass rounded-xl border border-white/10 p-2 min-w-[200px] z-50"
+          >
+            <button
+              onClick={() => handleConnect('evm')}
+              className="w-full px-4 py-2 text-left rounded-lg hover:bg-white/5 transition-colors flex items-center gap-2"
+            >
+              <span>EVM Wallets</span>
+              <span className="text-xs text-white/40">(MetaMask)</span>
+            </button>
+            <button
+              onClick={() => handleConnect('solana')}
+              className="w-full px-4 py-2 text-left rounded-lg hover:bg-white/5 transition-colors flex items-center gap-2 mt-1"
+            >
+              <span>Solana Wallets</span>
+              <span className="text-xs text-white/40">(Phantom)</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
