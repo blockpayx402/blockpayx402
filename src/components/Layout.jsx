@@ -19,6 +19,7 @@ const Layout = ({ children }) => {
   const navItems = [
     { path: '/', icon: Wallet, label: 'Dashboard' },
     { path: '/request', icon: PlusCircle, label: 'Create Request' },
+    { path: '/swap', icon: Zap, label: 'Swapper' },
     { path: '/transactions', icon: History, label: 'Transactions' },
     { path: '/staking', icon: TrendingUp, label: 'Staking' },
   ]

@@ -7,6 +7,7 @@ import Transactions from './pages/Transactions'
 import PaymentPage from './pages/PaymentPage'
 import Staking from './pages/Staking'
 import OrderStatus from './pages/OrderStatus'
+import Swapper from './pages/Swapper'
 import Layout from './components/Layout'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/request" element={<PaymentRequest />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/staking" element={<Staking />} />
+            <Route path="/swap" element={<Swapper />} />
             <Route path="/pay/:requestId" element={<PaymentPage />} />
             <Route path="/status/:orderId" element={<OrderStatus />} />
           </Routes>

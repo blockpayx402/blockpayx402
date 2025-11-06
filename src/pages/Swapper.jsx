@@ -1,0 +1,470 @@
+import { useState, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, RefreshCw, Loader2, ArrowUpDown, CheckCircle2, Copy, ExternalLink } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-hot-toast'
+import QRCode from 'qrcode.react'
+import { ordersAPI } from '../services/api'
+import { CHAINS } from '../services/blockchain'
+
+const Swapper = () => {
+  const navigate = useNavigate()
+  
+  // Swap direction: from -> to
+  const [fromChain, setFromChain] = useState('bnb')
+  const [fromAsset, setFromAsset] = useState('BNB')
+  const [fromAmount, setFromAmount] = useState('')
+  
+  const [toChain, setToChain] = useState('bnb')
+  const [toAsset, setToAsset] = useState('USDT')
+  const [toAmount, setToAmount] = useState('')
+  
+  const [recipientAddress, setRecipientAddress] = useState('')
+  const [refundAddress, setRefundAddress] = useState('')
+  const [showRefund, setShowRefund] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [calculating, setCalculating] = useState(false)
+  const [order, setOrder] = useState(null)
+  const debounceTimer = useRef(null)
+
+  const availableChains = [
+    { value: 'ethereum', label: 'Ethereum', assets: ['ETH', 'USDT', 'USDC'] },
+    { value: 'bnb', label: 'BNB Chain', assets: ['BNB', 'USDT', 'BUSD'] },
+    { value: 'polygon', label: 'Polygon', assets: ['MATIC', 'USDT', 'USDC'] },
+    { value: 'solana', label: 'Solana', assets: ['SOL', 'USDC'] },
+  ]
+
+  const fromChainConfig = availableChains.find(c => c.value === fromChain)
+  const toChainConfig = availableChains.find(c => c.value === toChain)
+
+  // Auto-calculate "to" amount when "from" amount changes
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+
+    const calculateRate = async () => {
+      if (fromAmount && parseFloat(fromAmount) > 0 && fromChain && fromAsset && toChain && toAsset) {
+        setCalculating(true)
+        try {
+          const rateData = await ordersAPI.getExchangeRate({
+            fromChain,
+            fromAsset,
+            toChain,
+            toAsset,
+            amount: parseFloat(fromAmount),
+            direction: 'forward'
+          })
+          const estimatedTo = rateData.estimatedAmount && typeof rateData.estimatedAmount === 'number' 
+            ? rateData.estimatedAmount.toFixed(6) 
+            : (rateData.estimatedAmount?.toString() || '')
+          setToAmount(estimatedTo)
+        } catch (error) {
+          console.error('Error calculating rate:', error)
+          setToAmount('')
+          const errorMsg = error.response?.data?.error || error.message || 'Failed to calculate exchange rate'
+          if (!errorMsg.includes('API key')) {
+            toast.error(errorMsg, { duration: 4000 })
+          }
+        } finally {
+          setCalculating(false)
+        }
+      } else {
+        setToAmount('')
+      }
+    }
+
+    debounceTimer.current = setTimeout(calculateRate, 500)
+    
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current)
+      }
+    }
+  }, [fromAmount, fromChain, fromAsset, toChain, toAsset])
+
+  const handleSwap = async () => {
+    if (!fromAmount || parseFloat(fromAmount) <= 0) {
+      toast.error('Please enter an amount to swap')
+      return
+    }
+
+    if (!recipientAddress || recipientAddress.trim() === '') {
+      toast.error('Please enter recipient address')
+      return
+    }
+
+    // Validate recipient address for destination chain
+    const isEVM = toChain !== 'solana'
+    const isSolana = toChain === 'solana'
+    
+    if (isEVM && !recipientAddress.startsWith('0x')) {
+      toast.error('Invalid EVM address. Must start with 0x')
+      return
+    }
+    
+    if (isSolana && recipientAddress.length < 32) {
+      toast.error('Invalid Solana address')
+      return
+    }
+
+    setLoading(true)
+    try {
+      // Direct swap - no payment request needed
+      const orderData = await ordersAPI.create({
+        requestId: null, // No payment request, direct swap
+        fromChain,
+        fromAsset,
+        toChain,
+        toAsset,
+        amount: parseFloat(fromAmount),
+        recipientAddress: recipientAddress.trim(),
+        refundAddress: refundAddress || null
+      })
+
+      setOrder(orderData)
+      toast.success('Swap order created!')
+    } catch (error) {
+      console.error('Error creating swap:', error)
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to create swap order'
+      toast.error(errorMessage, { duration: 5000 })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSwitch = () => {
+    // Switch from and to
+    const tempChain = fromChain
+    const tempAsset = fromAsset
+    const tempAmount = fromAmount
+    
+    setFromChain(toChain)
+    setFromAsset(toAsset)
+    setFromAmount(toAmount)
+    
+    setToChain(tempChain)
+    setToAsset(tempAsset)
+    setToAmount(tempAmount)
+  }
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+    toast.success('Copied to clipboard!')
+  }
+
+  if (order) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <Link to="/swap" className="inline-flex items-center gap-2 text-dark-400 hover:text-white mb-8">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Swapper
+        </Link>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass-strong rounded-2xl p-6 bg-gradient-to-br from-green-500/20 to-blue-500/20 border border-green-500/30"
+        >
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-green-500/20 border border-green-500/30 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-green-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-green-400 mb-2 tracking-tight">Swap Order Created!</h3>
+            <p className="text-sm text-white/70 tracking-tight">Send {fromAsset} to the deposit address below</p>
+          </div>
+
+          <div className="glass-strong rounded-2xl p-6 flex items-center justify-center mb-6 border border-white/[0.12]">
+            <div className="w-64 h-64 bg-white rounded-2xl p-4 flex items-center justify-center shadow-soft-lg">
+              <QRCode 
+                value={order.depositAddress} 
+                size={224}
+                level="H"
+                includeMargin={false}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-white/60 tracking-tight">Deposit Address</span>
+                <button
+                  onClick={() => copyToClipboard(order.depositAddress)}
+                  className="text-primary-400 hover:text-primary-300 flex items-center gap-2 transition-colors p-2 glass-strong rounded-lg border border-primary-500/30 hover:bg-primary-500/10"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span className="text-xs tracking-tight">Copy</span>
+                </button>
+              </div>
+              <p className="font-mono text-sm break-all text-white/90 tracking-tight">{order.depositAddress}</p>
+            </div>
+
+            <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
+              <div className="flex items-center justify-between text-sm mb-2">
+                <span className="text-white/60">Sending</span>
+                <span className="font-medium">{fromAmount} {fromAsset} on {fromChainConfig?.label}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-white/60">Receiving</span>
+                <span className="font-medium text-primary-400">{toAmount} {toAsset} on {toChainConfig?.label}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-white/50 mb-4">
+              <CheckCircle2 className="w-4 h-4 text-green-400" />
+              <span>Auto-swap enabled • Direct to recipient</span>
+            </div>
+
+            <button
+              onClick={() => navigate(`/status/${order.id}`)}
+              className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Track Swap Status
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <Link to="/" className="inline-flex items-center gap-2 text-dark-400 hover:text-white mb-8">
+        <ArrowLeft className="w-4 h-4" />
+        Back to Dashboard
+      </Link>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        className="glass rounded-3xl p-10 border border-white/[0.08] max-w-3xl mx-auto"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-soft-lg shadow-purple-500/20">
+            <RefreshCw className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">Token Swapper</h1>
+            <p className="text-white/60 text-lg">Swap any cryptocurrency instantly</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* You Send */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You send</label>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
+                  <select
+                    value={fromChain}
+                    onChange={(e) => {
+                      setFromChain(e.target.value)
+                      const chain = availableChains.find(c => c.value === e.target.value)
+                      const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
+                      setFromAsset(preferredAsset)
+                    }}
+                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                  >
+                    {availableChains.map(chain => (
+                      <option key={chain.value} value={chain.value} className="bg-black text-white">
+                        {chain.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
+                  <select
+                    value={fromAsset}
+                    onChange={(e) => setFromAsset(e.target.value)}
+                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                  >
+                    {fromChainConfig?.assets.map(asset => (
+                      <option key={asset} value={asset} className="bg-black text-white">
+                        {asset}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Amount</label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={fromAmount}
+                  onChange={(e) => setFromAmount(e.target.value)}
+                  placeholder="0.0"
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-purple-500/30 focus:border-purple-500/50 focus:outline-none transition-all bg-purple-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Switch Button */}
+          <div className="flex items-center justify-center py-2">
+            <button
+              onClick={handleSwitch}
+              className="p-3 glass-strong rounded-xl border border-white/10 hover:border-purple-500/50 transition-all"
+            >
+              <ArrowUpDown className="w-5 h-5 text-white/70" />
+            </button>
+          </div>
+
+          {/* Floating rate indicator */}
+          <div className="flex items-center justify-center gap-2 py-2">
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <RefreshCw className="w-4 h-4" />
+              <span>Floating rate</span>
+            </div>
+          </div>
+
+          {/* You Get */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">You get</label>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Chain</label>
+                  <select
+                    value={toChain}
+                    onChange={(e) => {
+                      setToChain(e.target.value)
+                      const chain = availableChains.find(c => c.value === e.target.value)
+                      const preferredAsset = chain?.assets.find(a => a === 'USDT') || chain?.assets[0] || 'ETH'
+                      setToAsset(preferredAsset)
+                    }}
+                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-green-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                  >
+                    {availableChains.map(chain => (
+                      <option key={chain.value} value={chain.value} className="bg-black text-white">
+                        {chain.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Currency</label>
+                  <select
+                    value={toAsset}
+                    onChange={(e) => setToAsset(e.target.value)}
+                    className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-green-500/50 focus:outline-none transition-all bg-white/[0.04] text-white text-sm"
+                  >
+                    {toChainConfig?.assets.map(asset => (
+                      <option key={asset} value={asset} className="bg-black text-white">
+                        {asset}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-white/60 mb-1.5 tracking-tight">Estimated amount</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={toAmount || ''}
+                    readOnly
+                    placeholder={calculating ? "Calculating..." : "0.0"}
+                    className="w-full px-4 py-3 glass-strong rounded-xl border border-green-500/30 focus:border-green-500/50 focus:outline-none transition-all bg-green-500/10 text-white placeholder:text-white/30 text-lg font-semibold"
+                  />
+                  {calculating && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-5 h-5 animate-spin text-green-400" />
+                    </div>
+                  )}
+                </div>
+                {calculating && (
+                  <p className="text-xs text-green-400 mt-2 flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Calculating exchange rate...
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Recipient Address */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
+              Recipient Address
+            </label>
+            <input
+              type="text"
+              value={recipientAddress}
+              onChange={(e) => setRecipientAddress(e.target.value)}
+              placeholder={toChain === 'solana' ? 'Enter Solana address...' : '0x...'}
+              className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
+            />
+            <p className="text-xs text-white/50 mt-2 tracking-tight">
+              Address where you want to receive {toAsset} on {toChainConfig?.label}
+            </p>
+          </div>
+
+          {/* Refund Address (Optional) */}
+          {showRefund && (
+            <div>
+              <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">
+                Refund Address (Optional)
+              </label>
+              <input
+                type="text"
+                value={refundAddress}
+                onChange={(e) => setRefundAddress(e.target.value)}
+                placeholder={fromChain === 'solana' ? 'Your refund address...' : '0x...'}
+                className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
+              />
+              <p className="text-xs text-white/50 mt-2 tracking-tight">
+                Address to refund if swap fails
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowRefund(!showRefund)}
+              className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-white/20 text-white/70 hover:text-white transition-all text-sm"
+            >
+              {showRefund ? 'Hide' : 'Add'} Refund Address
+            </button>
+          </div>
+
+          <button
+            onClick={handleSwap}
+            disabled={loading || calculating || !fromAmount || !toAmount || !recipientAddress || parseFloat(fromAmount) <= 0}
+            className="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium text-white hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Creating Swap...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-5 h-5" />
+                Create Swap
+              </>
+            )}
+          </button>
+
+          <div className="flex items-center gap-2 text-xs text-white/50">
+            <CheckCircle2 className="w-4 h-4 text-green-400" />
+            <span>Powered by SimpleSwap • Instant exchange • Direct to recipient</span>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+export default Swapper
+

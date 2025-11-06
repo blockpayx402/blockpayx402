@@ -117,11 +117,26 @@ export const syncAPI = {
 export const ordersAPI = {
   create: async (orderData) => {
     try {
-      const response = await api.post('/create-order', orderData)
+      // Support both payment request flow and direct swap flow
+      const payload = {
+        requestId: orderData.requestId || null,
+        fromChain: orderData.fromChain,
+        fromAsset: orderData.fromAsset,
+        amount: orderData.amount,
+        refundAddress: orderData.refundAddress || null,
+        // For direct swaps (no requestId)
+        ...(orderData.requestId === null && {
+          toChain: orderData.toChain,
+          toAsset: orderData.toAsset,
+          recipientAddress: orderData.recipientAddress
+        })
+      }
+      const response = await api.post('/create-order', payload)
       return response.data
     } catch (error) {
       console.error('Error creating order:', error)
-      throw error
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to create order'
+      throw new Error(errorMessage)
     }
   },
 

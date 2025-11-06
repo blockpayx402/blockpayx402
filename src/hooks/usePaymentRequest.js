@@ -76,7 +76,6 @@ export const usePaymentRequest = () => {
         currency: formData.currency,
         description: formData.description || 'Payment request',
         recipient: formData.recipient,
-        enableExchange: formData.enableExchange !== false, // Default to true
       })
 
       toast.success('Payment request created successfully!')
