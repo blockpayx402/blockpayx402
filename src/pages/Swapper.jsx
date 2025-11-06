@@ -594,63 +594,62 @@ const Swapper = () => {
                   </div>
                 )}
 
-                {!isDirectSwap && (
-                  <div className="space-y-4">
-
-            <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
-              <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-white/60">Sending</span>
-                <span className="font-medium">{fromAmount} {fromAsset} on {fromChainConfig?.label}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-white/60">Receiving</span>
-                <span className="font-medium text-primary-400">{toAmount} {toAsset} on {toChainConfig?.label}</span>
-              </div>
-            </div>
-
-            {!isDirectSwap && (
-              <div className="flex items-center gap-2 text-xs text-white/50 mb-4">
-                <CheckCircle2 className="w-4 h-4 text-green-400" />
-                <span>Auto-swap enabled • Direct to recipient</span>
-              </div>
-            )}
-
-            {!isDirectSwap && (
-              <button
-                onClick={() => navigate(`/status/${order.id}`)}
-                className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Track Swap Status
-              </button>
-            )}
-            
-            {isDirectSwap && (
-              <div className="space-y-3">
-                <p className="text-sm text-white/70 text-center">
-                  For same-chain swaps, please use a DEX aggregator like:
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <a
-                    href={`https://app.uniswap.org/#/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}&chainId=${order.chainId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
-                  >
-                    Uniswap
-                  </a>
-                  <a
-                    href={`https://pancakeswap.finance/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
-                  >
-                    PancakeSwap
-                  </a>
+                <div className="glass-strong rounded-xl p-4 border border-white/[0.12]">
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="text-white/60">Sending</span>
+                    <span className="font-medium">{fromAmount} {fromAsset} on {fromChainConfig?.label}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-white/60">Receiving</span>
+                    <span className="font-medium text-primary-400">{toAmount} {toAsset} on {toChainConfig?.label}</span>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+
+                {!isDirectSwap && (
+                  <div className="flex items-center gap-2 text-xs text-white/50 mb-4">
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                    <span>Auto-swap enabled • Direct to recipient</span>
+                  </div>
+                )}
+
+                {!isDirectSwap && (
+                  <button
+                    onClick={() => navigate(`/status/${order.id}`)}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Track Swap Status
+                  </button>
+                )}
+                
+                {isDirectSwap && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-white/70 text-center">
+                      For same-chain swaps, please use a DEX aggregator:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={`https://app.uniswap.org/#/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}&chainId=${order.chainId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
+                      >
+                        Uniswap
+                      </a>
+                      <a
+                        href={`https://pancakeswap.finance/swap?inputCurrency=${order.fromTokenAddress}&outputCurrency=${order.toTokenAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/50 text-center text-sm text-white/90 hover:text-white transition-all"
+                      >
+                        PancakeSwap
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
         </motion.div>
       </div>
     )
