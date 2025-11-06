@@ -258,6 +258,9 @@ export const AppProvider = ({ children }) => {
   }
 
   const updatePaymentRequestStatus = useCallback(async (requestId, status) => {
+    console.log(`🔄 Updating request ${requestId} status to: ${status}`)
+    
+    // Update UI immediately (optimistic update)
     setPaymentRequests(prev => {
       const updated = prev.map(req =>
         req.id === requestId
@@ -268,7 +271,9 @@ export const AppProvider = ({ children }) => {
       // Update on server
       const updatedRequest = updated.find(req => req.id === requestId)
       if (updatedRequest) {
-        paymentRequestsAPI.update(requestId, { status }).catch(error => {
+        paymentRequestsAPI.update(requestId, { status }).then(() => {
+          console.log(`✅ Request ${requestId} status updated to ${status} on server`)
+        }).catch(error => {
           console.error('Error updating request on server:', error)
         })
       }
@@ -365,7 +370,7 @@ export const AppProvider = ({ children }) => {
     let checkCount = 0
     let lastErrorCount = 0
 
-    // Check payment every 20 seconds (production-ready interval)
+    // Check payment every 10 seconds for faster detection
     const interval = setInterval(async () => {
       try {
         checkCount++
@@ -432,7 +437,17 @@ export const AppProvider = ({ children }) => {
                 clearInterval(interval)
                 monitoringIntervalsRef.current.delete(requestId)
 
-                // Update payment request status
+                // Update payment request status to completed IMMEDIATELY
+                setPaymentRequests(prev => {
+                  const updated = prev.map(req =>
+                    req.id === requestId
+                      ? { ...req, status: 'completed', updatedAt: new Date().toISOString() }
+                      : req
+                  )
+                  return updated
+                })
+                
+                // Update on server
                 await updatePaymentRequestStatus(requestId, 'completed')
                 
                 // Save transaction with actual blockchain data
@@ -450,7 +465,7 @@ export const AppProvider = ({ children }) => {
                 })
                 
                 console.log('✅ Transaction saved:', savedTx.id)
-                toast.success(`Payment verified! Transaction: ${result.txHash.slice(0, 8)}...`)
+                toast.success(`✅ Payment verified! Status updated to completed. TX: ${result.txHash.slice(0, 8)}...`)
               } else {
                 // Update last checked time and save to server
                 const lastChecked = new Date().toISOString()
@@ -494,7 +509,7 @@ export const AppProvider = ({ children }) => {
         console.error('❌ Error in payment monitoring:', error)
         lastErrorCount++
       }
-    }, 20000) // Check every 20 seconds (production-ready)
+    }, 10000) // Check every 10 seconds for faster auto-detection
 
     monitoringIntervalsRef.current.set(requestId, interval)
     console.log('✅ Monitoring started for request:', requestId)
@@ -545,8 +560,9 @@ export const AppProvider = ({ children }) => {
       const savedRequest = await paymentRequestsAPI.create(newRequest)
       setPaymentRequests(prev => [savedRequest, ...prev])
       
-      // Start monitoring this payment request
+      // Start monitoring this payment request IMMEDIATELY
       if (savedRequest.recipient) {
+        console.log('🚀 Starting auto-monitoring for new request:', savedRequest.id)
         startPaymentMonitoring(savedRequest.id)
       }
       
@@ -558,8 +574,9 @@ export const AppProvider = ({ children }) => {
       // Fallback: save locally
       setPaymentRequests(prev => [newRequest, ...prev])
       
-      // Start monitoring this payment request
+      // Start monitoring this payment request IMMEDIATELY
       if (newRequest.recipient) {
+        console.log('🚀 Starting auto-monitoring for new request:', newRequest.id)
         startPaymentMonitoring(newRequest.id)
       }
       
