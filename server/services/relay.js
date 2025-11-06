@@ -190,10 +190,6 @@ export const createRelayTransaction = async (orderData) => {
       }),
     })
     
-    if (!quote || !quote.depositAddress) {
-      throw new Error('Failed to get quote from Relay SDK')
-    }
-    
     // Extract data from quote response
     // Relay SDK quote format may vary, so we handle multiple possible fields
     const depositAddress = quote.depositAddress || quote.originAddress || quote.fromAddress
@@ -205,6 +201,10 @@ export const createRelayTransaction = async (orderData) => {
       destinationAmount,
       quoteId
     })
+    
+    if (!quote || !depositAddress) {
+      throw new Error('Failed to get quote from Relay SDK')
+    }
     
     return {
       exchangeId: quoteId || orderId,
@@ -379,55 +379,134 @@ export const getAllRelayTokens = async (chainId) => {
     
     // First, try to get tokens from the chain data itself (from /chains endpoint)
     const chains = await getAllRelayChains()
-    const chain = chains.find(c => 
-      c.chainId?.toString() === chainId.toString() || 
-      c.id?.toString() === chainId.toString() ||
-      c.chainId === chainId ||
-      c.id === chainId
-    )
+    const chain = chains.find(c => {
+      const cId = c.chainId || c.id || c.chain_id
+      return cId?.toString() === chainId.toString() || cId === chainId
+    })
     
-    if (chain && chain.tokens && Array.isArray(chain.tokens) && chain.tokens.length > 0) {
-      console.log('[Relay] Found', chain.tokens.length, 'tokens in chain data')
-      return chain.tokens.map(token => ({
-        symbol: token.symbol || token.name || 'UNKNOWN',
-        address: token.address || token.contractAddress || token.tokenAddress || (token.isNative ? '0x0000000000000000000000000000000000000000' : ''),
-        decimals: token.decimals || 18,
-        name: token.name || token.symbol,
-        isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
-      }))
+    console.log('[Relay] Found chain:', chain ? (chain.name || chain.displayName) : 'NOT FOUND')
+    
+    if (chain) {
+      // Check if tokens are in chain data
+      if (chain.tokens && Array.isArray(chain.tokens) && chain.tokens.length > 0) {
+        console.log('[Relay] Found', chain.tokens.length, 'tokens in chain data')
+        return chain.tokens.map(token => ({
+          symbol: token.symbol || token.name || 'UNKNOWN',
+          address: token.address || token.contractAddress || token.tokenAddress || (token.isNative ? '0x0000000000000000000000000000000000000000' : ''),
+          decimals: token.decimals || 18,
+          name: token.name || token.symbol,
+          isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+        }))
+      }
+      
+      // Check if tokens are in tokenSupport or supportedTokens
+      if (chain.tokenSupport && Array.isArray(chain.tokenSupport) && chain.tokenSupport.length > 0) {
+        console.log('[Relay] Found', chain.tokenSupport.length, 'tokens in tokenSupport')
+        return chain.tokenSupport.map(token => ({
+          symbol: token.symbol || token.name || 'UNKNOWN',
+          address: token.address || token.contractAddress || token.tokenAddress || (token.isNative ? '0x0000000000000000000000000000000000000000' : ''),
+          decimals: token.decimals || 18,
+          name: token.name || token.symbol,
+          isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+        }))
+      }
+      
+      if (chain.supportedTokens && Array.isArray(chain.supportedTokens) && chain.supportedTokens.length > 0) {
+        console.log('[Relay] Found', chain.supportedTokens.length, 'tokens in supportedTokens')
+        return chain.supportedTokens.map(token => ({
+          symbol: token.symbol || token.name || 'UNKNOWN',
+          address: token.address || token.contractAddress || token.tokenAddress || (token.isNative ? '0x0000000000000000000000000000000000000000' : ''),
+          decimals: token.decimals || 18,
+          name: token.name || token.symbol,
+          isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+        }))
+      }
+      
+      // Check erc20Currencies field
+      if (chain.erc20Currencies && Array.isArray(chain.erc20Currencies) && chain.erc20Currencies.length > 0) {
+        console.log('[Relay] Found', chain.erc20Currencies.length, 'tokens in erc20Currencies')
+        const tokens = chain.erc20Currencies.map(token => ({
+          symbol: token.symbol || token.name || token.code || 'UNKNOWN',
+          address: token.address || token.contractAddress || token.contract || '',
+          decimals: token.decimals || token.decimal || 18,
+          name: token.name || token.symbol || token.code,
+          isNative: false,
+        }))
+        
+        // Add native token
+        const nativeSymbol = chain.symbol || chain.nativeCurrency?.symbol || chain.native_currency?.symbol
+        if (nativeSymbol) {
+          tokens.unshift({
+            symbol: nativeSymbol,
+            address: '0x0000000000000000000000000000000000000000',
+            decimals: chain.decimals || chain.nativeCurrency?.decimals || 18,
+            name: nativeSymbol,
+            isNative: true,
+          })
+        }
+        
+        return tokens
+      }
+      
+      // Check currency field (single native currency)
+      if (chain.currency) {
+        console.log('[Relay] Found currency field')
+        const tokens = [{
+          symbol: chain.currency.symbol || chain.currency.code || chain.symbol,
+          address: '0x0000000000000000000000000000000000000000',
+          decimals: chain.currency.decimals || chain.decimals || 18,
+          name: chain.currency.name || chain.currency.symbol,
+          isNative: true,
+        }]
+        
+        // Add erc20Currencies if available
+        if (chain.erc20Currencies && Array.isArray(chain.erc20Currencies)) {
+          chain.erc20Currencies.forEach(token => {
+            tokens.push({
+              symbol: token.symbol || token.code || 'UNKNOWN',
+              address: token.address || token.contract || '',
+              decimals: token.decimals || token.decimal || 18,
+              name: token.name || token.symbol || token.code,
+              isNative: false,
+            })
+          })
+        }
+        
+        return tokens
+      }
     }
     
-    // If not in chain data, try API endpoints
-    // Try GET /chains/{chainId}/tokens first
-    let response = await fetch(`https://api.relay.link/chains/${chainId}/tokens`, {
-      method: 'GET',
+    // Try POST /currencies endpoint (this is the documented way)
+    console.log('[Relay] Trying POST /currencies endpoint')
+    let response = await fetch(`https://api.relay.link/currencies`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        chainId: chainId.toString(),
+      }),
     })
     
-    // If GET fails, try POST /currencies
     if (!response.ok) {
-      console.log('[Relay] GET /chains/{chainId}/tokens failed, trying POST /currencies')
-      response = await fetch(`https://api.relay.link/currencies`, {
-        method: 'POST',
+      // Try GET /chains/{chainId}/tokens as alternative
+      console.log('[Relay] POST /currencies failed, trying GET /chains/{chainId}/tokens')
+      response = await fetch(`https://api.relay.link/chains/${chainId}/tokens`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          chainId: chainId.toString(),
-        }),
       })
     }
     
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error')
       console.error(`[Relay] Failed to fetch tokens: ${response.status} - ${errorText}`)
-      throw new Error(`Failed to fetch tokens: ${response.status}`)
+      throw new Error(`Failed to fetch tokens: ${response.status} - ${errorText}`)
     }
     
     const data = await response.json()
-    console.log('[Relay] Token response format:', Array.isArray(data) ? 'array' : typeof data, data ? Object.keys(data) : 'null')
+    console.log('[Relay] Token response:', JSON.stringify(data).substring(0, 500))
     
     // Handle different response formats
     let tokens = []
@@ -439,77 +518,30 @@ export const getAllRelayTokens = async (chainId) => {
       tokens = data.tokens
     } else if (data.data && Array.isArray(data.data)) {
       tokens = data.data
+    } else if (data.result && Array.isArray(data.result)) {
+      tokens = data.result
     }
     
     console.log('[Relay] Found', tokens.length, 'tokens for chain', chainId)
     
+    if (tokens.length === 0) {
+      console.error('[Relay] No tokens found in API response. Full response:', JSON.stringify(data))
+      throw new Error(`No tokens found for chain ${chainId}`)
+    }
+    
     // Ensure tokens have required fields
     tokens = tokens.map(token => ({
-      symbol: token.symbol || token.name || 'UNKNOWN',
-      address: token.address || token.contractAddress || token.tokenAddress || (token.isNative ? '0x0000000000000000000000000000000000000000' : ''),
-      decimals: token.decimals || 18,
-      name: token.name || token.symbol,
-      isNative: token.isNative || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
+      symbol: token.symbol || token.name || token.code || 'UNKNOWN',
+      address: token.address || token.contractAddress || token.tokenAddress || token.contract || (token.isNative ? '0x0000000000000000000000000000000000000000' : ''),
+      decimals: token.decimals || token.decimal || 18,
+      name: token.name || token.symbol || token.code,
+      isNative: token.isNative || token.native || token.address === '0x0000000000000000000000000000000000000000' || !token.address,
     }))
-    
-    // If still no tokens, add at least native token as fallback
-    if (tokens.length === 0) {
-      console.log('[Relay] No tokens found, adding native token fallback')
-      const chains = await getAllRelayChains()
-      const chain = chains.find(c => 
-        c.chainId?.toString() === chainId.toString() || 
-        c.id?.toString() === chainId.toString() ||
-        c.chainId === chainId ||
-        c.id === chainId
-      )
-      
-      if (chain) {
-        const nativeSymbol = chain.symbol || chain.nativeCurrency?.symbol || chain.native_currency?.symbol || 'ETH'
-        tokens = [{
-          symbol: nativeSymbol,
-          address: '0x0000000000000000000000000000000000000000',
-          decimals: chain.decimals || chain.nativeCurrency?.decimals || 18,
-          name: nativeSymbol,
-          isNative: true,
-        }]
-        
-        // Add common tokens for known chains
-        const commonTokens = {
-          '1': ['USDT', 'USDC', 'DAI', 'WBTC'], // Ethereum
-          '56': ['USDT', 'BUSD', 'USDC', 'CAKE'], // BSC
-          '137': ['USDT', 'USDC', 'DAI'], // Polygon
-          '42161': ['USDT', 'USDC', 'ARB'], // Arbitrum
-          '10': ['USDT', 'USDC', 'OP'], // Optimism
-        }
-        
-        const chainIdStr = chainId.toString()
-        if (commonTokens[chainIdStr]) {
-          commonTokens[chainIdStr].forEach(symbol => {
-            tokens.push({
-              symbol: symbol,
-              address: '', // Will need to be fetched or looked up
-              decimals: symbol === 'WBTC' ? 8 : (symbol === 'USDT' || symbol === 'USDC' ? 6 : 18),
-              name: symbol,
-              isNative: false,
-            })
-          })
-        }
-        
-        console.log('[Relay] Added fallback tokens:', tokens.length)
-      }
-    }
     
     return tokens
   } catch (error) {
     console.error('[Relay SDK] Error getting tokens:', error)
-    // Return at least native token on error
-    return [{
-      symbol: 'ETH',
-      address: '0x0000000000000000000000000000000000000000',
-      decimals: 18,
-      name: 'Ethereum',
-      isNative: true,
-    }]
+    throw error // Don't return fallback, throw error so frontend knows it failed
   }
 }
 
