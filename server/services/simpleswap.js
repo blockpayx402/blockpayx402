@@ -167,27 +167,41 @@ const getSimpleSwapCurrencyFromList = (currency, chain = null) => {
   
   // Search for matching currency
   for (const item of currencies) {
-    const itemSymbol = (item.symbol || item.code || item.currency || '').toUpperCase()
-    const itemNetwork = (item.network || item.chain || '').toLowerCase()
+    const itemSymbol = (item.symbol || item.code || item.currency || item.name || '').toUpperCase()
+    const itemNetwork = (item.network || item.chain || item.blockchain || '').toLowerCase()
+    const itemCode = item.code || item.currency || item.id || itemSymbol.toLowerCase()
     
     // Match by symbol
-    if (itemSymbol === upperCurrency) {
+    if (itemSymbol === upperCurrency || itemSymbol.includes(upperCurrency) || upperCurrency.includes(itemSymbol)) {
       // If chain specified, match network too
       if (chainLower) {
         const networkMap = {
-          'ethereum': ['eth', 'ethereum', 'erc20'],
-          'bnb': ['bsc', 'bep20', 'binance'],
+          'ethereum': ['eth', 'ethereum', 'erc20', 'erc-20'],
+          'bnb': ['bsc', 'bep20', 'bep-20', 'binance', 'binance smart chain'],
           'polygon': ['matic', 'polygon'],
           'solana': ['sol', 'solana', 'spl'],
         }
         const expectedNetworks = networkMap[chainLower] || [chainLower]
         
-        if (!itemNetwork || expectedNetworks.some(n => itemNetwork.includes(n))) {
-          return item.code || item.currency || itemSymbol.toLowerCase()
+        // If network matches or no network specified (might be default)
+        if (!itemNetwork || expectedNetworks.some(n => itemNetwork.includes(n) || n.includes(itemNetwork))) {
+          console.log('[SimpleSwap] Found currency match:', {
+            currency,
+            chain,
+            itemCode,
+            itemSymbol,
+            itemNetwork
+          })
+          return itemCode
         }
       } else {
         // No chain specified, return first match
-        return item.code || item.currency || itemSymbol.toLowerCase()
+        console.log('[SimpleSwap] Found currency match (no chain):', {
+          currency,
+          itemCode,
+          itemSymbol
+        })
+        return itemCode
       }
     }
   }
@@ -238,7 +252,18 @@ const getSimpleSwapCurrency = async (currency, chain = null) => {
   if (chainLower && NETWORK_MAP[chainLower]) {
     const network = NETWORK_MAP[chainLower]
     
-    // For tokens on any network, use currency_network format
+    // SimpleSwap format varies by chain:
+    // - BSC tokens: USDT/BUSD use just "usdt"/"busd" (not "usdt_bsc")
+    // - Ethereum tokens: "usdt_eth" or "usdt"
+    // - Polygon tokens: "usdt_matic" or "usdt"
+    // - Solana tokens: "usdc_sol"
+    
+    if (network === 'bsc' && (upperCurrency === 'USDT' || upperCurrency === 'BUSD')) {
+      // BSC USDT/BUSD use just the currency code
+      return upperCurrency.toLowerCase()
+    }
+    
+    // For other networks, try currency_network format
     // Format: currency_network (e.g., usdc_eth, usdc_sol)
     return `${upperCurrency.toLowerCase()}_${network}`
   }
