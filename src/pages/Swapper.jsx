@@ -329,7 +329,7 @@ const Swapper = () => {
           return
         }
 
-        toast.error('Unable to load Jupiter token list. Using default tokens.')
+        toast.error('Unable to load token list. Using default tokens.')
       } finally {
         setLoadingTokens(false)
       }
@@ -417,7 +417,7 @@ const Swapper = () => {
       >
         <div>
           <h1 className="text-4xl font-semibold gradient-text tracking-tight">Swap Assets</h1>
-          <p className="text-white/60 text-sm tracking-tight">Live quotes powered by Jupiter Aggregator</p>
+          <p className="text-white/60 text-sm tracking-tight">Live quotes and best rates</p>
         </div>
         <button
           onClick={fetchQuote}
@@ -511,7 +511,7 @@ const Swapper = () => {
             rel="noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500/20 border border-primary-500/40 text-primary-100 hover:bg-primary-500/30 transition"
           >
-            Open in Jupiter
+            Open Swap
             <ExternalLink className="w-4 h-4" />
           </a>
         </div>
@@ -523,7 +523,7 @@ const Swapper = () => {
         transition={{ delay: 0.15 }}
         className="text-center text-xs text-white/40 tracking-tight"
       >
-        Quotes provided by Jupiter • Paste any Solana mint to swap instantly
+        Paste any Solana mint address to swap instantly
       </motion.div>
 
       {/* Relay-based swap flow removed */}

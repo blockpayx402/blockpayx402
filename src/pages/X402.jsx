@@ -202,19 +202,8 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content
       >
         <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">x402 Payment Protocol</h1>
         <p className="text-white/60 text-lg tracking-tight">
-          Coinbase x402 protocol implementation for Solana. Built on HTTP 402 Payment Required.
+          HTTP 402 Payment Required protocol for Solana. Request blockchain payments before granting access to resources.
         </p>
-        <div className="mt-4 flex items-center gap-2 text-sm text-white/40">
-          <span>Based on</span>
-          <a 
-            href="https://github.com/coinbase/x402" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-primary-400 hover:text-primary-300 underline"
-          >
-            coinbase/x402
-          </a>
-        </div>
       </motion.div>
 
       {/* Protocol Overview */}

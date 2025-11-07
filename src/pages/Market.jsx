@@ -44,12 +44,12 @@ const Market = () => {
       )
       
       if (!response.ok) {
-        throw new Error(response.status === 429 ? 'Rate limited by CoinGecko. Please wait a moment and try again.' : 'Failed to fetch market data')
+        throw new Error(response.status === 429 ? 'Rate limited. Please wait a moment and try again.' : 'Failed to fetch market data')
       }
       
       const data = await response.json()
       if (!Array.isArray(data)) {
-        throw new Error('Unexpected response format from CoinGecko')
+        throw new Error('Unexpected response format')
       }
 
       // Filter out duplicates if API returns overlapping results
@@ -281,7 +281,7 @@ const Market = () => {
         <div>
           <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">Crypto Market</h1>
           <p className="text-white/60 text-lg tracking-tight">
-            Real-time cryptocurrency prices and market data. Powered by CoinGecko.
+            Real-time cryptocurrency prices and market data.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -480,12 +480,12 @@ const Market = () => {
                 <p className="text-white/50 text-sm tracking-tight flex items-center gap-2">
                   Rank #{formattedCoinDetails.details.market_cap_rank ?? '—'}
                   <a
-                    href={formattedCoinDetails.details.links?.homepage?.[0] || `https://www.coingecko.com/en/coins/${formattedCoinDetails.details.id}`}
+                    href={formattedCoinDetails.details.links?.homepage?.[0] || '#'}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 text-primary-200 hover:text-primary-100 text-xs"
                   >
-                    View on CoinGecko <ExternalLink className="w-3 h-3" />
+                    View Website <ExternalLink className="w-3 h-3" />
                   </a>
                 </p>
               </div>
@@ -651,7 +651,7 @@ const Market = () => {
         className="text-center text-white/40 text-xs tracking-tight"
       >
         <p>
-          Data provided by CoinGecko API • {lastUpdated ? `Updated ${new Date(lastUpdated).toLocaleTimeString()}` : 'Awaiting data'}
+          {lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}` : 'Awaiting data'}
         </p>
       </motion.div>
     </div>

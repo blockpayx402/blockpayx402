@@ -1,7 +1,6 @@
 /**
  * x402 Payment Protocol Facilitator for Solana
- * Implements the Coinbase x402 protocol specification for Solana payments
- * https://github.com/coinbase/x402
+ * Implements the x402 payment protocol for Solana payments
  */
 
 import { Connection, PublicKey } from '@solana/web3.js'

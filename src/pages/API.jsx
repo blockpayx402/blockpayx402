@@ -788,7 +788,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content
       <div className="glass rounded-2xl p-6 border border-white/[0.08]">
         <h2 className="text-xl font-semibold mb-3 tracking-tight">x402 Payment Protocol</h2>
         <p className="text-white/80 mb-4">
-          BlockPay implements the <a href="https://github.com/coinbase/x402" target="_blank" rel="noopener noreferrer" className="text-primary-400 hover:text-primary-300 underline">Coinbase x402</a> payment protocol for Solana payments. 
+          BlockPay implements the x402 payment protocol for Solana payments. 
           This allows for HTTP 402 Payment Required responses with blockchain payment requirements.
         </p>
         <p className="text-white/60 text-sm mb-4">
