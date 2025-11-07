@@ -9,7 +9,11 @@ import {
   XCircle,
   ArrowRight,
   PlusCircle,
-  Loader2
+  Loader2,
+  ShoppingBag,
+  Github,
+  Twitter,
+  Send
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import StatCard from '../components/StatCard'
@@ -56,7 +60,7 @@ const Dashboard = () => {
         transition={{ duration: 0.5 }}
         className="glass rounded-3xl p-8 border border-white/[0.08]"
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">
               Welcome Back
@@ -67,15 +71,64 @@ const Dashboard = () => {
                 : 'Connect your wallet to get started'}
             </p>
           </div>
-          {!wallet?.connected && (
-            <Link
-              to="/request"
+          <div className="flex items-center gap-3 flex-wrap">
+            <a
+              href="https://pump.fun/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl text-white font-medium shadow-lg shadow-primary-500/30 hover:shadow-primary-500/40 transition-all flex items-center gap-2"
             >
-              <PlusCircle className="w-5 h-5" />
-              Create Request
-            </Link>
-          )}
+              <ShoppingBag className="w-5 h-5" />
+              Buy
+            </a>
+            {!wallet?.connected && (
+              <Link
+                to="/request"
+                className="px-6 py-3 glass-strong rounded-xl border border-white/10 hover:border-primary-500/30 text-white font-medium transition-all flex items-center gap-2"
+              >
+                <PlusCircle className="w-5 h-5" />
+                Create Request
+              </Link>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Social Links Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.15 }}
+        className="glass rounded-3xl p-6 border border-white/[0.08]"
+      >
+        <div className="flex items-center justify-center gap-4">
+          <a
+            href="https://github.com/abdelrahman147/payment-cloud-system"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-5 py-2.5 glass-strong rounded-xl border border-white/10 hover:border-primary-500/30 transition-all group"
+          >
+            <Github className="w-5 h-5 text-white/70 group-hover:text-white" />
+            <span className="text-white/70 group-hover:text-white font-medium tracking-tight">GitHub</span>
+          </a>
+          <a
+            href="https://twitter.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-5 py-2.5 glass-strong rounded-xl border border-white/10 hover:border-sky-500/30 transition-all group"
+          >
+            <Twitter className="w-5 h-5 text-white/70 group-hover:text-sky-400" />
+            <span className="text-white/70 group-hover:text-sky-400 font-medium tracking-tight">Twitter</span>
+          </a>
+          <a
+            href="https://t.me"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-5 py-2.5 glass-strong rounded-xl border border-white/10 hover:border-blue-500/30 transition-all group"
+          >
+            <Send className="w-5 h-5 text-white/70 group-hover:text-blue-400" />
+            <span className="text-white/70 group-hover:text-blue-400 font-medium tracking-tight">Telegram</span>
+          </a>
         </div>
       </motion.div>
 
@@ -274,3 +327,4 @@ const Dashboard = () => {
 }
 
 export default Dashboard
+
