@@ -331,15 +331,11 @@ app.post('/api/create-order', async (req, res) => {
       }
     }
 
-    // Calculate platform fee (with chain-specific recipient)
-    const fee = calculatePlatformFee(amountNum, fromAsset, fromChain)
-
-    // Generate order ID first
+    // Pure Relay wrapper - no fee calculation for swaps
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
-    // Generate deposit address via Relay Link
-    // If userAddress is provided, use it for direct execution (like Relay)
-    const depositInfo = await generateDepositAddress({
+    // Pass through to Relay SDK directly
+    const relayResponse = await generateDepositAddress({
       fromChain,
       fromAsset,
       toChain,
@@ -348,36 +344,15 @@ app.post('/api/create-order', async (req, res) => {
       recipientAddress,
       refundAddress,
       orderId,
-      userAddress: userAddress || recipientAddress, // Use user's wallet for transaction signing
+      userAddress: userAddress || recipientAddress,
     })
 
-    // Create order in database
-    const order = dbHelpers.createOrder({
-      id: orderId,
-      requestId: requestId || null, // null for direct swaps
-      fromChain,
-      fromAsset,
-      toChain,
-      toAsset,
-      amount: amountNum.toString(),
-      depositAddress: depositInfo.depositAddress,
-      refundAddress,
-      expectedAmount: depositInfo.estimatedAmount?.toString() || amountNum.toString(),
-      status: 'awaiting_deposit',
-      exchangeId: depositInfo.exchangeId,
-      platformFeeAmount: fee.amount.toString(),
-      platformFeePercent: fee.percent.toString(),
-      amountAfterFee: depositInfo.amountAfterFee?.toString() || amountNum.toString()
-    })
-
+    // Return Relay's response directly
     res.json({
-      ...order,
-      depositAddress: depositInfo.depositAddress,
-      orderId: order.id,
-      platformFee: fee,
-      estimatedAmount: depositInfo.estimatedAmount,
-      exchangeRate: depositInfo.exchangeRate,
-      validUntil: depositInfo.validUntil
+      id: orderId,
+      requestId: requestId || null,
+      ...relayResponse,
+      orderId: orderId,
     })
   } catch (error) {
     console.error('[Create Order Error]', error)

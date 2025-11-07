@@ -149,32 +149,10 @@ export const generateDepositAddress = async (orderData) => {
       return await generateDirectSwap(orderData)
     }
     
-    // Relay Link dynamically supports all chains and tokens it supports
-    // No need for pair validation - Relay will return proper errors if pair is invalid
-
-    // Calculate BlockPay platform fee (with chain-specific recipient)
-    const fee = calculatePlatformFee(amount, fromAsset, fromChain)
+    // Pure Relay wrapper - no custom fee calculation or order management
+    // Relay handles everything: fees, execution, status tracking
     
-    // Ensure fee doesn't exceed amount (safety check)
-    const safeFeeAmount = Math.min(fee.amount, amount * 0.99)
-    const safeFee = { ...fee, amount: safeFeeAmount }
-    
-    // Adjust amount to account for platform fee
-    // The fee will be deducted from the final amount received by the seller
-    let amountAfterFee = amount - safeFeeAmount
-    
-    // Ensure amount after fee is positive (at least 1% of original amount)
-    if (amountAfterFee <= 0) {
-      // If fee would make amount negative, use a percentage-based fee instead
-      const percentageFee = amount * 0.01 // 1% fee
-      amountAfterFee = amount - percentageFee
-      // Update fee to match
-      safeFee.amount = percentageFee
-      safeFee.percent = 0.01
-    }
-
-    // Create exchange transaction via Relay Link API
-    // Relay handles all chains and tokens dynamically - no hardcoded pairs
+    // Pass through to Relay SDK directly - no wrapper logic
     let exchangeData = null
     
     try {
@@ -183,11 +161,11 @@ export const generateDepositAddress = async (orderData) => {
         fromAsset,
         toChain,
         toAsset,
-        amount: amountAfterFee, // Amount after BlockPay fee
+        amount: amount, // Use full amount - Relay handles fees internally
         recipientAddress,
         refundAddress,
         orderId,
-        userAddress: userAddress || recipientAddress, // Use user's wallet for transaction signing
+        userAddress: userAddress || recipientAddress,
       })
     } catch (err) {
       const msg = String(err?.message || '')

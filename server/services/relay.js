@@ -175,11 +175,8 @@ export const createRelayTransaction = async (orderData) => {
       throw new Error(`Invalid recipient address: ${recipientValidation.error}`)
     }
     
-    // Use SDK's getQuote method to get an executable quote
-    // Based on Relay SDK docs: https://docs.relay.link/references/api/overview
-    // getQuote is under client.actions, not client directly
-    // tradeType is required: 'EXACT_INPUT' or 'EXACT_OUTPUT'
-    // user: wallet address that will sign the transaction (like Relay)
+    // Pure Relay wrapper - use SDK's getQuote method directly
+    // No custom processing - just pass through to Relay
     const userWalletAddress = userAddress || recipientAddress.trim()
     const quote = await client.actions.getQuote({
       chainId: originChain.chainId || originChain.id,
@@ -187,38 +184,42 @@ export const createRelayTransaction = async (orderData) => {
       currency: originToken.address,
       toCurrency: destinationToken.address,
       amount: amount.toString(),
-      tradeType: 'EXACT_INPUT', // Required parameter
-      user: userWalletAddress, // User's wallet that will sign transaction
+      tradeType: 'EXACT_INPUT',
+      user: userWalletAddress, // Wallet that will sign transaction
       recipient: recipientAddress.trim(), // Where tokens will be sent
       ...(refundAddress && {
         refundTo: refundAddress.trim()
       }),
     })
     
-    // Extract data from quote response
-    // Relay SDK quote format may vary, so we handle multiple possible fields
+    // Pure Relay wrapper - return Relay's quote response directly
     const depositAddress = quote.depositAddress || quote.originAddress || quote.fromAddress
     const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount
     const quoteId = quote.id || quote.quoteId || quote.requestId
+    const transactionData = quote.transaction || quote.tx || quote.transactionData || null
+    const needsApproval = quote.needsApproval || false
+    const approvalTx = quote.approvalTransaction || quote.approvalTx || null
     
     console.log('[Relay SDK] Quote received:', {
       depositAddress,
       destinationAmount,
-      quoteId
+      quoteId,
+      hasTransactionData: !!transactionData,
+      needsApproval
     })
     
-    if (!quote || !depositAddress) {
-      throw new Error('Failed to get quote from Relay SDK')
-    }
-    
+    // Return Relay's response directly - minimal wrapping
     return {
       exchangeId: quoteId || orderId,
-      depositAddress: depositAddress,
+      depositAddress: depositAddress || null,
       estimatedAmount: destinationAmount ? parseFloat(destinationAmount) : null,
-      amountAfterFee: amount, // Relay handles fees internally
       exchangeRate: destinationAmount && amount ? parseFloat(destinationAmount) / parseFloat(amount) : null,
       validUntil: quote.expiresAt || quote.validUntil || quote.expiry || null,
-      quote: quote, // Store full quote for execution
+      quote: quote, // Full Relay quote
+      transactionData: transactionData, // For direct execution
+      approvalTransaction: approvalTx, // For ERC20 approval
+      needsApproval: needsApproval,
+      isDirectExecution: !!transactionData, // True if has transaction data
     }
   } catch (error) {
     console.error('[Relay SDK] Error creating transaction:', error)
