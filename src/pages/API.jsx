@@ -667,30 +667,10 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content
 
                 {endpoint.example && (
                   <div className="space-y-4">
-                    {endpoint.example.bash && (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (Bash/Linux/Mac)</h4>
-                          <button
-                            onClick={() => copyToClipboard(endpoint.example.bash, `${endpoint.id}-bash`)}
-                            className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
-                          >
-                            {copiedCode === `${endpoint.id}-bash` ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-white/60" />
-                            )}
-                          </button>
-                        </div>
-                        <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                          <code className="text-white/90">{endpoint.example.bash}</code>
-                        </pre>
-                      </div>
-                    )}
                     {endpoint.example.powershell && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (PowerShell/Windows)</h4>
+                          <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (PowerShell)</h4>
                           <button
                             onClick={() => copyToClipboard(endpoint.example.powershell, `${endpoint.id}-powershell`)}
                             className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
@@ -707,7 +687,27 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content
                         </pre>
                       </div>
                     )}
-                    {endpoint.example.request && !endpoint.example.bash && (
+                    {endpoint.example.bash && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-white/40 tracking-tight text-xs">Alternative: Bash/Linux/Mac (curl)</h4>
+                          <button
+                            onClick={() => copyToClipboard(endpoint.example.bash, `${endpoint.id}-bash`)}
+                            className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                          >
+                            {copiedCode === `${endpoint.id}-bash` ? (
+                              <Check className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-white/60" />
+                            )}
+                          </button>
+                        </div>
+                        <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm opacity-60">
+                          <code className="text-white/60">{endpoint.example.bash}</code>
+                        </pre>
+                      </div>
+                    )}
+                    {endpoint.example.request && !endpoint.example.powershell && !endpoint.example.bash && (
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request</h4>
