@@ -136,6 +136,113 @@ const API = () => {
   }
 ]`
       }
+    },
+    {
+      id: 'x402-verify',
+      method: 'POST',
+      path: '/x402/verify',
+      title: 'x402: Verify Payment',
+      description: 'Verify a payment payload with the x402 facilitator',
+      request: {
+        body: {
+          x402Version: 'number (required)',
+          paymentHeader: 'string (required) - base64 encoded payment payload',
+          paymentRequirements: 'object (required) - payment requirements from 402 response'
+        },
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      response: {
+        status: 200,
+        body: '{ isValid: boolean, invalidReason: string | null }'
+      },
+      example: {
+        request: `curl -X POST ${baseUrl}/x402/verify \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "x402Version": 1,
+    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0=",
+    "paymentRequirements": {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "500000000",
+      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+    }
+  }'`,
+        response: `{
+  "isValid": true,
+  "invalidReason": null
+}`
+      }
+    },
+    {
+      id: 'x402-settle',
+      method: 'POST',
+      path: '/x402/settle',
+      title: 'x402: Settle Payment',
+      description: 'Settle a payment with the x402 facilitator (confirm on-chain)',
+      request: {
+        body: {
+          x402Version: 'number (required)',
+          paymentHeader: 'string (required) - base64 encoded payment payload',
+          paymentRequirements: 'object (required) - payment requirements from 402 response'
+        },
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      response: {
+        status: 200,
+        body: '{ success: boolean, error: string | null, txHash: string | null, networkId: string | null }'
+      },
+      example: {
+        request: `curl -X POST ${baseUrl}/x402/settle \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "x402Version": 1,
+    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0=",
+    "paymentRequirements": {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "500000000",
+      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+    }
+  }'`,
+        response: `{
+  "success": true,
+  "error": null,
+  "txHash": "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosLDYvCmgdxo2BHpidWMuxRo5dhrsH4Xxj6M2mfDHP6u",
+  "networkId": "solana-mainnet"
+}`
+      }
+    },
+    {
+      id: 'x402-supported',
+      method: 'GET',
+      path: '/x402/supported',
+      title: 'x402: Get Supported Schemes',
+      description: 'Get list of supported payment schemes and networks',
+      request: {},
+      response: {
+        status: 200,
+        body: '{ kinds: [{ scheme: string, network: string }] }'
+      },
+      example: {
+        request: `curl ${baseUrl}/x402/supported`,
+        response: `{
+  "kinds": [
+    {
+      "scheme": "exact",
+      "network": "solana-mainnet"
+    },
+    {
+      "scheme": "exact",
+      "network": "solana"
+    }
+  ]
+}`
+      }
     }
   ]
 

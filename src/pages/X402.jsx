@@ -14,11 +14,21 @@ const X402 = () => {
   }
 
   const curlGetRequest = `curl -H "X-Payment-Protocol: x402/1.0" \\
-  https://blockpay.cloud/api/requests/req_1234567890_abc123`
+  https://blockpay.cloud/api/requests/<REQUEST_ID>`
 
   const curlWithPayment = `curl -H "X-Payment-Protocol: x402/1.0" \\
   -H "X-Payment: <base64_encoded_payment_payload>" \\
-  https://blockpay.cloud/api/requests/req_1234567890_abc123`
+  https://blockpay.cloud/api/requests/<REQUEST_ID>`
+
+  const curlCreateRequest = `curl -X POST https://blockpay.cloud/api/requests \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "amount": "1.5",
+    "currency": "SOL",
+    "chain": "solana",
+    "recipient": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
+    "description": "Payment for services"
+  }'`
 
   const exampleResponse = `HTTP/1.1 402 Payment Required
 Content-Type: application/json
@@ -46,11 +56,23 @@ X-Payment-Protocol: x402/1.0
   "error": null
 }`
 
-  const jsExample = `// Fetch resource with x402 protocol
-import { fetchWithX402, getPaymentRequirements } from './services/x402'
+  const jsExample = `// Step 1: Create payment request
+const createResponse = await fetch('https://blockpay.cloud/api/requests', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    amount: '1.5',
+    currency: 'SOL',
+    chain: 'solana',
+    recipient: '44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta',
+    description: 'Payment for services'
+  })
+})
+const { id: requestId } = await createResponse.json()
 
-// Step 1: Request resource (will get 402 if payment required)
-const result = await fetchWithX402('/api/requests/req_1234567890_abc123')
+// Step 2: Fetch resource with x402 protocol (will get 402 if payment required)
+import { fetchWithX402 } from './services/x402'
+const result = await fetchWithX402(\`/api/requests/\${requestId}\`)
 
 if (result.paymentRequired) {
   // Step 2: Get payment requirements
@@ -163,7 +185,29 @@ const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base
         
         <div className="space-y-6">
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Get Payment Request (402 Response)</h3>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 1: Create Payment Request</h3>
+            <p className="text-white/60 text-sm mb-3">First, create a payment request to get a request ID:</p>
+            <div className="relative">
+              <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                <code className="text-white/90">{curlCreateRequest}</code>
+              </pre>
+              <button
+                onClick={() => copyToClipboard(curlCreateRequest, 'curl-create')}
+                className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+              >
+                {copiedCode === 'curl-create' ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-white/60" />
+                )}
+              </button>
+            </div>
+            <p className="text-white/40 text-xs mt-2">Response includes an <code className="text-primary-400">id</code> field - use this in the next step</p>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 2: Get Payment Request (402 Response)</h3>
+            <p className="text-white/60 text-sm mb-3">Use the request ID from step 1. Replace <code className="text-primary-400">&lt;REQUEST_ID&gt;</code> with your actual ID:</p>
             <div className="relative">
               <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
                 <code className="text-white/90">{curlGetRequest}</code>
@@ -182,7 +226,8 @@ const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Access Resource with Payment</h3>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 3: Access Resource with Payment</h3>
+            <p className="text-white/60 text-sm mb-3">After sending payment, retry the request with the X-PAYMENT header:</p>
             <div className="relative">
               <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
                 <code className="text-white/90">{curlWithPayment}</code>
@@ -198,6 +243,7 @@ const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base
                 )}
               </button>
             </div>
+            <p className="text-white/40 text-xs mt-2">Replace <code className="text-primary-400">&lt;REQUEST_ID&gt;</code> and <code className="text-primary-400">&lt;base64_encoded_payment_payload&gt;</code> with actual values</p>
           </div>
         </div>
       </motion.div>
