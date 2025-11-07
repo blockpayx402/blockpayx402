@@ -13,6 +13,7 @@ import { getRelayExchangeRate, getAllRelayChains, getAllRelayTokens } from '../.
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from '../../server/config.js'
 import { checkSetup, generateSetupInstructions } from '../../server/utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from '../../server/utils/security.js'
+import * as x402Service from '../../server/services/x402.js'
 
 const app = express()
 
@@ -663,6 +664,182 @@ app.get('/api/relay/tokens/:chainId', async (req, res) => {
   } catch (error) {
     console.error('[API] Error fetching tokens:', error)
     res.status(500).json({ error: 'Failed to fetch tokens', tokens: [] })
+  }
+})
+
+// ==================== x402 Protocol Endpoints ====================
+
+// x402 Facilitator: Verify payment
+app.post('/api/x402/verify', async (req, res) => {
+  try {
+    const { x402Version, paymentHeader, paymentRequirements } = req.body
+
+    if (!paymentHeader || !paymentRequirements) {
+      return res.status(400).json({
+        isValid: false,
+        invalidReason: 'Missing paymentHeader or paymentRequirements',
+      })
+    }
+
+    // Decode payment header (base64)
+    let paymentPayload
+    try {
+      paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString())
+    } catch (error) {
+      return res.status(400).json({
+        isValid: false,
+        invalidReason: 'Invalid payment header format',
+      })
+    }
+
+    const verification = await x402Service.verifyPayment(paymentPayload, paymentRequirements)
+
+    res.json(verification)
+  } catch (error) {
+    console.error('Error in x402 verify:', error)
+    res.status(500).json({
+      isValid: false,
+      invalidReason: error.message || 'Verification failed',
+    })
+  }
+})
+
+// x402 Facilitator: Settle payment
+app.post('/api/x402/settle', async (req, res) => {
+  try {
+    const { x402Version, paymentHeader, paymentRequirements } = req.body
+
+    if (!paymentHeader || !paymentRequirements) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing paymentHeader or paymentRequirements',
+        txHash: null,
+        networkId: null,
+      })
+    }
+
+    // Decode payment header (base64)
+    let paymentPayload
+    try {
+      paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString())
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid payment header format',
+        txHash: null,
+        networkId: null,
+      })
+    }
+
+    const settlement = await x402Service.settlePayment(paymentPayload, paymentRequirements)
+
+    res.json(settlement)
+  } catch (error) {
+    console.error('Error in x402 settle:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Settlement failed',
+      txHash: null,
+      networkId: null,
+    })
+  }
+})
+
+// x402 Facilitator: Get supported schemes
+app.get('/api/x402/supported', (req, res) => {
+  try {
+    const supported = x402Service.getSupportedSchemes()
+    res.json(supported)
+  } catch (error) {
+    console.error('Error getting supported schemes:', error)
+    res.status(500).json({ error: 'Failed to get supported schemes' })
+  }
+})
+
+// x402 Demo endpoint - returns 402 directly for testing
+app.get('/api/x402/demo', (req, res) => {
+  try {
+    // Check if payment header is present
+    const paymentHeader = req.headers['x-payment']
+    
+    if (paymentHeader) {
+      // If payment header exists, verify it
+      try {
+        const paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString())
+        const paymentRequirements = x402Service.createPaymentRequirements({
+          amount: '0.1', // 0.1 SOL for demo
+          recipient: process.env.X402_DEMO_RECIPIENT || '7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn',
+          resource: '/api/x402/demo',
+          description: 'x402 Demo Payment',
+          asset: 'native',
+        })
+        
+        // Verify payment asynchronously
+        x402Service.verifyPayment(paymentPayload, paymentRequirements).then((verification) => {
+          if (verification.isValid) {
+            // Payment verified - return success
+            res.json({
+              success: true,
+              message: 'Payment verified successfully!',
+              transaction: verification.transaction,
+            })
+          } else {
+            // Payment invalid - return 402 again
+            res.status(402).json({
+              x402Version: 1,
+              accepts: [paymentRequirements],
+              error: verification.invalidReason || 'Payment verification failed',
+            })
+          }
+        }).catch((error) => {
+          console.error('Error verifying payment:', error)
+          const paymentRequirements = x402Service.createPaymentRequirements({
+            amount: '0.1',
+            recipient: process.env.X402_DEMO_RECIPIENT || '7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn',
+            resource: '/api/x402/demo',
+            description: 'x402 Demo Payment',
+            asset: 'native',
+          })
+          res.status(402).json({
+            x402Version: 1,
+            accepts: [paymentRequirements],
+            error: 'Payment verification error',
+          })
+        })
+      } catch (error) {
+        // Invalid payment header format
+        const paymentRequirements = x402Service.createPaymentRequirements({
+          amount: '0.1',
+          recipient: process.env.X402_DEMO_RECIPIENT || '7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn',
+          resource: '/api/x402/demo',
+          description: 'x402 Demo Payment',
+          asset: 'native',
+        })
+        res.status(402).json({
+          x402Version: 1,
+          accepts: [paymentRequirements],
+          error: 'Invalid payment header format',
+        })
+      }
+    } else {
+      // No payment header - return 402 with payment requirements
+      const paymentRequirements = x402Service.createPaymentRequirements({
+        amount: '0.1', // 0.1 SOL for demo
+        recipient: process.env.X402_DEMO_RECIPIENT || '7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn',
+        resource: '/api/x402/demo',
+        description: 'x402 Demo Payment - Send 0.1 SOL to test the protocol',
+        asset: 'native',
+      })
+      
+      res.status(402).json({
+        x402Version: 1,
+        accepts: [paymentRequirements],
+        error: null,
+      })
+    }
+  } catch (error) {
+    console.error('Error in x402 demo:', error)
+    res.status(500).json({ error: 'Internal server error' })
   }
 })
 
