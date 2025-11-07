@@ -168,6 +168,11 @@ const Market = () => {
   const getPlatformContracts = (platforms) => {
     if (!platforms || typeof platforms !== 'object') return []
     return Object.entries(platforms)
+      .filter(([_, address]) => typeof address === 'string' && address.trim() !== '')
+      .map(([chain, address]) => ({ chain, address }))
+      .slice(0, 6)
+  }
+
   const formattedCoinDetails = useMemo(() => {
     if (!coinDetails || !coinDetails.details) return null
     const { details, chart } = coinDetails
@@ -238,10 +243,6 @@ const Market = () => {
       },
     }
   }, [coinDetails])
-      .filter(([_, address]) => typeof address === 'string' && address.trim() !== '')
-      .map(([chain, address]) => ({ chain, address }))
-      .slice(0, 6)
-  }
 
   const formatPrice = (price) => {
     if (price < 0.01) return `$${price.toFixed(6)}`
