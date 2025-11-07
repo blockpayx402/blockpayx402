@@ -13,22 +13,15 @@ const X402 = () => {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  const curlGetRequest = `curl -H "X-Payment-Protocol: x402/1.0" \\
-  https://blockpay.cloud/api/requests/<REQUEST_ID>`
+  // Working example - no request needed, just curl the demo endpoint
+  const curlDemo = `curl -H "X-Payment-Protocol: x402/1.0" \\
+  https://blockpay.cloud/api/x402/demo`
 
+  // After sending payment, retry with X-PAYMENT header
+  // Replace <BASE64_PAYMENT_PAYLOAD> with your actual payment payload (see JavaScript example below)
   const curlWithPayment = `curl -H "X-Payment-Protocol: x402/1.0" \\
-  -H "X-Payment: <base64_encoded_payment_payload>" \\
-  https://blockpay.cloud/api/requests/<REQUEST_ID>`
-
-  const curlCreateRequest = `curl -X POST https://blockpay.cloud/api/requests \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "amount": "1.5",
-    "currency": "SOL",
-    "chain": "solana",
-    "recipient": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
-    "description": "Payment for services"
-  }'`
+  -H "X-Payment: <BASE64_PAYMENT_PAYLOAD>" \\
+  https://blockpay.cloud/api/x402/demo`
 
   const exampleResponse = `HTTP/1.1 402 Payment Required
 Content-Type: application/json
@@ -56,99 +49,134 @@ X-Payment-Protocol: x402/1.0
   "error": null
 }`
 
-  const jsExample = `// Step 1: Create payment request
-const createResponse = await fetch('https://blockpay.cloud/api/requests', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    amount: '1.5',
-    currency: 'SOL',
-    chain: 'solana',
-    recipient: '44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta',
-    description: 'Payment for services'
-  })
+  const jsExample = `// Step 1: Request the demo endpoint (will return 402 Payment Required)
+const response = await fetch('https://blockpay.cloud/api/x402/demo', {
+  headers: {
+    'X-Payment-Protocol': 'x402/1.0'
+  }
 })
-const { id: requestId } = await createResponse.json()
 
-// Step 2: Fetch resource with x402 protocol (will get 402 if payment required)
-import { fetchWithX402 } from './services/x402'
-const result = await fetchWithX402(\`/api/requests/\${requestId}\`)
-
-if (result.paymentRequired) {
-  // Step 2: Get payment requirements
-  const { accepts } = result.paymentData
-  const paymentReq = accepts[0] // Select first payment option
+// Step 2: Check if payment is required (status 402)
+if (response.status === 402) {
+  const paymentData = await response.json()
+  const paymentReq = paymentData.accepts[0] // Get first payment requirement
   
-  // Step 3: Create and send Solana transaction
-  const signature = await sendSolanaPayment(paymentReq)
+  // Step 3: Send Solana payment using your wallet
+  // You need to:
+  // - Connect to Solana (use @solana/web3.js)
+  // - Create a transfer transaction to paymentReq.payTo
+  // - Amount: parseFloat(paymentReq.maxAmountRequired) / 1e9 (convert lamports to SOL)
+  // - Sign and send the transaction
+  // - Get the transaction signature
   
-  // Step 4: Create payment payload
+  // Example transaction creation (you need wallet connection):
+  // const connection = new Connection('https://api.mainnet-beta.solana.com')
+  // const recipient = new PublicKey(paymentReq.payTo)
+  // const amountLamports = BigInt(paymentReq.maxAmountRequired)
+  // const transaction = new Transaction().add(
+  //   SystemProgram.transfer({
+  //     fromPubkey: wallet.publicKey,
+  //     toPubkey: recipient,
+  //     lamports: Number(amountLamports)
+  //   })
+  // )
+  // const signature = await wallet.sendTransaction(transaction, connection)
+  // await connection.confirmTransaction(signature)
+  
+  // Step 4: Create payment payload with transaction signature
+  // Replace 'YOUR_TX_SIGNATURE' with the actual signature from step 3
   const paymentPayload = {
     x402Version: 1,
     scheme: paymentReq.scheme,
     network: paymentReq.network,
-    payload: { signature }
+    payload: {
+      signature: 'YOUR_TX_SIGNATURE' // Replace with actual transaction signature
+    }
   }
   
-  // Step 5: Retry request with X-PAYMENT header
+  // Step 5: Encode payment payload as base64
   const paymentHeader = btoa(JSON.stringify(paymentPayload))
-  const paidResponse = await fetch('/api/requests/req_1234567890_abc123', {
+  
+  // Step 6: Retry request with X-PAYMENT header
+  const paidResponse = await fetch('https://blockpay.cloud/api/x402/demo', {
     headers: {
-      'X-Payment': paymentHeader,
-      'X-Payment-Protocol': 'x402/1.0'
+      'X-Payment-Protocol': 'x402/1.0',
+      'X-Payment': paymentHeader
     }
   })
   
+  // Step 7: Get the resource (should be 200 OK now)
   const resource = await paidResponse.json()
+  console.log('Payment verified!', resource)
 }`
 
   const solanaWeb3Example = `import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js'
 
-// Payment requirements from 402 response
-const paymentReq = {
-  scheme: 'exact',
-  network: 'solana-mainnet',
-  maxAmountRequired: '1500000000', // lamports (1.5 SOL)
-  payTo: '44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta'
-}
+// Step 1: Get payment requirements from 402 response
+// First, call the demo endpoint to get payment requirements
+const response = await fetch('https://blockpay.cloud/api/x402/demo', {
+  headers: { 'X-Payment-Protocol': 'x402/1.0' }
+})
+const paymentData = await response.json()
+const paymentReq = paymentData.accepts[0] // Get first payment requirement
 
-// Connect to Solana
-const connection = new Connection('https://api.mainnet-beta.solana.com')
+// Step 2: Connect to Solana (you need to have wallet connected)
+// Make sure you have a wallet adapter or wallet object available
+const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
 
-// Create transfer transaction
-const recipient = new PublicKey(paymentReq.payTo)
-const amountLamports = BigInt(paymentReq.maxAmountRequired)
+// Step 3: Parse payment requirements
+const recipient = new PublicKey(paymentReq.payTo) // Address to send SOL to
+const amountLamports = BigInt(paymentReq.maxAmountRequired) // Amount in lamports
+// Convert to SOL: parseFloat(paymentReq.maxAmountRequired) / 1e9
 
+// Step 4: Create transfer transaction
 const transaction = new Transaction().add(
   SystemProgram.transfer({
-    fromPubkey: wallet.publicKey,
+    fromPubkey: wallet.publicKey, // Your wallet public key
     toPubkey: recipient,
     lamports: Number(amountLamports)
   })
 )
 
-// Get recent blockhash
+// Step 5: Get recent blockhash and set fee payer
 const { blockhash } = await connection.getLatestBlockhash()
 transaction.recentBlockhash = blockhash
 transaction.feePayer = wallet.publicKey
 
-// Sign and send
+// Step 6: Sign transaction with your wallet
+// This requires wallet connection (Phantom, Solflare, etc.)
 const signedTx = await wallet.signTransaction(transaction)
+
+// Step 7: Send transaction to Solana network
 const signature = await connection.sendRawTransaction(signedTx.serialize())
 
-// Wait for confirmation
+// Step 8: Wait for confirmation (important!)
 await connection.confirmTransaction(signature, 'confirmed')
 
-// Create x402 payment payload
+// Step 9: Create x402 payment payload with the transaction signature
 const paymentPayload = {
   x402Version: 1,
   scheme: paymentReq.scheme,
   network: paymentReq.network,
-  payload: { signature }
+  payload: {
+    signature: signature // Use the actual transaction signature from step 7
+  }
 }
 
-// Encode as base64 for X-PAYMENT header
-const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64')`
+// Step 10: Encode payment payload as base64 for X-PAYMENT header
+const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64')
+
+// Step 11: Retry the request with X-PAYMENT header
+const paidResponse = await fetch('https://blockpay.cloud/api/x402/demo', {
+  headers: {
+    'X-Payment-Protocol': 'x402/1.0',
+    'X-Payment': paymentHeader
+  }
+})
+
+// Step 12: Get the verified resource
+const result = await paidResponse.json()
+console.log('Payment verified!', result)`
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -181,53 +209,45 @@ const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base
         animate={{ opacity: 1, y: 0 }}
         className="glass rounded-3xl p-8 border border-white/[0.08]"
       >
-        <h2 className="text-2xl font-semibold mb-6 tracking-tight">Quick Start - cURL Commands</h2>
+        <h2 className="text-2xl font-semibold mb-6 tracking-tight">Try It Now - Working Examples</h2>
+        
+        <div className="mb-6 p-4 glass-strong rounded-xl border border-primary-500/20 bg-primary-500/5">
+          <p className="text-white/80 text-sm">
+            <strong className="text-primary-400">No setup needed!</strong> The demo endpoint works immediately. 
+            Just curl it to get a 402 response with payment requirements.
+          </p>
+        </div>
         
         <div className="space-y-6">
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 1: Create Payment Request</h3>
-            <p className="text-white/60 text-sm mb-3">First, create a payment request to get a request ID:</p>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 1: Get Payment Requirements (402 Response)</h3>
+            <p className="text-white/60 text-sm mb-3">This will return HTTP 402 with payment requirements. No request creation needed!</p>
             <div className="relative">
               <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                <code className="text-white/90">{curlCreateRequest}</code>
+                <code className="text-white/90">{curlDemo}</code>
               </pre>
               <button
-                onClick={() => copyToClipboard(curlCreateRequest, 'curl-create')}
+                onClick={() => copyToClipboard(curlDemo, 'curl-demo')}
                 className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
               >
-                {copiedCode === 'curl-create' ? (
+                {copiedCode === 'curl-demo' ? (
                   <Check className="w-4 h-4 text-green-400" />
                 ) : (
                   <Copy className="w-4 h-4 text-white/60" />
                 )}
               </button>
             </div>
-            <p className="text-white/40 text-xs mt-2">Response includes an <code className="text-primary-400">id</code> field - use this in the next step</p>
+            <p className="text-white/40 text-xs mt-2">
+              This returns a 402 response with <code className="text-primary-400">accepts</code> array containing payment requirements.
+              You'll see the recipient address and amount needed.
+            </p>
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 2: Get Payment Request (402 Response)</h3>
-            <p className="text-white/60 text-sm mb-3">Use the request ID from step 1. Replace <code className="text-primary-400">&lt;REQUEST_ID&gt;</code> with your actual ID:</p>
-            <div className="relative">
-              <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                <code className="text-white/90">{curlGetRequest}</code>
-              </pre>
-              <button
-                onClick={() => copyToClipboard(curlGetRequest, 'curl-get')}
-                className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-              >
-                {copiedCode === 'curl-get' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-white/60" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 3: Access Resource with Payment</h3>
-            <p className="text-white/60 text-sm mb-3">After sending payment, retry the request with the X-PAYMENT header:</p>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 2: Send Payment & Retry with X-PAYMENT Header</h3>
+            <p className="text-white/60 text-sm mb-3">
+              After sending the Solana payment, create a payment payload and retry the request:
+            </p>
             <div className="relative">
               <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
                 <code className="text-white/90">{curlWithPayment}</code>
@@ -243,7 +263,54 @@ const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base
                 )}
               </button>
             </div>
-            <p className="text-white/40 text-xs mt-2">Replace <code className="text-primary-400">&lt;REQUEST_ID&gt;</code> and <code className="text-primary-400">&lt;base64_encoded_payment_payload&gt;</code> with actual values</p>
+            <p className="text-white/40 text-xs mt-2">
+              Replace <code className="text-primary-400">&lt;BASE64_PAYMENT_PAYLOAD&gt;</code> with your actual payment payload.
+              See the JavaScript/Solana examples below to see how to create it from a transaction signature.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* How It Works Explanation */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="glass rounded-2xl p-8 border border-white/[0.08]"
+      >
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight">How It Works</h2>
+        <div className="space-y-4 text-white/80 text-sm">
+          <div>
+            <p className="mb-2">
+              <strong className="text-primary-400">1. Request the demo endpoint</strong> - You'll get a 402 Payment Required response with payment requirements.
+            </p>
+            <p className="text-white/60 text-xs ml-4">
+              The response includes: recipient address, amount (in lamports), network, and scheme.
+            </p>
+          </div>
+          <div>
+            <p className="mb-2">
+              <strong className="text-primary-400">2. Send Solana payment</strong> - Create a Solana transaction sending the required amount to the recipient address.
+            </p>
+            <p className="text-white/60 text-xs ml-4">
+              Use any Solana wallet (Phantom, Solflare, etc.) or @solana/web3.js to create and send the transaction.
+            </p>
+          </div>
+          <div>
+            <p className="mb-2">
+              <strong className="text-primary-400">3. Create payment payload</strong> - Build a JSON object with the transaction signature.
+            </p>
+            <p className="text-white/60 text-xs ml-4">
+              Format: <code className="text-primary-400">{"{ x402Version: 1, scheme: 'exact', network: 'solana-mainnet', payload: { signature: 'YOUR_TX_SIGNATURE' } }"}</code>
+            </p>
+          </div>
+          <div>
+            <p className="mb-2">
+              <strong className="text-primary-400">4. Encode and retry</strong> - Base64 encode the payload and include it in the X-PAYMENT header.
+            </p>
+            <p className="text-white/60 text-xs ml-4">
+              The server verifies the transaction on-chain and returns the resource if payment is valid.
+            </p>
           </div>
         </div>
       </motion.div>
