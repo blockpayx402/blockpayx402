@@ -8,19 +8,19 @@ export const BLOCKPAY_CONFIG = {
   name: 'BlockPay',
   version: '1.0.0',
   
-  // ChangeNOW API Configuration
+  // Cross-Chain Swap API Configuration
   changenow: {
     apiKey: process.env.CHANGENOW_API_KEY || '',
     apiUrl: 'https://api.changenow.io/v1',
     // Partner ID for affiliate tracking
     partnerId: process.env.CHANGENOW_PARTNER_ID || '',
-    // Default affiliate fee (0.4% is ChangeNOW default, can be customized)
+    // Default affiliate fee
     defaultAffiliateFee: 0.004, // 0.4%
   },
   
   // SimpleSwap API Configuration
   simpleswap: {
-    apiKey: process.env.SIMPLESWAP_API_KEY || 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgVVOdMRtgXdgA6TMkdoBRnDh+GJUXODvNuQrxR4fury6hRANCAAShaUFlbXt5RR3p+f9iYtJfRSoxpn3IzPyNw6iYusN2oh6qUwiSpR5hkGtDJHcuZj63pohFC4UYfzWldvY6yUFU',
+    apiKey: process.env.SIMPLESWAP_API_KEY || '',
     apiUrl: 'https://api.simpleswap.io', // Base URL - endpoints use /v1/ prefix
   },
   

@@ -1,7 +1,25 @@
 {
-  "name": "block-payment",
+  "name": "blockpay-x402",
   "version": "1.0.0",
+  "description": "Advanced cryptocurrency payment system with cross-chain swaps and X402 Payment Protocol",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blockpayx402/blockpayx402.git"
+  },
+  "homepage": "https://blockpay.cloud",
+  "keywords": [
+    "cryptocurrency",
+    "payment",
+    "blockchain",
+    "ethereum",
+    "solana",
+    "cross-chain",
+    "x402",
+    "payment-protocol"
+  ],
+  "author": "Abdelrahman",
+  "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite",

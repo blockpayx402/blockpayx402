@@ -1,201 +1,210 @@
-# 🚀 BlockPay - Production-Ready Crypto Payment System
+# 🚀 BlockPay X402 - Cryptocurrency Payment Platform
 
-**BlockPay** is a complete, production-ready cryptocurrency payment system with automatic cross-chain token swapping. Built with real ChangeNOW API integration and customizable platform fees.
+**BlockPay X402** is an advanced cryptocurrency payment system that enables seamless cross-chain payments, automatic token swapping, and real-time blockchain transaction verification.
 
-🌐 **Live Site:** [http://blockpay.cloud/](http://blockpay.cloud/)
+🌐 **Live Site:** [https://blockpay.cloud](https://blockpay.cloud)
 
 ---
 
-## ⚡ Quick Start (3 Steps)
+## 🎯 What is BlockPay X402?
 
-### 1. Install
+BlockPay X402 is a **non-custodial cryptocurrency payment platform** that allows users to:
+
+- 💳 Create and share payment requests with QR codes
+- ⛓️ Accept payments across multiple blockchains (Ethereum, BNB Chain, Polygon, Solana)
+- 🔄 Automatically swap tokens across different chains
+- 📊 Track transactions in real-time with blockchain verification
+- 🔐 Implement the X402 Payment Protocol for paywalled content
+- 💰 Earn platform fees from transactions
+
+### Key Innovation: X402 Payment Protocol
+
+BlockPay implements the **X402 Payment Protocol**, an innovative HTTP status code extension that enables paywalled content access through cryptocurrency payments. When a user requests protected content, the server responds with a `402 Payment Required` status and payment instructions, allowing seamless integration of crypto payments into web applications.
+
+---
+
+## 🌐 Live Features
+
+Visit [https://blockpay.cloud](https://blockpay.cloud) to access:
+
+### Core Features
+- ✅ **Multi-Chain Support** - Ethereum, BNB Chain, Polygon, Solana
+- ✅ **Cross-Chain Swaps** - Automatic token conversion
+- ✅ **Real-Time Verification** - Blockchain transaction monitoring
+- ✅ **QR Code Generation** - Easy mobile payments
+- ✅ **Payment Requests** - Create and share payment links
+- ✅ **Dashboard** - Track all transactions
+- ✅ **X402 Protocol** - Paywalled content access
+
+### Advanced Features
+- ✅ **Platform Fees** - Configurable fee system
+- ✅ **Non-Custodial** - Users retain full control
+- ✅ **Webhook Support** - Real-time notifications
+- ✅ **API Endpoints** - RESTful API for integrations
+- ✅ **Transaction History** - Complete audit trail
+- ✅ **Multi-Wallet Support** - MetaMask, Phantom, WalletConnect
+
+---
+
+## 🏗️ How It Works
+
+### Payment Flow
+
+1. **Request Creation**
+   - User connects wallet and creates a payment request
+   - System generates unique request ID and payment link
+   - QR code is generated for easy sharing
+
+2. **Payment Processing**
+   - Recipient opens payment link
+   - System calculates required amount including fees
+   - If cross-chain payment needed, swap order is created
+   - User approves transaction in wallet
+   - Transaction is broadcast to blockchain
+
+3. **Verification**
+   - Backend monitors blockchain for transaction confirmation
+   - Real-time status updates via polling
+   - Payment marked as completed upon confirmation
+
+4. **Fee Distribution**
+   - Platform fee is calculated (configurable percentage)
+   - Fee is automatically routed to platform wallet
+   - Remaining amount goes to recipient
+
+### Cross-Chain Swap Mechanism
+
+Our swap engine handles token conversions across different blockchains:
+
+1. **Swap Detection**: System detects when payment currency differs from recipient's preferred chain
+2. **Rate Calculation**: Real-time exchange rates are fetched and calculated
+3. **Order Creation**: Swap order is created with optimal routing
+4. **Execution**: Swap is executed automatically
+5. **Delivery**: Converted tokens are sent to recipient's address
+
+### X402 Protocol Implementation
+
+The X402 Payment Protocol allows content creators to monetize their work:
+
+```javascript
+// Server responds with 402 Payment Required
+{
+  "x402Version": 1,
+  "accepts": [{
+    "asset": "SOL",
+    "amount": "0.1",
+    "recipient": "wallet_address",
+    "resource": "/api/protected-content"
+  }]
+}
+
+// Client pays and includes X-PAYMENT header
+fetch('/api/protected-content', {
+  headers: {
+    'X-PAYMENT': 'transaction_signature'
+  }
+})
+```
+
+---
+
+## 📖 API Documentation
+
+### Payment Requests
+
 ```bash
-npm install
+# Create a payment request
+POST /api/requests
+{
+  "amount": "0.1",
+  "currency": "ETH",
+  "recipient": "0x...",
+  "description": "Payment for services",
+  "chain": "ethereum"
+}
+
+# Get all requests
+GET /api/requests
+
+# Get specific request
+GET /api/requests/:id
+
+# Pay a request (X402 protocol)
+GET /api/requests/:id
+Headers: { "X-PAYMENT": "transaction_signature" }
 ```
-*(Auto-creates .env file on install)*
 
-### 2. Add API Key
-Get your ChangeNOW API key from: https://changenow.io/api
-
-Add to `.env` file:
-```bash
-CHANGENOW_API_KEY=your_api_key_here
-```
-
-### 3. Start
-```bash
-npm start
-```
-
-**That's it!** 🎉
-
----
-
-## 📋 What's Included
-
-✅ **Everything is Pre-Configured:**
-- ✅ Database setup
-- ✅ Server configuration  
-- ✅ Fee system (1% default)
-- ✅ All API endpoints
-- ✅ Error handling
-- ✅ Setup validation
-
-✅ **Production Features:**
-- ✅ Real ChangeNOW API integration
-- ✅ Customizable platform fees
-- ✅ Cross-chain swaps
-- ✅ Real-time order tracking
-- ✅ Webhook support
-- ✅ Fee collection
-
----
-
-## 💰 Platform Fees
-
-Configure your fees in `.env`:
+### Swap Orders
 
 ```bash
-# 1% platform fee (default)
-BLOCKPAY_FEE_PERCENT=0.01
+# Create swap order
+POST /api/create-order
+{
+  "fromCurrency": "ETH",
+  "toCurrency": "SOL",
+  "amount": "0.1",
+  "recipient": "wallet_address"
+}
 
-# 0.5% platform fee
-BLOCKPAY_FEE_PERCENT=0.005
-
-# 2% platform fee
-BLOCKPAY_FEE_PERCENT=0.02
-
-# Your fee recipient address
-BLOCKPAY_FEE_RECIPIENT=0xYourAddressHere
+# Get order status
+GET /api/orders/:id
 ```
 
----
-
-## 🎯 Features
-
-- 🎨 **Premium UI/UX** - Modern, Apple-inspired design
-- 🔐 **Non-Custodial** - Users retain full control
-- 💳 **Payment Requests** - Create and share easily
-- 📊 **Dashboard** - Track all transactions
-- 🔄 **Cross-Chain Swaps** - Automatic token conversion
-- 💰 **Platform Fees** - Earn from every transaction
-- 📱 **QR Codes** - Easy mobile payments
-- ⛓️ **Multi-Chain** - Ethereum, BNB, Polygon, Solana
-- ✅ **Real-Time Verification** - Blockchain monitoring
-- 🌐 **Production Ready** - Error handling, logging, monitoring
-
----
-
-## 📖 Documentation
-
-- **`START_HERE.md`** - Quick start guide
-- **`QUICK_START.md`** - Detailed setup steps
-- **`SETUP_GUIDE.md`** - Production configuration guide
-- **`SETUP_GUIDE.md`** - Advanced setup and troubleshooting
-
----
-
-## 🛠️ Available Scripts
+### Health & Setup
 
 ```bash
-# Development
-npm run dev              # Start both frontend and backend
-npm run dev:client       # Frontend only
-npm run dev:server       # Backend only
+# Health check
+GET /api/health
 
-# Production
-npm start                # Start production server
-npm run build            # Build frontend
-
-# Setup
-npm run setup            # Interactive setup wizard
-npm run auto-setup       # Auto-configure with defaults
+# Setup status
+GET /api/setup
 ```
 
----
-
-## ⚙️ Configuration
-
-### Required:
-- `CHANGENOW_API_KEY` - Get from https://changenow.io/api
-
-### Recommended:
-- `BLOCKPAY_FEE_RECIPIENT` - Your fee collection address
-- `BLOCKPAY_FEE_PERCENT` - Your platform fee (default: 1%)
-
-### Check Setup Status:
-```bash
-curl http://localhost:3001/api/setup
-```
+Full API documentation available at: [https://blockpay.cloud/api](https://blockpay.cloud/api)
 
 ---
 
-## 🔧 Tech Stack
+## 💡 Use Cases
 
-- **React 18** - Modern UI
-- **Express** - Backend server
-- **SQLite** - Database
-- **ChangeNOW API** - Cross-chain swaps
-- **Ethers.js** - Ethereum interaction
-- **Solana Web3.js** - Solana interaction
-- **Tailwind CSS** - Styling
-- **Framer Motion** - Animations
+- **E-commerce**: Accept crypto payments for products
+- **Content Monetization**: X402 protocol for paywalled content
+- **Freelance Payments**: Request payments for services
+- **Donations**: Accept crypto donations
+- **Subscription Services**: Recurring payment requests
+- **Cross-Border Payments**: Fast, low-cost international transfers
 
 ---
 
-## 📁 Project Structure
+## 🔒 Security
 
-```
-├── src/                    # Frontend React app
-│   ├── components/         # UI components
-│   ├── pages/             # Page components
-│   ├── services/           # API & blockchain services
-│   └── context/           # State management
-├── server/                # Backend Express server
-│   ├── services/         # ChangeNOW integration
-│   ├── utils/             # Utilities
-│   └── index.js           # Server entry
-├── scripts/               # Setup scripts
-└── .env                   # Configuration (create from .env.example)
-```
+### Security Features
+
+- **Non-Custodial Architecture** - Users control their private keys
+- **Direct Blockchain Transactions** - No intermediary holding funds
+- **Transaction Verification** - All payments verified on-chain
+- **Input Validation** - Comprehensive validation on all inputs
+- **CORS Protection** - Configured CORS for production domains
 
 ---
 
-## 🚀 Deployment
+## 🎓 Technical Highlights
 
-### Production Checklist:
-1. ✅ Set `CHANGENOW_API_KEY` in `.env`
-2. ✅ Set `BLOCKPAY_FEE_RECIPIENT` in `.env`
-3. ✅ Configure `NODE_ENV=production`
-4. ✅ Set up webhook URL in ChangeNOW dashboard
-5. ✅ Build frontend: `npm run build`
-6. ✅ Deploy backend with Node.js support
-
----
-
-## 📞 Support
-
-- **ChangeNOW API**: https://changenow.io/api
-- **Setup Guide**: See `SETUP_GUIDE.md`
-- **Quick Start**: See `QUICK_START.md`
-
----
-
-## ✅ What's Ready
-
-Everything is pre-configured! You just need to:
-1. Install dependencies (`npm install`)
-2. Add your ChangeNOW API key
-3. Start the server (`npm start`)
-
-All fees, configuration, and features are ready to go! 🎉
+- **Modern React Architecture**: Hooks, Context API, and functional components
+- **Type-Safe Development**: Comprehensive validation and error handling
+- **Optimized Performance**: Code splitting, lazy loading, and efficient rendering
+- **Responsive Design**: Mobile-first approach with Tailwind CSS
+- **Production Ready**: Error boundaries, logging, and monitoring
 
 ---
 
 ## 📄 License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-**Made with ❤️ for crypto payments**
+## 🌐 Links
+
+- **Live Site**: [https://blockpay.cloud](https://blockpay.cloud)
+- **API Documentation**: [https://blockpay.cloud/api](https://blockpay.cloud/api)
+- **GitHub Repository**: [https://github.com/blockpayx402/blockpayx402](https://github.com/blockpayx402/blockpayx402)
