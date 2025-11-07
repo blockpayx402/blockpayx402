@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
 import { Loader2, ArrowLeftRight, ExternalLink, Search } from 'lucide-react'
@@ -37,6 +37,77 @@ const JUPITER_TOKEN_SOURCES = [
   'https://tokens.jup.ag/tokens?tags=verified,community,strict',
 ]
 
+const buildSingleTokenEndpoints = (mint) => [
+  `https://token.jup.ag/strict/${mint}`,
+  `https://token.jup.ag/community/${mint}`,
+  `https://token.jup.ag/all/${mint}`,
+  `https://token.jup.ag/verified/${mint}`,
+  `https://token.jup.ag/extended/${mint}`,
+  `https://tokens.jup.ag/token/${mint}`,
+  `https://cache.jup.ag/token/${mint}`,
+]
+
+const normalizeTokenMetadata = (rawToken, fallbackMint) => {
+  if (!rawToken && !fallbackMint) return null
+
+  const address = rawToken?.address || rawToken?.mint || rawToken?.id || fallbackMint
+  if (!address) return null
+
+  const decimalsValue = rawToken?.decimals ?? rawToken?.decimal ?? 9
+  const decimals = Number.isFinite(Number(decimalsValue)) ? Number(decimalsValue) : 9
+
+  const symbol = rawToken?.symbol || rawToken?.ticker || rawToken?.tokenSymbol || 'UNKNOWN'
+  const name = rawToken?.name || rawToken?.tokenName || rawToken?.symbol || symbol || 'Unknown Token'
+
+  return {
+    address,
+    symbol,
+    name,
+    decimals,
+  }
+}
+
+const fetchTokenMetadataFromJupiter = async (mint) => {
+  const endpoints = buildSingleTokenEndpoints(mint)
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        continue
+      }
+
+      const payload = await response.json()
+
+      let candidate = null
+      if (Array.isArray(payload)) {
+        candidate = payload[0]
+      } else if (payload?.data) {
+        candidate = Array.isArray(payload.data) ? payload.data[0] : payload.data
+      } else if (payload?.token) {
+        candidate = payload.token
+      } else {
+        candidate = payload
+      }
+
+      const normalized = normalizeTokenMetadata(candidate, mint)
+      if (normalized?.address) {
+        return normalized
+      }
+    } catch (error) {
+      // Try next endpoint
+      continue
+    }
+  }
+
+  return null
+}
+
 const isMaybeMint = (value) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((value || '').trim())
 
 const formatNumber = (value, decimals = 6) => {
@@ -46,8 +117,9 @@ const formatNumber = (value, decimals = 6) => {
   return value.toPrecision(4)
 }
 
-const TokenSelector = ({ label, tokens, value, onChange }) => {
+const TokenSelector = ({ label, tokens, value, onChange, onResolveMint }) => {
   const [query, setQuery] = useState('')
+  const [resolvingMint, setResolvingMint] = useState(false)
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase()
@@ -61,16 +133,26 @@ const TokenSelector = ({ label, tokens, value, onChange }) => {
       .slice(0, 200)
   }, [query, tokens])
 
-  const handleUseMint = () => {
+  const handleUseMint = async () => {
     const mint = query.trim()
     if (!isMaybeMint(mint)) {
       toast.error('Enter a valid Solana mint address')
       return
     }
 
-    // If mint exists in list, ensure we use the exact token entry to keep dropdown state consistent
-    const matchingToken = tokens.find(token => token.address?.toLowerCase() === mint.toLowerCase())
-    onChange(matchingToken ? matchingToken.address : mint)
+    try {
+      setResolvingMint(true)
+      await onResolveMint?.(mint)
+
+      const matchingToken = tokens.find(token => token.address?.toLowerCase() === mint.toLowerCase())
+      onChange(matchingToken ? matchingToken.address : mint)
+      setQuery('')
+    } catch (error) {
+      const message = error?.message || 'Unable to load token metadata'
+      toast.error(message)
+    } finally {
+      setResolvingMint(false)
+    }
   }
 
   return (
@@ -93,9 +175,10 @@ const TokenSelector = ({ label, tokens, value, onChange }) => {
           </button>
           <button
             onClick={handleUseMint}
-            className="px-3 py-1 text-xs bg-primary-500/20 border border-primary-500/40 text-primary-100 rounded-lg hover:bg-primary-500/30"
+            disabled={resolvingMint}
+            className="px-3 py-1 text-xs bg-primary-500/20 border border-primary-500/40 text-primary-100 rounded-lg hover:bg-primary-500/30 disabled:opacity-50"
           >
-            Use Mint
+            {resolvingMint ? 'Loading…' : 'Use Mint'}
           </button>
         </div>
       </div>
@@ -138,6 +221,26 @@ const Swapper = () => {
   const [jupiterQuote, setJupiterQuote] = useState(null)
   const [jupiterQuoting, setJupiterQuoting] = useState(false)
   const [jupiterError, setJupiterError] = useState(null)
+
+  const ensureTokenMetadata = useCallback(async (mint) => {
+    const normalizedMint = (mint || '').trim()
+    if (!normalizedMint) return
+
+    const lowerMint = normalizedMint.toLowerCase()
+    if (tokens.some(token => token.address?.toLowerCase() === lowerMint)) {
+      return
+    }
+
+    const tokenMetadata = await fetchTokenMetadataFromJupiter(normalizedMint)
+    if (!tokenMetadata) {
+      throw new Error('Token not found on Jupiter lists')
+    }
+
+    setTokens(prevTokens => {
+      const filtered = prevTokens.filter(token => token.address?.toLowerCase() !== lowerMint)
+      return [tokenMetadata, ...filtered]
+    })
+  }, [tokens])
 
   useEffect(() => {
     const loadTokens = async () => {
@@ -302,6 +405,7 @@ const Swapper = () => {
               tokens={tokens}
               value={fromMint}
               onChange={setFromMint}
+              onResolveMint={ensureTokenMetadata}
             />
           </div>
 
@@ -321,6 +425,7 @@ const Swapper = () => {
               tokens={tokens}
               value={toMint}
               onChange={setToMint}
+              onResolveMint={ensureTokenMetadata}
             />
           </div>
         </div>
