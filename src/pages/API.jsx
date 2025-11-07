@@ -64,7 +64,7 @@ const API = () => {
 
 Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
-  "id": "req_1234567890_abc123",
+  "id": "<YOUR_REQUEST_ID>",
   "amount": "0.5",
   "currency": "ETH",
   "chain": "ethereum",
@@ -73,7 +73,7 @@ Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Ty
   "status": "pending",
   "createdAt": "2024-01-01T10:00:00Z",
   "expiresAt": "2024-01-01T11:00:00Z",
-  "payment_url": "https://blockpay.cloud/pay/req_1234567890_abc123"
+  "payment_url": "https://blockpay.cloud/pay/<YOUR_REQUEST_ID>"
 }`
       }
     },
@@ -97,8 +97,8 @@ Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Ty
         body: 'Payment request object OR x402 payment requirements'
       },
       example: {
-        bash: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/requests/req_1234567890_abc123`,
-        powershell: `Invoke-WebRequest -Uri "${baseUrl}/requests/req_1234567890_abc123" -Headers @{"X-Payment-Protocol"="x402/1.0"}`,
+        bash: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/requests/<YOUR_REQUEST_ID>`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/requests/<YOUR_REQUEST_ID>" -Headers @{"X-Payment-Protocol"="x402/1.0"}`,
         response: `HTTP/1.1 402 Payment Required
 {
   "x402Version": 1,
@@ -107,7 +107,7 @@ Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Ty
       "scheme": "exact",
       "network": "solana-mainnet",
       "maxAmountRequired": "500000000",
-      "resource": "/api/requests/req_1234567890_abc123",
+      "resource": "/api/requests/<YOUR_REQUEST_ID>",
       "description": "Payment for services",
       "mimeType": "application/json",
       "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
@@ -138,7 +138,7 @@ Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Ty
         powershell: `Invoke-WebRequest -Uri "${baseUrl}/requests"`,
         response: `[
   {
-    "id": "req_1234567890_abc123",
+    "id": "<YOUR_REQUEST_ID>",
     "amount": "0.5",
     "currency": "ETH",
     "chain": "ethereum",
@@ -168,13 +168,13 @@ Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Ty
         body: 'Updated payment request object'
       },
       example: {
-        bash: `curl -X PUT ${baseUrl}/requests/req_1234567890_abc123 \\
+        bash: `curl -X PUT ${baseUrl}/requests/<YOUR_REQUEST_ID> \\
   -H "Content-Type: application/json" \\
   -d '{"status": "completed"}'`,
         powershell: `$body = @{status = "completed"} | ConvertTo-Json
-Invoke-WebRequest -Uri "${baseUrl}/requests/req_1234567890_abc123" -Method PUT -Headers @{"Content-Type"="application/json"} -Body $body`,
+Invoke-WebRequest -Uri "${baseUrl}/requests/<YOUR_REQUEST_ID>" -Method PUT -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
-  "id": "req_1234567890_abc123",
+  "id": "<YOUR_REQUEST_ID>",
   "status": "completed",
   "lastChecked": "2024-01-01T12:00:00Z"
 }`
@@ -195,12 +195,12 @@ Invoke-WebRequest -Uri "${baseUrl}/requests/req_1234567890_abc123" -Method PUT -
         powershell: `Invoke-WebRequest -Uri "${baseUrl}/transactions"`,
         response: `[
   {
-    "id": "tx_1234567890_abc123",
-    "requestId": "req_1234567890_abc123",
+    "id": "<YOUR_TRANSACTION_ID>",
+    "requestId": "<YOUR_REQUEST_ID>",
     "amount": "0.5",
     "currency": "ETH",
     "chain": "ethereum",
-    "txHash": "0x...",
+    "txHash": "<YOUR_TX_HASH>",
     "timestamp": "2024-01-01T12:00:00Z"
   }
 ]`
@@ -231,28 +231,28 @@ Invoke-WebRequest -Uri "${baseUrl}/requests/req_1234567890_abc123" -Method PUT -
         bash: `curl -X POST ${baseUrl}/transactions \\
   -H "Content-Type: application/json" \\
   -d '{
-    "requestId": "req_1234567890_abc123",
+    "requestId": "<YOUR_REQUEST_ID>",
     "amount": "0.5",
     "currency": "ETH",
     "chain": "ethereum",
-    "txHash": "0x..."
+    "txHash": "<YOUR_TX_HASH>"
   }'`,
         powershell: `$body = @{
-    requestId = "req_1234567890_abc123"
+    requestId = "<YOUR_REQUEST_ID>"
     amount = "0.5"
     currency = "ETH"
     chain = "ethereum"
-    txHash = "0x..."
+    txHash = "<YOUR_TX_HASH>"
 } | ConvertTo-Json
 
 Invoke-WebRequest -Uri "${baseUrl}/transactions" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
-  "id": "tx_1234567890_abc123",
-  "requestId": "req_1234567890_abc123",
+  "id": "<YOUR_TRANSACTION_ID>",
+  "requestId": "<YOUR_REQUEST_ID>",
   "amount": "0.5",
   "currency": "ETH",
   "chain": "ethereum",
-  "txHash": "0x...",
+  "txHash": "<YOUR_TX_HASH>",
   "timestamp": "2024-01-01T12:00:00Z"
 }`
       }
@@ -377,7 +377,7 @@ Invoke-WebRequest -Uri "${baseUrl}/sync" -Method POST -Headers @{"Content-Type"=
   -H "Content-Type: application/json" \\
   -d '{
     "x402Version": 1,
-    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0=",
+    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
     "paymentRequirements": {
       "scheme": "exact",
       "network": "solana-mainnet",
@@ -387,7 +387,7 @@ Invoke-WebRequest -Uri "${baseUrl}/sync" -Method POST -Headers @{"Content-Type"=
   }'`,
         powershell: `$body = @{
     x402Version = 1
-    paymentHeader = "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0="
+    paymentHeader = "<YOUR_BASE64_PAYMENT_PAYLOAD>"
     paymentRequirements = @{
         scheme = "exact"
         network = "solana-mainnet"
@@ -428,7 +428,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST -Headers @{"Content
   -H "Content-Type: application/json" \\
   -d '{
     "x402Version": 1,
-    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0=",
+    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
     "paymentRequirements": {
       "scheme": "exact",
       "network": "solana-mainnet",
@@ -438,7 +438,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST -Headers @{"Content
   }'`,
         powershell: `$body = @{
     x402Version = 1
-    paymentHeader = "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0="
+    paymentHeader = "<YOUR_BASE64_PAYMENT_PAYLOAD>"
     paymentRequirements = @{
         scheme = "exact"
         network = "solana-mainnet"
@@ -451,7 +451,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content
         response: `{
   "success": true,
   "error": null,
-  "txHash": "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosLDYvCmgdxo2BHpidWMuxRo5dhrsH4Xxj6M2mfDHP6u",
+  "txHash": "<YOUR_TX_HASH>",
   "networkId": "solana-mainnet"
 }`
       }

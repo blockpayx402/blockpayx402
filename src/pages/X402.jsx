@@ -45,7 +45,7 @@ const X402 = () => {
       "resource": "/api/x402/demo",
       "description": "x402 Demo Payment - Send 0.1 SOL to test the protocol",
       "mimeType": "application/json",
-      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn",
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>",
       "maxTimeoutSeconds": 300,
       "asset": "So11111111111111111111111111111111111111112",
       "extra": {
@@ -83,7 +83,7 @@ const X402 = () => {
   -H "Content-Type: application/json" \\
   -d '{
     "x402Version": 1,
-    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
     "paymentRequirements": {
       "scheme": "exact",
       "network": "solana-mainnet",
@@ -95,7 +95,7 @@ const X402 = () => {
   -Headers @{"Content-Type"="application/json"} \\
   -Body '{
     "x402Version": 1,
-    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
     "paymentRequirements": {
       "scheme": "exact",
       "network": "solana-mainnet",
@@ -134,7 +134,7 @@ const X402 = () => {
   -H "Content-Type: application/json" \\
   -d '{
     "x402Version": 1,
-    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
     "paymentRequirements": {
       "scheme": "exact",
       "network": "solana-mainnet",
@@ -146,7 +146,7 @@ const X402 = () => {
   -Headers @{"Content-Type"="application/json"} \\
   -Body '{
     "x402Version": 1,
-    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
     "paymentRequirements": {
       "scheme": "exact",
       "network": "solana-mainnet",
@@ -157,7 +157,7 @@ const X402 = () => {
         response: `{
   "success": true,
   "error": null,
-  "txHash": "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosLDYvCmgdxo2BHpidWMuxRo5dhrsH4Xxj6M2mfDHP6u",
+  "txHash": "<YOUR_TX_HASH>",
   "networkId": "solana-mainnet"
 }`
       }
@@ -412,7 +412,7 @@ const X402 = () => {
   "scheme": "exact",
   "network": "solana-mainnet",
   "payload": {
-    "signature": "YOUR_TRANSACTION_SIGNATURE"
+    "signature": "<YOUR_TRANSACTION_SIGNATURE>"
   }
 }`}</code>
             </pre>
