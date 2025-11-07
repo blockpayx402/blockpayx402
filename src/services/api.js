@@ -113,78 +113,6 @@ export const syncAPI = {
   },
 }
 
-// Orders API - For cross-chain swap orders
-export const ordersAPI = {
-  getStatus: async (orderId) => {
-    try {
-      const response = await api.get(`/status/${orderId}`)
-      return response.data
-    } catch (error) {
-      console.error('Error fetching order status:', error)
-      throw error
-    }
-  },
-
-  create: async (orderData) => {
-    try {
-      // Support both payment request flow and direct swap flow
-      const payload = {
-        requestId: orderData.requestId || null,
-        fromChain: orderData.fromChain,
-        fromAsset: orderData.fromAsset,
-        amount: orderData.amount,
-        refundAddress: orderData.refundAddress || null,
-        // For direct swaps (no requestId)
-        ...(orderData.requestId === null && {
-          toChain: orderData.toChain,
-          toAsset: orderData.toAsset,
-          recipientAddress: orderData.recipientAddress
-        })
-      }
-      const response = await api.post('/create-order', payload)
-      return response.data
-    } catch (error) {
-      console.error('Error creating order:', error)
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to create order'
-      throw new Error(errorMessage)
-    }
-  },
-
-  getStatus: async (orderId) => {
-    try {
-      const response = await api.get(`/status/${orderId}`)
-      return response.data
-    } catch (error) {
-      console.error('Error fetching order status:', error)
-      throw error
-    }
-  },
-
-  getByRequestId: async (requestId) => {
-    try {
-      const response = await api.get(`/orders/${requestId}`)
-      return response.data
-    } catch (error) {
-      console.error('Error fetching orders:', error)
-      return []
-    }
-  },
-
-  getExchangeRate: async (rateData) => {
-    try {
-      const response = await api.post('/exchange-rate', rateData)
-      return response.data
-    } catch (error) {
-      console.error('Error getting exchange rate:', error)
-      // Extract error message from response if available
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to get exchange rate'
-      const enhancedError = new Error(errorMessage)
-      enhancedError.response = error.response
-      throw enhancedError
-    }
-  },
-}
-
 // Health check
 export const healthCheck = async () => {
   try {
@@ -193,28 +121,5 @@ export const healthCheck = async () => {
   } catch (error) {
     return null
   }
-}
-
-// Relay API - Get chains and tokens dynamically
-export const relayAPI = {
-  getChains: async () => {
-    try {
-      const response = await api.get('/relay/chains')
-      return response.data.chains || []
-    } catch (error) {
-      console.error('Error fetching Relay chains:', error)
-      return []
-    }
-  },
-
-  getTokens: async (chainId) => {
-    try {
-      const response = await api.get(`/relay/tokens/${chainId}`)
-      return response.data.tokens || []
-    } catch (error) {
-      console.error('Error fetching Relay tokens:', error)
-      return []
-    }
-  },
 }
 

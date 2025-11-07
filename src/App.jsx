@@ -6,7 +6,6 @@ import PaymentRequest from './pages/PaymentRequest'
 import Transactions from './pages/Transactions'
 import PaymentPage from './pages/PaymentPage'
 import Staking from './pages/Staking'
-import OrderStatus from './pages/OrderStatus'
 import Swapper from './pages/Swapper'
 import Market from './pages/Market'
 import GasTracker from './pages/GasTracker'
@@ -32,7 +31,6 @@ function App() {
             <Route path="/api" element={<API />} />
             <Route path="/solana-closer" element={<SolanaCloser />} />
             <Route path="/pay/:requestId" element={<PaymentPage />} />
-            <Route path="/status/:orderId" element={<OrderStatus />} />
           </Routes>
         </Layout>
         <Toaster 

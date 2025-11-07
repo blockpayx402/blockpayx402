@@ -1,8 +1,6 @@
 import express from 'express'
 import cors from 'cors'
 import { dbHelpers } from './database.js'
-import { generateDepositAddress, checkDepositStatus, getExchangeStatusById } from './services/depositAddress.js'
-import { getRelayExchangeRate, getAllRelayChains, getAllRelayTokens } from './services/relay.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from './config.js'
 import { checkSetup, generateSetupInstructions } from './utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from './utils/security.js'
@@ -206,132 +204,13 @@ app.get('/api/setup', (req, res) => {
 
 // Create order (generate deposit address for cross-chain swap)
 app.post('/api/create-order', async (req, res) => {
-  try {
-    const {
-      requestId,
-      fromChain,
-      fromAsset,
-      amount,
-      refundAddress
-    } = req.body
-
-    // Validate required fields
-    if (!amount || amount === '' || amount === null || amount === undefined) {
-      return res.status(400).json({ error: 'Amount is required' })
-    }
-    
-    // Convert amount to number
-    const amountNum = typeof amount === 'string' ? parseFloat(amount.trim()) : Number(amount)
-    
-    if (!isFinite(amountNum) || isNaN(amountNum) || amountNum <= 0) {
-      return res.status(400).json({ error: `Invalid amount: ${amount}. Amount must be a positive number greater than zero.` })
-    }
-
-    // Support both payment requests and direct swaps
-    let toChain, toAsset, recipientAddress
-    
-    if (requestId) {
-      // Payment request flow
-      const request = dbHelpers.getRequestById(requestId)
-      if (!request) {
-        return res.status(404).json({ error: 'Payment request not found' })
-      }
-      toChain = request.chain
-      toAsset = request.currency
-      recipientAddress = request.recipient
-    } else {
-      // Direct swap flow - get from request body
-      toChain = req.body.toChain
-      toAsset = req.body.toAsset
-      recipientAddress = req.body.recipientAddress
-      
-      if (!toChain || !toAsset || !recipientAddress) {
-        return res.status(400).json({ error: 'For direct swaps, toChain, toAsset, and recipientAddress are required' })
-      }
-    }
-
-    // Extract userAddress from request body (optional - used for direct execution)
-    const userAddress = req.body.userAddress || null
-
-    // Calculate platform fee (with chain-specific recipient)
-    const fee = calculatePlatformFee(amountNum, fromAsset, fromChain)
-
-    // Generate order ID first
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
-
-    // Generate deposit address via Relay Link
-    // If userAddress is provided, use it for direct execution (like Relay)
-    const depositInfo = await generateDepositAddress({
-      fromChain,
-      fromAsset,
-      toChain,
-      toAsset,
-      amount: amountNum,
-      recipientAddress,
-      refundAddress,
-      orderId,
-      userAddress: userAddress || recipientAddress, // Use user's wallet for transaction signing
-    })
-
-    // Create order in database (for our tracking only)
-    const order = dbHelpers.createOrder({
-      id: orderId,
-      requestId: requestId || null,
-      fromChain,
-      fromAsset,
-      toChain,
-      toAsset,
-      amount: amountNum.toString(),
-      depositAddress: depositInfo.depositAddress || depositInfo.originAddress || null,
-      refundAddress,
-      expectedAmount: depositInfo.destinationAmount?.toString() || depositInfo.estimatedAmount?.toString() || amountNum.toString(),
-      status: 'awaiting_deposit',
-      exchangeId: depositInfo.id || depositInfo.quoteId || depositInfo.exchangeId || orderId,
-      platformFeeAmount: fee.amount.toString(),
-      platformFeePercent: fee.percent.toString(),
-      amountAfterFee: amountNum.toString()
-    })
-
-    // Pure wrapper - return Relay's response exactly as-is, just add orderId
-    res.json({
-      ...depositInfo, // Relay's full quote response
-      orderId: order.id, // Only our addition
-    })
-  } catch (error) {
-    console.error('[Create Order Error]', error)
-    console.error('[Create Order Error Stack]', error.stack)
-    
-    // Provide more specific error messages
-    let errorMessage = 'Failed to create order. Please try again.'
-    let statusCode = 500
-    
-    if (error.message) {
-      if (error.message.includes('API key') || error.message.includes('Unauthorized') || error.message.includes('401')) {
-        errorMessage = 'Relay Link API error. Please check your configuration.'
-        statusCode = 401
-      } else if (error.message.includes('not available') || error.message.includes('not found') || error.message.includes('404')) {
-        errorMessage = `This exchange pair is not available: ${fromAsset}(${fromChain}) -> ${req.body?.requestId ? 'target currency' : 'unknown'}. Please try a different currency or chain.`
-        statusCode = 404
-      } else if (error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('fetch')) {
-        errorMessage = 'Cannot connect to Relay Link API. Please check your internet connection and try again.'
-        statusCode = 503
-      } else {
-        errorMessage = error.message
-      }
-    }
-    
-    // Log the full error for debugging
-    console.error('[Create Order] Final error message:', errorMessage)
-    
-    res.status(statusCode).json({ 
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    })
-  }
+  res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
 })
 
 // Get exchange rate estimate (for calculating required send amount)
 app.post('/api/exchange-rate', async (req, res) => {
+  return res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
+  /*
   try {
     const {
       fromChain,
@@ -486,10 +365,13 @@ app.post('/api/exchange-rate', async (req, res) => {
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     })
   }
+  */
 })
 
 // Get order status (with real-time sync from ChangeNOW)
 app.get('/api/status/:orderId', async (req, res) => {
+  return res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
+  /*
   try {
     const order = dbHelpers.getOrderById(req.params.orderId)
     
@@ -541,10 +423,13 @@ app.get('/api/status/:orderId', async (req, res) => {
     console.error('Error fetching order status:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
+  */
 })
 
 
 app.get('/api/orders/:requestId', (req, res) => {
+  return res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
+  /*
   try {
     const orders = dbHelpers.getOrdersByRequestId(req.params.requestId)
     res.json(orders)
@@ -552,6 +437,7 @@ app.get('/api/orders/:requestId', (req, res) => {
     console.error('Error fetching orders:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
+  */
 })
 
 app.post('/api/cleanup', (req, res) => {
@@ -566,6 +452,8 @@ app.post('/api/cleanup', (req, res) => {
 
 // Relay Link Webhook Handler (for real-time status updates) - Currently not used
 app.post('/api/webhooks/relay', express.raw({ type: 'application/json' }), async (req, res) => {
+  return res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
+  /*
   try {
     // Verify webhook signature if configured
     const signature = req.headers['x-relay-signature']
@@ -612,6 +500,7 @@ app.post('/api/webhooks/relay', express.raw({ type: 'application/json' }), async
     console.error('Error processing webhook:', error)
     res.status(500).json({ error: 'Webhook processing failed' })
   }
+  */
 })
 
 app.listen(PORT, () => {
@@ -638,7 +527,6 @@ app.listen(PORT, () => {
   
   console.log(`💾 Database: SQLite`)
   console.log(`⏰ Payment requests expire after ${BLOCKPAY_CONFIG.paymentRequest.expirationHours} hour(s)`)
-  console.log(`🔄 Cross-chain swap orders supported`)
   console.log(`💰 Platform fee: ${calculatePlatformFee(100, 'USD').percent}%`)
   console.log(`   └─ Minimum: $${BLOCKPAY_CONFIG.fees.minFeeUSD}`)
   console.log(`   └─ Maximum: ${BLOCKPAY_CONFIG.fees.maxFeeUSD > 0 ? '$' + BLOCKPAY_CONFIG.fees.maxFeeUSD : 'No limit'}`)
@@ -680,6 +568,8 @@ app.listen(PORT, () => {
 
 // Get all Relay chains (for frontend)
 app.get('/api/relay/chains', async (req, res) => {
+  return res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
+  /*
   try {
     const chains = await getAllRelayChains()
     // Format chains for frontend
@@ -709,10 +599,13 @@ app.get('/api/relay/chains', async (req, res) => {
     console.error('[API] Error fetching chains:', error)
     res.status(500).json({ error: 'Failed to fetch chains', chains: [] })
   }
+  */
 })
 
 // Get all tokens for a chain (for frontend)
 app.get('/api/relay/tokens/:chainId', async (req, res) => {
+  return res.status(410).json({ error: 'Cross-chain swaps are disabled for this deployment.' })
+  /*
   try {
     const { chainId } = req.params
     console.log('[API] Fetching tokens for chainId:', chainId)
@@ -734,4 +627,5 @@ app.get('/api/relay/tokens/:chainId', async (req, res) => {
     console.error('[API] Error fetching tokens:', error)
     res.status(500).json({ error: 'Failed to fetch tokens', tokens: [] })
   }
+  */
 })

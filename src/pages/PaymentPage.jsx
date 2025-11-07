@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Wallet, Copy, CheckCircle2, Loader2, Clock, AlertCircle, RefreshCw, ExternalLink, ArrowRight } from 'lucide-react'
+import { ArrowLeft, Wallet, Copy, CheckCircle2, Loader2, Clock, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import QRCode from 'qrcode.react'
-import { generateExchangeLink, getAvailableExchangeCurrencies } from '../services/exchange'
 import { useApp } from '../context/AppContext'
 import { formatDistanceToNow } from 'date-fns'
 import { CHAINS, verifyPayment } from '../services/blockchain'
-import DepositAddressPayment from '../components/DepositAddressPayment'
 
 const PaymentPage = () => {
   const { requestId } = useParams()
@@ -333,36 +331,42 @@ const PaymentPage = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Instant Exchange Payment - Primary Method */}
-              {(request.enableExchange !== false) && (
-                <DepositAddressPayment request={request} />
-              )}
-
-              {/* Traditional Payment Method */}
-              <div className="glass-strong rounded-2xl p-5 bg-primary-500/10 border border-primary-500/30">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-                    <Wallet className="w-5 h-5 text-primary-400" />
+              <div className="glass-strong rounded-2xl p-6 bg-primary-500/10 border border-primary-500/30">
+                <div className="flex items-start gap-4 mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
+                    <Wallet className="w-5 h-5 text-primary-300" />
                   </div>
-                  <div className="text-sm flex-1">
-                    <div className="font-semibold text-primary-400 mb-3 tracking-tight">Direct Payment (Alternative)</div>
-                    <p className="text-xs text-white/60 mb-3 tracking-tight">
-                      If you already have {request.currency}, send directly:
+                  <div className="flex-1 text-sm">
+                    <div className="font-semibold text-primary-300 mb-3 tracking-tight text-lg">Payment Instructions</div>
+                    <p className="text-xs text-white/70 mb-3 tracking-tight">
+                      Send <span className="font-semibold text-white">{request.amount} {request.currency}</span> on <span className="font-semibold text-white">{CHAINS[request.chain]?.name || request.chain}</span> directly to the recipient address below. Only send this exact asset on this chain—other tokens or networks may be lost.
                     </p>
-                    <ol className="list-decimal list-inside space-y-2 text-white/70 text-[15px] leading-relaxed">
-                      <li className="tracking-tight">Copy the recipient address below</li>
-                      <li className="tracking-tight">Open your wallet app</li>
-                      <li className="tracking-tight">Send <span className="font-semibold text-white">{request.amount} {request.currency}</span> to the address</li>
+                    <ol className="list-decimal list-inside space-y-2 text-white/80 text-[15px] leading-relaxed">
+                      <li className="tracking-tight">Copy the recipient address.</li>
+                      <li className="tracking-tight">Open your wallet and switch to {CHAINS[request.chain]?.name || request.chain}.</li>
+                      <li className="tracking-tight">Send exactly <span className="font-semibold text-white">{request.amount} {request.currency}</span> to the address.</li>
+                      <li className="tracking-tight">Wait for confirmations—we’ll update this page automatically.</li>
                     </ol>
                   </div>
                 </div>
-                
+
+                <div className="grid gap-4 md:grid-cols-2 mb-4">
+                  <div className="glass rounded-xl border border-white/10 p-4">
+                    <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-2">Amount Due</p>
+                    <p className="text-white text-lg font-semibold tracking-tight">{request.amount} {request.currency}</p>
+                  </div>
+                  <div className="glass rounded-xl border border-white/10 p-4">
+                    <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-2">Network</p>
+                    <p className="text-white text-lg font-semibold tracking-tight">{CHAINS[request.chain]?.name || request.chain}</p>
+                  </div>
+                </div>
+
                 <button
                   onClick={handleCopyAddress}
                   className="w-full px-6 py-3 glass-strong border border-primary-500/30 text-primary-400 hover:bg-primary-500/10 rounded-xl font-medium transition-all flex items-center justify-center gap-2.5 tracking-tight"
                 >
                   <Copy className="w-4 h-4" />
-                  Copy {request.currency} Address
+                  Copy Recipient Address
                 </button>
               </div>
             </div>
@@ -378,23 +382,17 @@ const PaymentPage = () => {
         >
           <div className="text-center mb-8">
             <h2 className="text-2xl font-semibold mb-2 gradient-text tracking-tight">
-              {(request.enableExchange !== false) ? 'Instant Payment QR' : 'Scan to Pay'}
+              Scan to Pay
             </h2>
             <p className="text-sm text-white/60 tracking-tight">
-              {(request.enableExchange !== false) 
-                ? 'Scan to pay with any cryptocurrency - instant exchange!' 
-                : 'Scan this QR code with your wallet'}
+              Scan this QR code with your wallet to send <span className="text-white">{request.amount} {request.currency}</span> on {CHAINS[request.chain]?.name || request.chain}.
             </p>
           </div>
 
           <div className="glass-strong rounded-2xl p-6 flex items-center justify-center mb-6 border border-white/[0.12]">
             <div className="w-64 h-64 bg-white rounded-2xl p-4 flex items-center justify-center shadow-soft-lg">
               <QRCode 
-                value={
-                  (request.enableExchange !== false) 
-                    ? generateExchangeLink('BTC', request.currency, parseFloat(request.amount), request.recipient)
-                    : paymentUrl
-                } 
+                value={request.recipient || ''}
                 size={224}
                 level="H"
                 includeMargin={false}

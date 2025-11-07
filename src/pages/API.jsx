@@ -26,15 +26,14 @@ const API = () => {
       method: 'POST',
       path: '/requests',
       title: 'Create Payment Request',
-      description: 'Create a new payment request',
+      description: 'Create a new on-chain payment request',
       request: {
         body: {
           amount: 'string (required)',
           currency: 'string (required)',
           chain: 'string (required)',
           recipient: 'string (required)',
-          description: 'string (optional)',
-          refundAddress: 'string (optional)'
+          description: 'string (optional)'
         },
         headers: {
           'Content-Type': 'application/json',
@@ -43,18 +42,7 @@ const API = () => {
       },
       response: {
         status: 201,
-        body: {
-          id: 'string',
-          amount: 'string',
-          currency: 'string',
-          chain: 'string',
-          recipient: 'string',
-          description: 'string',
-          status: 'pending',
-          createdAt: 'string (ISO 8601)',
-          expiresAt: 'string (ISO 8601)',
-          payment_url: 'string'
-        }
+        body: '{ id, amount, currency, chain, recipient, description, status, createdAt, expiresAt, payment_url }'
       },
       example: {
         request: `curl -X POST ${baseUrl}/requests \\
@@ -85,7 +73,7 @@ const API = () => {
       method: 'GET',
       path: '/requests/:id',
       title: 'Get Payment Request',
-      description: 'Retrieve a payment request by ID',
+      description: 'Retrieve the status of a payment request by ID',
       request: {
         params: {
           id: 'string (required)'
@@ -93,18 +81,7 @@ const API = () => {
       },
       response: {
         status: 200,
-        body: {
-          id: 'string',
-          amount: 'string',
-          currency: 'string',
-          chain: 'string',
-          recipient: 'string',
-          description: 'string',
-          status: 'string',
-          createdAt: 'string',
-          expiresAt: 'string',
-          payment_url: 'string'
-        }
+        body: '{ id, amount, currency, chain, recipient, description, status, createdAt, expiresAt, payment_url }'
       },
       example: {
         request: `curl ${baseUrl}/requests/req_1234567890_abc123`,
@@ -127,10 +104,10 @@ const API = () => {
       method: 'GET',
       path: '/requests',
       title: 'List Payment Requests',
-      description: 'Get all payment requests',
+      description: 'List all payment requests you have created',
       response: {
         status: 200,
-        body: 'array of payment request objects'
+        body: 'Array of payment request objects'
       },
       example: {
         request: `curl ${baseUrl}/requests`,
@@ -144,91 +121,6 @@ const API = () => {
     "createdAt": "2024-01-01T10:00:00Z"
   }
 ]`
-      }
-    },
-    {
-      id: 'create-order',
-      method: 'POST',
-      path: '/create-order',
-      title: 'Create Swap Order',
-      description: 'Create a cross-chain swap order',
-      request: {
-        body: {
-          fromChain: 'string (required)',
-          fromAsset: 'string (required)',
-          amount: 'string (required)',
-          toChain: 'string (optional)',
-          toAsset: 'string (optional)',
-          recipientAddress: 'string (optional)',
-          refundAddress: 'string (optional)',
-          requestId: 'string (optional)',
-          userAddress: 'string (optional)'
-        }
-      },
-      response: {
-        status: 200,
-        body: {
-          id: 'string',
-          depositAddress: 'string',
-          exchangeId: 'string',
-          estimatedAmount: 'number',
-          exchangeRate: 'number',
-          validUntil: 'string'
-        }
-      },
-      example: {
-        request: `curl -X POST ${baseUrl}/create-order \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "fromChain": "ethereum",
-    "fromAsset": "ETH",
-    "amount": "0.1",
-    "toChain": "binance",
-    "toAsset": "BNB",
-    "recipientAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-  }'`,
-        response: `{
-  "id": "order_1234567890_abc123",
-  "depositAddress": "0x1234567890abcdef...",
-  "exchangeId": "relay_12345",
-  "estimatedAmount": 0.095,
-  "exchangeRate": 0.95,
-  "validUntil": "2024-01-01T11:00:00Z"
-}`
-      }
-    },
-    {
-      id: 'order-status',
-      method: 'GET',
-      path: '/order-status/:id',
-      title: 'Get Order Status',
-      description: 'Get the status of a swap order',
-      request: {
-        params: {
-          id: 'string (required)'
-        }
-      },
-      response: {
-        status: 200,
-        body: {
-          id: 'string',
-          status: 'string',
-          txHash: 'string',
-          swapTxHash: 'string',
-          amount: 'string',
-          toAmount: 'string'
-        }
-      },
-      example: {
-        request: `curl ${baseUrl}/order-status/order_1234567890_abc123`,
-        response: `{
-  "id": "order_1234567890_abc123",
-  "status": "completed",
-  "txHash": "0x1234567890abcdef...",
-  "swapTxHash": "0xabcdef1234567890...",
-  "amount": "0.1",
-  "toAmount": "0.095"
-}`
       }
     }
   ]
@@ -332,6 +224,19 @@ const API = () => {
                         </div>
                       </div>
                     )}
+                    {endpoint.request.params && (
+                      <div className="mb-4">
+                        <p className="text-sm text-white/80 mb-2 tracking-tight">Path Parameters:</p>
+                        <div className="space-y-2">
+                          {Object.entries(endpoint.request.params).map(([key, value]) => (
+                            <div key={key} className="flex items-start gap-3 text-sm">
+                              <code className="text-primary-400 font-mono">{key}</code>
+                              <span className="text-white/60">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -423,10 +328,6 @@ const API = () => {
             <span className="text-white/60">Not Found - Resource does not exist</span>
           </div>
           <div className="flex items-start gap-3">
-            <code className="text-red-400 font-mono">402</code>
-            <span className="text-white/60">Payment Required - Payment needed to access resource</span>
-          </div>
-          <div className="flex items-start gap-3">
             <code className="text-red-400 font-mono">500</code>
             <span className="text-white/60">Internal Server Error - Server error occurred</span>
           </div>
@@ -445,4 +346,5 @@ const API = () => {
 }
 
 export default API
+
 
