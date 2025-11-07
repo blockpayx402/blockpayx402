@@ -54,6 +54,18 @@ const TokenSelector = ({ label, tokens, value, onChange }) => {
       .slice(0, 200)
   }, [query, tokens])
 
+  const handleUseMint = () => {
+    const mint = query.trim()
+    if (!isMaybeMint(mint)) {
+      toast.error('Enter a valid Solana mint address')
+      return
+    }
+
+    // If mint exists in list, ensure we use the exact token entry to keep dropdown state consistent
+    const matchingToken = tokens.find(token => token.address?.toLowerCase() === mint.toLowerCase())
+    onChange(matchingToken ? matchingToken.address : mint)
+  }
+
   return (
     <div className="space-y-2">
       <label className="block text-sm text-white/60 tracking-tight">{label}</label>
@@ -71,6 +83,12 @@ const TokenSelector = ({ label, tokens, value, onChange }) => {
             className="px-3 py-1 text-xs glass-strong rounded-lg border border-white/10 text-white/60 hover:text-white"
           >
             Clear
+          </button>
+          <button
+            onClick={handleUseMint}
+            className="px-3 py-1 text-xs bg-primary-500/20 border border-primary-500/40 text-primary-100 rounded-lg hover:bg-primary-500/30"
+          >
+            Use Mint
           </button>
         </div>
       </div>
