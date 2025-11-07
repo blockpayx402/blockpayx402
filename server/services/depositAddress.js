@@ -142,17 +142,8 @@ export const generateDepositAddress = async (orderData) => {
       throw new Error(`Cannot create exchange for the same currency on the same chain: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please use direct payment instead.`)
     }
     
-    // For same-chain swaps, use direct DEX swap instead of deposit address
-    // This allows users to execute swaps directly on-chain like Relay does
-    if (fromChain === toChain && fromAsset.toUpperCase() !== toAsset.toUpperCase()) {
-      // Same chain, different tokens - use direct swap
-      return await generateDirectSwap(orderData)
-    }
-    
-    // Pure Relay wrapper - no custom fee calculation or order management
-    // Relay handles everything: fees, execution, status tracking
-    
-    // Pass through to Relay SDK directly - no wrapper logic
+    // Pure Relay wrapper - let Relay handle everything (same-chain, cross-chain, everything)
+    // Just like relay.link/bridge - no special cases, just pass through
     let exchangeData = null
     
     try {
@@ -186,20 +177,11 @@ export const generateDepositAddress = async (orderData) => {
       throw new Error(`Failed to generate deposit address for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again.`)
     }
 
+    // Pure wrapper - return Relay's response exactly as-is
+    // Just add our orderId for tracking, everything else is Relay's
     return {
-      depositAddress: exchangeData.depositAddress,
-      orderId: orderId,
-      exchangeId: exchangeData.exchangeId,
-      estimatedAmount: exchangeData.estimatedAmount,
-      exchangeRate: exchangeData.exchangeRate,
-      validUntil: exchangeData.validUntil,
-      platformFee: safeFee,
-      amountAfterFee,
-      // Include Relay direct execution fields
-      isDirectExecution: exchangeData.isDirectExecution || false,
-      transactionData: exchangeData.transactionData || null,
-      approvalTransaction: exchangeData.approvalTransaction || null,
-      needsApproval: exchangeData.needsApproval || false,
+      ...exchangeData,
+      orderId: orderId, // Only addition - for our internal tracking
     }
   } catch (error) {
     console.error('Error generating deposit address:', error)

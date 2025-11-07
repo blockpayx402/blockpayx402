@@ -192,35 +192,9 @@ export const createRelayTransaction = async (orderData) => {
       }),
     })
     
-    // Pure Relay wrapper - return Relay's quote response directly
-    const depositAddress = quote.depositAddress || quote.originAddress || quote.fromAddress
-    const destinationAmount = quote.destinationAmount || quote.toAmount || quote.outputAmount
-    const quoteId = quote.id || quote.quoteId || quote.requestId
-    const transactionData = quote.transaction || quote.tx || quote.transactionData || null
-    const needsApproval = quote.needsApproval || false
-    const approvalTx = quote.approvalTransaction || quote.approvalTx || null
-    
-    console.log('[Relay SDK] Quote received:', {
-      depositAddress,
-      destinationAmount,
-      quoteId,
-      hasTransactionData: !!transactionData,
-      needsApproval
-    })
-    
-    // Return Relay's response directly - minimal wrapping
-    return {
-      exchangeId: quoteId || orderId,
-      depositAddress: depositAddress || null,
-      estimatedAmount: destinationAmount ? parseFloat(destinationAmount) : null,
-      exchangeRate: destinationAmount && amount ? parseFloat(destinationAmount) / parseFloat(amount) : null,
-      validUntil: quote.expiresAt || quote.validUntil || quote.expiry || null,
-      quote: quote, // Full Relay quote
-      transactionData: transactionData, // For direct execution
-      approvalTransaction: approvalTx, // For ERC20 approval
-      needsApproval: needsApproval,
-      isDirectExecution: !!transactionData, // True if has transaction data
-    }
+    // Pure Relay wrapper - return Relay's quote exactly as-is
+    // Just like relay.link/bridge does
+    return quote
   } catch (error) {
     console.error('[Relay SDK] Error creating transaction:', error)
     console.error('[Relay SDK] Error details:', {

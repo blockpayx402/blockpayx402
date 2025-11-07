@@ -273,38 +273,29 @@ app.post('/api/create-order', async (req, res) => {
       userAddress: userAddress || recipientAddress, // Use user's wallet for transaction signing
     })
 
-    // Create order in database
+    // Create order in database (for our tracking only)
     const order = dbHelpers.createOrder({
       id: orderId,
-      requestId: requestId || null, // null for direct swaps
+      requestId: requestId || null,
       fromChain,
       fromAsset,
       toChain,
       toAsset,
       amount: amountNum.toString(),
-      depositAddress: depositInfo.depositAddress,
+      depositAddress: depositInfo.depositAddress || depositInfo.originAddress || null,
       refundAddress,
-      expectedAmount: depositInfo.estimatedAmount?.toString() || amountNum.toString(),
+      expectedAmount: depositInfo.destinationAmount?.toString() || depositInfo.estimatedAmount?.toString() || amountNum.toString(),
       status: 'awaiting_deposit',
-      exchangeId: depositInfo.exchangeId,
+      exchangeId: depositInfo.id || depositInfo.quoteId || depositInfo.exchangeId || orderId,
       platformFeeAmount: fee.amount.toString(),
       platformFeePercent: fee.percent.toString(),
-      amountAfterFee: depositInfo.amountAfterFee?.toString() || amountNum.toString()
+      amountAfterFee: amountNum.toString()
     })
 
+    // Pure wrapper - return Relay's response exactly as-is, just add orderId
     res.json({
-      ...order,
-      depositAddress: depositInfo.depositAddress,
-      orderId: order.id,
-      platformFee: fee,
-      estimatedAmount: depositInfo.estimatedAmount,
-      exchangeRate: depositInfo.exchangeRate,
-      validUntil: depositInfo.validUntil,
-      // Include Relay direct execution fields
-      isDirectExecution: depositInfo.isDirectExecution || false,
-      transactionData: depositInfo.transactionData || null,
-      approvalTransaction: depositInfo.approvalTransaction || null,
-      needsApproval: depositInfo.needsApproval || false,
+      ...depositInfo, // Relay's full quote response
+      orderId: order.id, // Only our addition
     })
   } catch (error) {
     console.error('[Create Order Error]', error)
