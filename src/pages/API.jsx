@@ -45,7 +45,7 @@ const API = () => {
         body: '{ id, amount, currency, chain, recipient, description, status, createdAt, expiresAt, payment_url }'
       },
       example: {
-        request: `curl -X POST ${baseUrl}/requests \\
+        bash: `curl -X POST ${baseUrl}/requests \\
   -H "Content-Type: application/json" \\
   -d '{
     "amount": "0.5",
@@ -54,6 +54,15 @@ const API = () => {
     "recipient": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
     "description": "Payment for services"
   }'`,
+        powershell: `$body = @{
+    amount = "0.5"
+    currency = "ETH"
+    chain = "ethereum"
+    recipient = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+    description = "Payment for services"
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "id": "req_1234567890_abc123",
   "amount": "0.5",
@@ -88,7 +97,8 @@ const API = () => {
         body: 'Payment request object OR x402 payment requirements'
       },
       example: {
-        request: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/requests/req_1234567890_abc123`,
+        bash: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/requests/req_1234567890_abc123`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/requests/req_1234567890_abc123" -Headers @{"X-Payment-Protocol"="x402/1.0"}`,
         response: `HTTP/1.1 402 Payment Required
 {
   "x402Version": 1,
@@ -124,7 +134,8 @@ const API = () => {
         body: 'Array of payment request objects'
       },
       example: {
-        request: `curl ${baseUrl}/requests`,
+        bash: `curl ${baseUrl}/requests`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/requests"`,
         response: `[
   {
     "id": "req_1234567890_abc123",
@@ -157,9 +168,11 @@ const API = () => {
         body: 'Updated payment request object'
       },
       example: {
-        request: `curl -X PUT ${baseUrl}/requests/req_1234567890_abc123 \\
+        bash: `curl -X PUT ${baseUrl}/requests/req_1234567890_abc123 \\
   -H "Content-Type: application/json" \\
   -d '{"status": "completed"}'`,
+        powershell: `$body = @{status = "completed"} | ConvertTo-Json
+Invoke-WebRequest -Uri "${baseUrl}/requests/req_1234567890_abc123" -Method PUT -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "id": "req_1234567890_abc123",
   "status": "completed",
@@ -178,7 +191,8 @@ const API = () => {
         body: 'Array of transaction objects'
       },
       example: {
-        request: `curl ${baseUrl}/transactions`,
+        bash: `curl ${baseUrl}/transactions`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/transactions"`,
         response: `[
   {
     "id": "tx_1234567890_abc123",
@@ -214,7 +228,7 @@ const API = () => {
         body: 'Created transaction object'
       },
       example: {
-        request: `curl -X POST ${baseUrl}/transactions \\
+        bash: `curl -X POST ${baseUrl}/transactions \\
   -H "Content-Type: application/json" \\
   -d '{
     "requestId": "req_1234567890_abc123",
@@ -223,6 +237,15 @@ const API = () => {
     "chain": "ethereum",
     "txHash": "0x..."
   }'`,
+        powershell: `$body = @{
+    requestId = "req_1234567890_abc123"
+    amount = "0.5"
+    currency = "ETH"
+    chain = "ethereum"
+    txHash = "0x..."
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "${baseUrl}/transactions" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "id": "tx_1234567890_abc123",
   "requestId": "req_1234567890_abc123",
@@ -251,12 +274,18 @@ const API = () => {
         body: '{ success: boolean, requests: array, transactions: array }'
       },
       example: {
-        request: `curl -X POST ${baseUrl}/sync \\
+        bash: `curl -X POST ${baseUrl}/sync \\
   -H "Content-Type: application/json" \\
   -d '{
     "requests": [...],
     "transactions": [...]
   }'`,
+        powershell: `$body = @{
+    requests = @()
+    transactions = @()
+} | ConvertTo-Json -Depth 10
+
+Invoke-WebRequest -Uri "${baseUrl}/sync" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "success": true,
   "requests": [...],
@@ -275,7 +304,8 @@ const API = () => {
         body: '{ status: "ok", timestamp: string }'
       },
       example: {
-        request: `curl ${baseUrl}/health`,
+        bash: `curl ${baseUrl}/health`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/health"`,
         response: `{
   "status": "ok",
   "timestamp": "2024-01-01T12:00:00Z"
@@ -293,7 +323,8 @@ const API = () => {
         body: '{ ready: boolean, issues: array, warnings: array, instructions: object }'
       },
       example: {
-        request: `curl ${baseUrl}/setup`,
+        bash: `curl ${baseUrl}/setup`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/setup"`,
         response: `{
   "ready": true,
   "issues": [],
@@ -313,7 +344,8 @@ const API = () => {
         body: '{ success: boolean, deleted: number }'
       },
       example: {
-        request: `curl -X POST ${baseUrl}/cleanup`,
+        bash: `curl -X POST ${baseUrl}/cleanup`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/cleanup" -Method POST`,
         response: `{
   "success": true,
   "deleted": 5
@@ -341,7 +373,7 @@ const API = () => {
         body: '{ isValid: boolean, invalidReason: string | null }'
       },
       example: {
-        request: `curl -X POST ${baseUrl}/x402/verify \\
+        bash: `curl -X POST ${baseUrl}/x402/verify \\
   -H "Content-Type: application/json" \\
   -d '{
     "x402Version": 1,
@@ -353,6 +385,18 @@ const API = () => {
       "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
     }
   }'`,
+        powershell: `$body = @{
+    x402Version = 1
+    paymentHeader = "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0="
+    paymentRequirements = @{
+        scheme = "exact"
+        network = "solana-mainnet"
+        maxAmountRequired = "500000000"
+        payTo = "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+    }
+} | ConvertTo-Json -Depth 10
+
+Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "isValid": true,
   "invalidReason": null
@@ -380,7 +424,7 @@ const API = () => {
         body: '{ success: boolean, error: string | null, txHash: string | null, networkId: string | null }'
       },
       example: {
-        request: `curl -X POST ${baseUrl}/x402/settle \\
+        bash: `curl -X POST ${baseUrl}/x402/settle \\
   -H "Content-Type: application/json" \\
   -d '{
     "x402Version": 1,
@@ -392,6 +436,18 @@ const API = () => {
       "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
     }
   }'`,
+        powershell: `$body = @{
+    x402Version = 1
+    paymentHeader = "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6IjEyMzQ1Njc4OTAifX0="
+    paymentRequirements = @{
+        scheme = "exact"
+        network = "solana-mainnet"
+        maxAmountRequired = "500000000"
+        payTo = "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+    }
+} | ConvertTo-Json -Depth 10
+
+Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "success": true,
   "error": null,
@@ -412,7 +468,8 @@ const API = () => {
         body: '{ kinds: [{ scheme: string, network: string }] }'
       },
       example: {
-        request: `curl ${baseUrl}/x402/supported`,
+        bash: `curl ${baseUrl}/x402/supported`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/supported"`,
         response: `{
   "kinds": [
     {
@@ -444,11 +501,8 @@ const API = () => {
         body: 'x402 payment requirements OR success response'
       },
       example: {
-        request: `# Bash/Linux/Mac
-curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo
-
-# PowerShell (Windows) - Shows JSON response
-try { $response = Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}; $response.Content } catch { $stream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($stream); $reader.ReadToEnd() }`,
+        bash: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo`,
+        powershell: `try { $response = Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}; $response.Content } catch { $stream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($stream); $reader.ReadToEnd() }`,
         response: `HTTP/1.1 402 Payment Required
 {
   "x402Version": 1,
@@ -613,24 +667,66 @@ try { $response = Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Pa
 
                 {endpoint.example && (
                   <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request</h4>
-                        <button
-                          onClick={() => copyToClipboard(endpoint.example.request, `${endpoint.id}-request`)}
-                          className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
-                        >
-                          {copiedCode === `${endpoint.id}-request` ? (
-                            <Check className="w-4 h-4 text-green-400" />
-                          ) : (
-                            <Copy className="w-4 h-4 text-white/60" />
-                          )}
-                        </button>
+                    {endpoint.example.bash && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (Bash/Linux/Mac)</h4>
+                          <button
+                            onClick={() => copyToClipboard(endpoint.example.bash, `${endpoint.id}-bash`)}
+                            className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                          >
+                            {copiedCode === `${endpoint.id}-bash` ? (
+                              <Check className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-white/60" />
+                            )}
+                          </button>
+                        </div>
+                        <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                          <code className="text-white/90">{endpoint.example.bash}</code>
+                        </pre>
                       </div>
-                      <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                        <code className="text-white/90">{endpoint.example.request}</code>
-                      </pre>
-                    </div>
+                    )}
+                    {endpoint.example.powershell && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (PowerShell/Windows)</h4>
+                          <button
+                            onClick={() => copyToClipboard(endpoint.example.powershell, `${endpoint.id}-powershell`)}
+                            className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                          >
+                            {copiedCode === `${endpoint.id}-powershell` ? (
+                              <Check className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-white/60" />
+                            )}
+                          </button>
+                        </div>
+                        <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                          <code className="text-white/90">{endpoint.example.powershell}</code>
+                        </pre>
+                      </div>
+                    )}
+                    {endpoint.example.request && !endpoint.example.bash && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request</h4>
+                          <button
+                            onClick={() => copyToClipboard(endpoint.example.request, `${endpoint.id}-request`)}
+                            className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                          >
+                            {copiedCode === `${endpoint.id}-request` ? (
+                              <Check className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-white/60" />
+                            )}
+                          </button>
+                        </div>
+                        <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                          <code className="text-white/90">{endpoint.example.request}</code>
+                        </pre>
+                      </div>
+                    )}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Response</h4>
