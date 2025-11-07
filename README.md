@@ -19,7 +19,19 @@ BlockPay X402 is a **non-custodial cryptocurrency payment platform** that allows
 
 ### Key Innovation: X402 Payment Protocol
 
-BlockPay implements the **X402 Payment Protocol**, an innovative HTTP status code extension that enables paywalled content access through cryptocurrency payments. When a user requests protected content, the server responds with a `402 Payment Required` status and payment instructions, allowing seamless integration of crypto payments into web applications.
+BlockPay implements the **X402 Payment Protocol**, an innovative HTTP status code extension that enables paywalled content access through cryptocurrency payments. 
+
+**How X402 Works:**
+
+The X402 protocol extends the standard HTTP `402 Payment Required` status code to support cryptocurrency payments. When a user requests protected content:
+
+1. **Server Response**: The server responds with HTTP `402` status and a JSON payload containing payment requirements
+2. **Payment Instructions**: The response includes accepted cryptocurrencies, amounts, and recipient addresses
+3. **Client Payment**: The user's wallet automatically processes the payment on the blockchain
+4. **Verification**: The client includes the transaction signature in the `X-PAYMENT` header
+5. **Content Access**: Upon verification, the server grants access to the protected resource
+
+This protocol enables seamless monetization of digital content, API access, and premium features without traditional payment processors.
 
 ---
 
@@ -84,83 +96,281 @@ Our swap engine handles token conversions across different blockchains:
 
 ### X402 Protocol Implementation
 
-The X402 Payment Protocol allows content creators to monetize their work:
+The X402 Payment Protocol allows content creators, developers, and service providers to monetize their work directly through blockchain payments.
+
+**Complete Flow Example:**
 
 ```javascript
-// Server responds with 402 Payment Required
-{
-  "x402Version": 1,
-  "accepts": [{
-    "asset": "SOL",
-    "amount": "0.1",
-    "recipient": "wallet_address",
-    "resource": "/api/protected-content"
-  }]
-}
+// Step 1: Client requests protected content
+const response = await fetch('/api/protected-content');
 
-// Client pays and includes X-PAYMENT header
-fetch('/api/protected-content', {
-  headers: {
-    'X-PAYMENT': 'transaction_signature'
+// Step 2: Server responds with 402 Payment Required
+if (response.status === 402) {
+  const paymentInfo = await response.json();
+  // Response structure:
+  {
+    "x402Version": 1,
+    "accepts": [
+      {
+        "asset": "SOL",                    // Cryptocurrency symbol
+        "amount": "0.1",                    // Required amount
+        "recipient": "7FSR...5Gn",         // Recipient wallet address
+        "resource": "/api/protected-content", // Resource being paid for
+        "description": "Premium article access",
+        "mimeType": "application/json"      // Expected content type
+      }
+    ],
+    "error": null
   }
-})
+  
+  // Step 3: User's wallet processes payment
+  const transaction = await wallet.sendTransaction({
+    to: paymentInfo.accepts[0].recipient,
+    amount: paymentInfo.accepts[0].amount
+  });
+  
+  // Step 4: Client retries request with payment proof
+  const paidResponse = await fetch('/api/protected-content', {
+    headers: {
+      'X-PAYMENT': transaction.signature,  // Transaction signature
+      'X-PAYMENT-ASSET': 'SOL',              // Asset used
+      'X-PAYMENT-AMOUNT': '0.1'              // Amount paid
+    }
+  });
+  
+  // Step 5: Server verifies payment and returns content
+  const content = await paidResponse.json();
+}
 ```
+
+**Key Benefits:**
+- **No Middlemen**: Direct wallet-to-wallet payments
+- **Instant Verification**: Blockchain confirms transactions in real-time
+- **Multi-Chain Support**: Accept payments in any supported cryptocurrency
+- **Programmatic Access**: Perfect for API monetization and premium features
+- **Non-Custodial**: Payments go directly to content creator's wallet
 
 ---
 
 ## 📖 API Documentation
 
+BlockPay X402 provides a comprehensive RESTful API for creating payment requests, managing transactions, and implementing the X402 protocol. All endpoints are available at `https://blockpay.cloud/api`.
+
 ### Payment Requests
 
-```bash
-# Create a payment request
+Create and manage cryptocurrency payment requests with support for multiple blockchains.
+
+**Create Payment Request**
+```http
 POST /api/requests
+Content-Type: application/json
+
 {
+  "amount": "0.1",                    // Payment amount
+  "currency": "ETH",                   // Currency symbol (ETH, SOL, USDC, etc.)
+  "recipient": "0x742d...35Cc",        // Recipient wallet address
+  "description": "Payment for services", // Optional description
+  "chain": "ethereum"                  // Blockchain: ethereum, solana, polygon, bnb
+}
+```
+
+**Response:**
+```json
+{
+  "id": "req_1234567890_abc123",
   "amount": "0.1",
   "currency": "ETH",
-  "recipient": "0x...",
+  "recipient": "0x742d...35Cc",
   "description": "Payment for services",
-  "chain": "ethereum"
+  "status": "pending",
+  "chain": "ethereum",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "paymentUrl": "https://blockpay.cloud/pay/req_1234567890_abc123"
 }
+```
 
-# Get all requests
+**Get All Payment Requests**
+```http
 GET /api/requests
+```
 
-# Get specific request
+**Get Specific Payment Request**
+```http
 GET /api/requests/:id
+```
 
-# Pay a request (X402 protocol)
+**Pay a Request (X402 Protocol)**
+```http
 GET /api/requests/:id
-Headers: { "X-PAYMENT": "transaction_signature" }
+Headers:
+  X-PAYMENT: <transaction_signature>
+  X-PAYMENT-ASSET: SOL
+  X-PAYMENT-AMOUNT: 0.1
 ```
 
 ### Swap Orders
 
-```bash
-# Create swap order
+Create cross-chain token swaps automatically when payment currency differs from recipient's preferred chain.
+
+**Create Swap Order**
+```http
 POST /api/create-order
+Content-Type: application/json
+
 {
+  "fromCurrency": "ETH",              // Source currency
+  "toCurrency": "SOL",                 // Target currency
+  "amount": "0.1",                      // Amount to swap
+  "recipient": "7FSR...5Gn",           // Recipient wallet address
+  "refundAddress": "0x742d...35Cc"     // Optional refund address
+}
+```
+
+**Response:**
+```json
+{
+  "id": "order_abc123",
   "fromCurrency": "ETH",
   "toCurrency": "SOL",
   "amount": "0.1",
-  "recipient": "wallet_address"
+  "status": "waiting",
+  "depositAddress": "0x...",
+  "expectedAmount": "2.5",
+  "rate": "25.0",
+  "expiresAt": "2024-01-15T11:30:00Z"
 }
+```
 
-# Get order status
+**Get Order Status**
+```http
 GET /api/orders/:id
 ```
 
-### Health & Setup
+**Response:**
+```json
+{
+  "id": "order_abc123",
+  "status": "finished",              // waiting, confirming, exchanging, finished, failed
+  "fromCurrency": "ETH",
+  "toCurrency": "SOL",
+  "fromAmount": "0.1",
+  "toAmount": "2.5",
+  "transactionHash": "0x...",
+  "completedAt": "2024-01-15T10:35:00Z"
+}
+```
 
-```bash
-# Health check
+### X402 Protocol Endpoints
+
+Implement paywalled content using the X402 Payment Protocol.
+
+**Request Protected Resource (Without Payment)**
+```http
+GET /api/protected-content
+```
+
+**Response (402 Payment Required):**
+```http
+HTTP/1.1 402 Payment Required
+Content-Type: application/json
+
+{
+  "x402Version": 1,
+  "accepts": [
+    {
+      "asset": "SOL",
+      "amount": "0.1",
+      "recipient": "7FSR...5Gn",
+      "resource": "/api/protected-content",
+      "description": "Premium article access",
+      "mimeType": "application/json"
+    }
+  ],
+  "error": null
+}
+```
+
+**Request Protected Resource (With Payment)**
+```http
+GET /api/protected-content
+Headers:
+  X-PAYMENT: <transaction_signature>
+  X-PAYMENT-ASSET: SOL
+  X-PAYMENT-AMOUNT: 0.1
+```
+
+**Response (200 OK):**
+```json
+{
+  "content": "...",
+  "verified": true,
+  "paymentTx": "5j7s...xyz"
+}
+```
+
+### System Endpoints
+
+**Health Check**
+```http
 GET /api/health
+```
 
-# Setup status
+**Response:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "version": "1.0.0"
+}
+```
+
+**Setup Status**
+```http
 GET /api/setup
 ```
 
-Full API documentation available at: [https://blockpay.cloud/api](https://blockpay.cloud/api)
+**Response:**
+```json
+{
+  "configured": true,
+  "features": {
+    "swaps": true,
+    "x402": true,
+    "multiChain": true
+  }
+}
+```
+
+### Error Responses
+
+All endpoints return standard HTTP status codes with error details:
+
+```json
+{
+  "error": "Payment request not found",
+  "code": "NOT_FOUND",
+  "status": 404
+}
+```
+
+**Common Status Codes:**
+- `200` - Success
+- `400` - Bad Request (invalid parameters)
+- `402` - Payment Required (X402 protocol)
+- `404` - Not Found
+- `500` - Internal Server Error
+
+### Authentication
+
+Currently, the API is publicly accessible. Rate limiting and authentication may be added in future versions.
+
+### Rate Limits
+
+- Standard endpoints: 100 requests/minute
+- Swap endpoints: 20 requests/minute
+- X402 endpoints: 50 requests/minute
+
+Full interactive API documentation available at: [https://blockpay.cloud/api](https://blockpay.cloud/api)
 
 ---
 
