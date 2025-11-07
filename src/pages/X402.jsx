@@ -273,8 +273,17 @@ console.log('Payment verified!', result)`
 
             <p className="text-white/40 text-xs mt-3">
               This returns a 402 response with <code className="text-primary-400">accepts</code> array containing payment requirements.
-              You'll see the recipient address and amount needed. To see the JSON response in PowerShell, use: <code className="text-primary-400">(Invoke-WebRequest ...).Content</code>
+              You'll see the recipient address and amount needed.
             </p>
+            <div className="mt-3 p-3 glass-strong rounded-lg border border-white/5">
+              <p className="text-white/60 text-xs mb-2 font-semibold">PowerShell Tip:</p>
+              <p className="text-white/40 text-xs mb-2">
+                The 402 status is expected! To see the JSON response body, use:
+              </p>
+              <code className="text-primary-400 text-xs block">
+                try {`{`} (Invoke-WebRequest -Uri "https://blockpay.cloud/api/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}).Content } catch {`{`} $_.Exception.Response.GetResponseStream() | ForEach-Object {`{`} $reader = New-Object System.IO.StreamReader($_); $reader.ReadToEnd() } }
+              </code>
+            </div>
           </div>
 
           <div>
