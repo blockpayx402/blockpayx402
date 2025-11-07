@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { TrendingUp, TrendingDown, Search, Loader2, BarChart3, RefreshCw, ExternalLink, Twitter, Globe, Github, Youtube, MessageCircle } from 'lucide-react'
+import { useMemo } from 'react'
+import { TrendingUp, TrendingDown, Search, Loader2, BarChart3, RefreshCw, ExternalLink, Twitter, Globe, Github, Youtube, MessageCircle, ChevronRight, Info } from 'lucide-react'
 
 const Market = () => {
   const [coins, setCoins] = useState([])
@@ -15,6 +16,9 @@ const Market = () => {
   const [coinDetails, setCoinDetails] = useState(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState(null)
+  const [activeTab, setActiveTab] = useState('overview')
+  const [activeDescription, setActiveDescription] = useState('overview')
+  const [priceRangePeriod, setPriceRangePeriod] = useState('24h')
 
   const PER_PAGE = 250
 
@@ -108,10 +112,10 @@ const Market = () => {
         setDetailsError(null)
 
         const [detailsRes, chartRes] = await Promise.all([
-          fetch(`https://api.coingecko.com/api/v3/coins/${selectedCoinId}?localization=false&tickers=false&market_data=true&community_data=true&developer_data=false&sparkline=false`, {
+          fetch(`https://api.coingecko.com/api/v3/coins/${selectedCoinId}?localization=false&tickers=false&market_data=true&community_data=true&developer_data=true&sparkline=false`, {
             signal: controller.signal,
           }),
-          fetch(`https://api.coingecko.com/api/v3/coins/${selectedCoinId}/market_chart?vs_currency=usd&days=7&interval=hourly`, {
+          fetch(`https://api.coingecko.com/api/v3/coins/${selectedCoinId}/market_chart?vs_currency=usd&days=30&interval=daily`, {
             signal: controller.signal,
           }),
         ])
@@ -125,7 +129,12 @@ const Market = () => {
         }
 
         const [detailsData, chartData] = await Promise.all([detailsRes.json(), chartRes.json()])
-        setCoinDetails({ details: detailsData, chart: chartData?.prices || [] })
+        setCoinDetails({
+          details: detailsData,
+          chart: chartData?.prices || [],
+          marketCaps: chartData?.market_caps || [],
+          totalVolumes: chartData?.total_volumes || [],
+        })
       } catch (err) {
         if (err.name === 'AbortError') return
         console.error('Error loading coin details:', err)
@@ -140,14 +149,12 @@ const Market = () => {
     return () => controller.abort()
   }, [selectedCoinId])
 
-  const normalizeSparkline = (values) => {
+  const normalizeSparkline = (values, width = 200, height = 60) => {
     if (!Array.isArray(values) || values.length === 0) return ''
     const prices = values.map(point => point[1])
     const min = Math.min(...prices)
     const max = Math.max(...prices)
     const range = max - min || 1
-    const width = 200
-    const height = 60
 
     return prices
       .map((price, index) => {
@@ -161,6 +168,76 @@ const Market = () => {
   const getPlatformContracts = (platforms) => {
     if (!platforms || typeof platforms !== 'object') return []
     return Object.entries(platforms)
+  const formattedCoinDetails = useMemo(() => {
+    if (!coinDetails || !coinDetails.details) return null
+    const { details, chart } = coinDetails
+    const marketData = details.market_data || {}
+
+    const socialLinks = []
+    if (details.links?.homepage?.[0]) {
+      socialLinks.push({ label: 'Website', url: details.links.homepage[0], icon: Globe, color: 'text-primary-200' })
+    }
+    if (details.links?.twitter_screen_name) {
+      socialLinks.push({ label: `@${details.links.twitter_screen_name}`, url: `https://twitter.com/${details.links.twitter_screen_name}`, icon: Twitter, color: 'text-sky-300' })
+    }
+    if (details.links?.subreddit_url) {
+      socialLinks.push({ label: 'Reddit', url: details.links.subreddit_url, icon: MessageCircle, color: 'text-orange-200' })
+    }
+    if (details.links?.repos_url?.github?.[0]) {
+      socialLinks.push({ label: 'GitHub', url: details.links.repos_url.github[0], icon: Github, color: 'text-white/80' })
+    }
+    if (details.links?.youtube_channel_ids?.[0]) {
+      socialLinks.push({ label: 'YouTube', url: `https://www.youtube.com/${details.links.youtube_channel_ids[0]}`, icon: Youtube, color: 'text-red-300' })
+    }
+
+    const metrics = [
+      {
+        label: 'Market Cap',
+        value: formatMarketCap(marketData.market_cap?.usd ?? 0),
+        helper: 'Current market capitalization in USD.',
+      },
+      {
+        label: 'Fully Diluted',
+        value: formatMarketCap(marketData.fully_diluted_valuation?.usd ?? 0),
+        helper: 'Value if maximum supply were in circulation.',
+      },
+      {
+        label: 'Circulating Supply',
+        value: marketData.circulating_supply ? `${Number(marketData.circulating_supply).toLocaleString()} ${details.symbol.toUpperCase()}` : '—',
+        helper: 'Coins currently in circulation.',
+      },
+      {
+        label: 'Total Volume (24h)',
+        value: formatMarketCap(marketData.total_volume?.usd ?? 0),
+        helper: 'Trading volume in the last 24 hours.',
+      },
+      {
+        label: 'ATH',
+        value: formatPrice(marketData.ath?.usd ?? 0),
+        helper: marketData.ath_date?.usd ? `ATH set on ${new Date(marketData.ath_date.usd).toLocaleDateString()}` : '',
+      },
+      {
+        label: 'ATL',
+        value: formatPrice(marketData.atl?.usd ?? 0),
+        helper: marketData.atl_date?.usd ? `ATL set on ${new Date(marketData.atl_date.usd).toLocaleDateString()}` : '',
+      },
+    ]
+
+    return {
+      details,
+      chart,
+      marketData,
+      socialLinks,
+      metrics,
+      description: details.description?.en ? details.description.en.split('.').slice(0, 4).join('.') : '',
+      platforms: getPlatformContracts(details.platforms),
+      communityStats: {
+        twitter: details.community_data?.twitter_followers?.toLocaleString() ?? '—',
+        telegram: details.community_data?.telegram_channel_user_count?.toLocaleString() ?? '—',
+        reddit: details.community_data?.reddit_subscribers?.toLocaleString() ?? '—',
+      },
+    }
+  }, [coinDetails])
       .filter(([_, address]) => typeof address === 'string' && address.trim() !== '')
       .map(([chain, address]) => ({ chain, address }))
       .slice(0, 6)
@@ -193,7 +270,7 @@ const Market = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 pb-16">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -553,6 +630,192 @@ const Market = () => {
                   />
                 </div>
               )}
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {selectedCoinId && formattedCoinDetails && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="glass rounded-3xl border border-white/[0.08] p-6 space-y-6"
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-center gap-4">
+              <img
+                src={formattedCoinDetails.details.image?.large || formattedCoinDetails.details.image?.thumb}
+                alt={formattedCoinDetails.details.name}
+                className="w-16 h-16 rounded-full"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none'
+                }}
+              />
+              <div>
+                <h2 className="text-3xl font-semibold text-white tracking-tight flex items-center gap-3">
+                  {formattedCoinDetails.details.name}
+                  <span className="text-sm uppercase text-white/40">{formattedCoinDetails.details.symbol}</span>
+                </h2>
+                <p className="text-white/50 text-sm tracking-tight flex items-center gap-2">
+                  Rank #{formattedCoinDetails.details.market_cap_rank ?? '—'}
+                  <a
+                    href={formattedCoinDetails.details.links?.homepage?.[0] || `https://www.coingecko.com/en/coins/${formattedCoinDetails.details.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary-200 hover:text-primary-100 text-xs"
+                  >
+                    View on CoinGecko <ExternalLink className="w-3 h-3" />
+                  </a>
+                </p>
+              </div>
+            </div>
+            <div className="text-right space-y-1">
+              <div className="text-white text-3xl font-semibold tracking-tight">
+                {formatPrice(formattedCoinDetails.marketData.current_price?.usd ?? 0)}
+              </div>
+              <div className="text-white/40 text-xs tracking-tight">
+                24h high {formatPrice(formattedCoinDetails.marketData.high_24h?.usd ?? 0)} • 24h low {formatPrice(formattedCoinDetails.marketData.low_24h?.usd ?? 0)}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/[0.08] pt-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-white/40 uppercase tracking-[0.2em]">
+              <button
+                className={`px-3 py-1 rounded-full border transition ${activeTab === 'overview' ? 'border-primary-500/60 text-primary-200' : 'border-white/10 hover:border-white/20'}`}
+                onClick={() => setActiveTab('overview')}
+              >
+                Overview
+              </button>
+              <button
+                className={`px-3 py-1 rounded-full border transition ${activeTab === 'markets' ? 'border-primary-500/60 text-primary-200' : 'border-white/10 hover:border-white/20'}`}
+                onClick={() => setActiveTab('markets')}
+              >
+                Metrics
+              </button>
+              <button
+                className={`px-3 py-1 rounded-full border transition ${activeTab === 'social' ? 'border-primary-500/60 text-primary-200' : 'border-white/10 hover:border-white/20'}`}
+                onClick={() => setActiveTab('social')}
+              >
+                Social
+              </button>
+              <button
+                className={`px-3 py-1 rounded-full border transition ${activeTab === 'contracts' ? 'border-primary-500/60 text-primary-200' : 'border-white/10 hover:border-white/20'}`}
+                onClick={() => setActiveTab('contracts')}
+              >
+                Contracts
+              </button>
+            </div>
+          </div>
+
+          {activeTab === 'overview' && (
+            <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+              <div className="glass-strong rounded-2xl border border-white/10 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-white/70 font-semibold tracking-tight">Price Performance</h3>
+                  <div className="flex gap-2 text-xs text-white/40">
+                    {['24h', '7d', '30d'].map(option => (
+                      <button
+                        key={option}
+                        onClick={() => setPriceRangePeriod(option)}
+                        className={`px-3 py-1 rounded-lg border transition ${priceRangePeriod === option ? 'border-primary-500/60 text-primary-200' : 'border-white/10 hover:border-white/20'}`}
+                      >
+                        {option.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <svg width="100%" height="180" viewBox="0 0 400 120" preserveAspectRatio="none" className="w-full">
+                  <polyline
+                    fill="none"
+                    stroke="rgba(59,130,246,0.75)"
+                    strokeWidth="2"
+                    points={normalizeSparkline(formattedCoinDetails.chart, 400, 120)}
+                  />
+                </svg>
+              </div>
+              <div className="space-y-3">
+                {formattedCoinDetails.metrics.slice(0, 4).map(metric => (
+                  <div key={metric.label} className="glass-strong rounded-2xl border border-white/10 p-4">
+                    <p className="text-white/40 text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+                      {metric.label}
+                      {metric.helper && <Info className="w-3 h-3" />}
+                    </p>
+                    <p className="text-white text-lg font-semibold tracking-tight">{metric.value}</p>
+                    {metric.helper && <p className="text-white/30 text-xs tracking-tight mt-1">{metric.helper}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'markets' && (
+            <div className="grid gap-4 md:grid-cols-3">
+              {formattedCoinDetails.metrics.map(metric => (
+                <div key={metric.label} className="glass-strong rounded-2xl border border-white/10 p-4 space-y-2">
+                  <p className="text-white/40 text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+                    {metric.label}
+                    {metric.helper && <Info className="w-3 h-3" />}
+                  </p>
+                  <p className="text-white text-lg font-semibold tracking-tight">{metric.value}</p>
+                  {metric.helper && <p className="text-white/30 text-xs tracking-tight">{metric.helper}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'social' && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-4">
+                <h3 className="text-white/70 font-semibold tracking-tight">Community Statistics</h3>
+                <div className="space-y-3 text-sm text-white/80">
+                  <p>Twitter Followers: {formattedCoinDetails.communityStats.twitter}</p>
+                  <p>Telegram Members: {formattedCoinDetails.communityStats.telegram}</p>
+                  <p>Reddit Subscribers: {formattedCoinDetails.communityStats.reddit}</p>
+                </div>
+              </div>
+              <div className="glass-strong rounded-2xl border border-white/10 p-4">
+                <h3 className="text-white/70 font-semibold tracking-tight mb-3">Official Links</h3>
+                <div className="flex flex-wrap gap-3">
+                  {formattedCoinDetails.socialLinks.length === 0 && <p className="text-sm text-white/50">No social profiles available.</p>}
+                  {formattedCoinDetails.socialLinks.map(link => (
+                    <a
+                      key={link.label}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`inline-flex items-center gap-2 border border-white/10 rounded-lg px-3 py-2 text-sm hover:border-primary-500/40 transition ${link.color}`}
+                    >
+                      <link.icon className="w-4 h-4" /> {link.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'contracts' && (
+            <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-3">
+              <h3 className="text-white/70 font-semibold tracking-tight">Contract Addresses</h3>
+              <div className="grid md:grid-cols-2 gap-3">
+                {formattedCoinDetails.platforms.length === 0 && (
+                  <p className="text-white/50 text-sm">No contract addresses available.</p>
+                )}
+                {formattedCoinDetails.platforms.map(platform => (
+                  <div key={`${platform.chain}-${platform.address}`} className="glass rounded-xl border border-white/10 p-3 text-sm text-white/70 break-all">
+                    <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-1">{platform.chain}</p>
+                    <p>{platform.address}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {formattedCoinDetails.description && (
+            <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-3">
+              <h3 className="text-white/70 font-semibold tracking-tight">About {formattedCoinDetails.details.name}</h3>
+              <p className="text-white/60 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedCoinDetails.description }} />
             </div>
           )}
         </motion.div>
