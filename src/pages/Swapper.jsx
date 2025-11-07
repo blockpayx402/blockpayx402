@@ -30,6 +30,13 @@ const FALLBACK_TOKENS = [
   },
 ]
 
+const JUPITER_TOKEN_SOURCES = [
+  'https://cache.jup.ag/tokens',
+  'https://token.jup.ag/strict',
+  'https://token.jup.ag/all',
+  'https://tokens.jup.ag/tokens?tags=verified,community,strict',
+]
+
 const isMaybeMint = (value) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((value || '').trim())
 
 const formatNumber = (value, decimals = 6) => {
@@ -136,16 +143,48 @@ const Swapper = () => {
     const loadTokens = async () => {
       setLoadingTokens(true)
       try {
-        const response = await fetch('https://tokens.jup.ag/tokens?tags=verified,community,strict')
-        const data = await response.json()
-        if (Array.isArray(data) && data.length > 0) {
-          setTokens(data)
-          const defaultFrom = data.find(t => t.symbol === 'USDC') ?? data[0]
-          const defaultTo = data.find(t => t.symbol === 'SOL') ?? data[1] ?? data[0]
+        let fetchedTokens = null
+
+        for (const source of JUPITER_TOKEN_SOURCES) {
+          try {
+            const response = await fetch(source, {
+              headers: {
+                'Accept': 'application/json',
+              },
+            })
+
+            if (!response.ok) {
+              continue
+            }
+
+            const payload = await response.json()
+            const tokensArray = Array.isArray(payload)
+              ? payload
+              : Array.isArray(payload?.data)
+                ? payload.data
+                : Array.isArray(payload?.tokens)
+                  ? payload.tokens
+                  : []
+
+            if (tokensArray.length > 0) {
+              fetchedTokens = tokensArray
+              break
+            }
+          } catch (innerError) {
+            // Try next source
+            continue
+          }
+        }
+
+        if (Array.isArray(fetchedTokens) && fetchedTokens.length > 0) {
+          setTokens(fetchedTokens)
+          const defaultFrom = fetchedTokens.find(t => t.symbol === 'USDC') ?? fetchedTokens[0]
+          const defaultTo = fetchedTokens.find(t => t.symbol === 'SOL') ?? fetchedTokens[1] ?? fetchedTokens[0]
           setFromMint(defaultFrom.address)
           setToMint(defaultTo.address)
+          return
         }
-      } catch (err) {
+
         toast.error('Unable to load Jupiter token list. Using default tokens.')
       } finally {
         setLoadingTokens(false)
