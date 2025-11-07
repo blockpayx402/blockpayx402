@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Wallet, X, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react'
+import { Wallet, X, Loader2, CheckCircle2, AlertCircle, RefreshCw, PlugZap } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { toast } from 'react-hot-toast'
 import { Connection, PublicKey, Transaction, clusterApiUrl } from '@solana/web3.js'
@@ -12,11 +12,53 @@ const SolanaCloser = () => {
   const [scanning, setScanning] = useState(false)
   const [closing, setClosing] = useState(false)
   const [totalReclaimable, setTotalReclaimable] = useState(0)
+  const [connection, setConnection] = useState(null)
+  const [resolvedEndpoint, setResolvedEndpoint] = useState('')
+  const [rpcLoading, setRpcLoading] = useState(false)
+  const [rpcError, setRpcError] = useState(null)
+  const [customRpc, setCustomRpc] = useState('')
 
-  const connection = useMemo(() => {
-    const endpoint = clusterApiUrl('mainnet-beta')
-    return new Connection(endpoint, 'confirmed')
-  }, [])
+  const DEFAULT_ENDPOINTS = useMemo(() => {
+    return [
+      customRpc?.trim() || null,
+      import.meta.env.VITE_SOLANA_RPC?.trim() || null,
+      'https://rpc.ankr.com/solana',
+      'https://solana-mainnet.g.alchemy.com/v2/demo',
+      'https://solana-mainnet.rpcpool.com',
+      clusterApiUrl('mainnet-beta')
+    ].filter(Boolean)
+  }, [customRpc])
+
+  const resolveConnection = useCallback(async () => {
+    setRpcLoading(true)
+    setRpcError(null)
+
+    for (const endpoint of DEFAULT_ENDPOINTS) {
+      try {
+        const candidate = new Connection(endpoint, 'confirmed')
+        await candidate.getVersion()
+        setConnection(candidate)
+        setResolvedEndpoint(endpoint)
+        setRpcLoading(false)
+        if (customRpc) {
+          toast.success('Using custom RPC endpoint')
+        }
+        return candidate
+      } catch (error) {
+        console.error('RPC endpoint failed:', endpoint, error)
+      }
+    }
+
+    const message = 'Unable to reach any Solana RPC endpoint. Add a custom endpoint or try again later.'
+    setRpcError(message)
+    toast.error(message)
+    setRpcLoading(false)
+    return null
+  }, [DEFAULT_ENDPOINTS, customRpc])
+
+  useEffect(() => {
+    resolveConnection()
+  }, [resolveConnection])
 
   useEffect(() => {
     if (wallet?.chain === 'solana' && wallet?.connected) {
@@ -30,10 +72,15 @@ const SolanaCloser = () => {
       return
     }
 
+    const activeConnection = connection || (await resolveConnection())
+    if (!activeConnection) {
+      return
+    }
+
     setScanning(true)
     try {
       const owner = new PublicKey(wallet.address)
-      const parsedAccounts = await connection.getParsedTokenAccountsByOwner(owner, {
+      const parsedAccounts = await activeConnection.getParsedTokenAccountsByOwner(owner, {
         programId: TOKEN_PROGRAM_ID
       })
 
@@ -62,7 +109,12 @@ const SolanaCloser = () => {
       setTotalReclaimable(total)
     } catch (error) {
       console.error('Error scanning accounts:', error)
-      toast.error('Failed to scan accounts')
+      if (typeof error?.message === 'string' && error.message.includes('403')) {
+        toast.error('RPC endpoint blocked (403). Add a custom RPC endpoint and try again.')
+        setRpcError('Access forbidden on current RPC endpoint. Provide a custom RPC endpoint that allows your IP.')
+      } else {
+        toast.error('Failed to scan accounts')
+      }
       setAccounts([])
       setTotalReclaimable(0)
     } finally {
@@ -85,6 +137,12 @@ const SolanaCloser = () => {
         return
       }
 
+      const activeConnection = connection || (await resolveConnection())
+      if (!activeConnection) {
+        setClosing(false)
+        return
+      }
+
       const owner = new PublicKey(wallet.address)
       const accountPubkey = new PublicKey(accountAddress)
 
@@ -96,12 +154,12 @@ const SolanaCloser = () => {
       ))
 
       transaction.feePayer = owner
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
+      const { blockhash, lastValidBlockHeight } = await activeConnection.getLatestBlockhash()
       transaction.recentBlockhash = blockhash
 
       const signedTx = await provider.signTransaction(transaction)
-      const signature = await connection.sendRawTransaction(signedTx.serialize())
-      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed')
+      const signature = await activeConnection.sendRawTransaction(signedTx.serialize())
+      await activeConnection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed')
 
       toast.success(`Closed account ${accountAddress.slice(0, 4)}...${accountAddress.slice(-4)}`)
 
@@ -149,6 +207,47 @@ const SolanaCloser = () => {
         <p className="text-white/60 text-lg tracking-tight">
           Close empty token accounts and reclaim rent-exempt SOL
         </p>
+      </motion.div>
+
+      {/* RPC Config */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass rounded-2xl p-6 border border-white/[0.08]"
+      >
+        <div className="flex items-start gap-4">
+          <PlugZap className="w-10 h-10 text-primary-400" />
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold mb-2 tracking-tight">RPC Endpoint</h2>
+            <p className="text-white/60 text-sm mb-4 tracking-tight">
+              {rpcLoading
+                ? 'Resolving Solana RPC endpoint...'
+                : resolvedEndpoint
+                  ? `Using ${resolvedEndpoint}`
+                  : 'No endpoint available. Add a custom RPC URL.'}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={customRpc}
+                onChange={(e) => setCustomRpc(e.target.value)}
+                placeholder="https://your-solana-rpc.com"
+                className="flex-1 px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-primary-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30"
+              />
+              <button
+                onClick={resolveConnection}
+                className="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl text-white font-medium shadow-lg shadow-primary-500/30 hover:shadow-primary-500/40 transition-all flex items-center gap-2"
+                disabled={rpcLoading}
+              >
+                <RefreshCw className={`w-4 h-4 ${rpcLoading ? 'animate-spin' : ''}`} />
+                Apply RPC
+              </button>
+            </div>
+            {rpcError && (
+              <p className="text-sm text-red-400 mt-3 tracking-tight">{rpcError}</p>
+            )}
+          </div>
+        </div>
       </motion.div>
 
       {/* Connect Wallet */}
