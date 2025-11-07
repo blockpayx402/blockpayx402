@@ -18,7 +18,7 @@ const API = () => {
     setExpandedSection(expandedSection === section ? null : section)
   }
 
-  const baseUrl = 'https://api.blockpay.cloud/api'
+  const baseUrl = 'https://blockpay.cloud/api'
 
   const endpoints = [
     {
@@ -118,7 +118,7 @@ const API = () => {
       method: 'GET',
       path: '/requests',
       title: 'List Payment Requests',
-      description: 'List all payment requests you have created',
+      description: 'List all payment requests',
       response: {
         status: 200,
         body: 'Array of payment request objects'
@@ -135,6 +135,189 @@ const API = () => {
     "createdAt": "2024-01-01T10:00:00Z"
   }
 ]`
+      }
+    },
+    {
+      id: 'update-request',
+      method: 'PUT',
+      path: '/requests/:id',
+      title: 'Update Payment Request',
+      description: 'Update payment request status',
+      request: {
+        params: {
+          id: 'string (required)'
+        },
+        body: {
+          status: 'string (optional) - pending, completed, expired',
+          lastChecked: 'string (optional) - ISO timestamp'
+        }
+      },
+      response: {
+        status: 200,
+        body: 'Updated payment request object'
+      },
+      example: {
+        request: `curl -X PUT ${baseUrl}/requests/req_1234567890_abc123 \\
+  -H "Content-Type: application/json" \\
+  -d '{"status": "completed"}'`,
+        response: `{
+  "id": "req_1234567890_abc123",
+  "status": "completed",
+  "lastChecked": "2024-01-01T12:00:00Z"
+}`
+      }
+    },
+    {
+      id: 'list-transactions',
+      method: 'GET',
+      path: '/transactions',
+      title: 'List Transactions',
+      description: 'Get all recorded transactions',
+      response: {
+        status: 200,
+        body: 'Array of transaction objects'
+      },
+      example: {
+        request: `curl ${baseUrl}/transactions`,
+        response: `[
+  {
+    "id": "tx_1234567890_abc123",
+    "requestId": "req_1234567890_abc123",
+    "amount": "0.5",
+    "currency": "ETH",
+    "chain": "ethereum",
+    "txHash": "0x...",
+    "timestamp": "2024-01-01T12:00:00Z"
+  }
+]`
+      }
+    },
+    {
+      id: 'create-transaction',
+      method: 'POST',
+      path: '/transactions',
+      title: 'Create Transaction',
+      description: 'Record a new transaction',
+      request: {
+        body: {
+          requestId: 'string (optional)',
+          amount: 'string (required)',
+          currency: 'string (required)',
+          chain: 'string (required)',
+          txHash: 'string (optional)',
+          from: 'string (optional)',
+          to: 'string (optional)'
+        }
+      },
+      response: {
+        status: 200,
+        body: 'Created transaction object'
+      },
+      example: {
+        request: `curl -X POST ${baseUrl}/transactions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "requestId": "req_1234567890_abc123",
+    "amount": "0.5",
+    "currency": "ETH",
+    "chain": "ethereum",
+    "txHash": "0x..."
+  }'`,
+        response: `{
+  "id": "tx_1234567890_abc123",
+  "requestId": "req_1234567890_abc123",
+  "amount": "0.5",
+  "currency": "ETH",
+  "chain": "ethereum",
+  "txHash": "0x...",
+  "timestamp": "2024-01-01T12:00:00Z"
+}`
+      }
+    },
+    {
+      id: 'sync',
+      method: 'POST',
+      path: '/sync',
+      title: 'Sync Data',
+      description: 'Sync payment requests and transactions',
+      request: {
+        body: {
+          requests: 'array (optional) - Array of payment request objects',
+          transactions: 'array (optional) - Array of transaction objects'
+        }
+      },
+      response: {
+        status: 200,
+        body: '{ success: boolean, requests: array, transactions: array }'
+      },
+      example: {
+        request: `curl -X POST ${baseUrl}/sync \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "requests": [...],
+    "transactions": [...]
+  }'`,
+        response: `{
+  "success": true,
+  "requests": [...],
+  "transactions": [...]
+}`
+      }
+    },
+    {
+      id: 'health',
+      method: 'GET',
+      path: '/health',
+      title: 'Health Check',
+      description: 'Check API health status',
+      response: {
+        status: 200,
+        body: '{ status: "ok", timestamp: string }'
+      },
+      example: {
+        request: `curl ${baseUrl}/health`,
+        response: `{
+  "status": "ok",
+  "timestamp": "2024-01-01T12:00:00Z"
+}`
+      }
+    },
+    {
+      id: 'setup',
+      method: 'GET',
+      path: '/setup',
+      title: 'Setup Status',
+      description: 'Get system setup status and configuration',
+      response: {
+        status: 200,
+        body: '{ ready: boolean, issues: array, warnings: array, instructions: object }'
+      },
+      example: {
+        request: `curl ${baseUrl}/setup`,
+        response: `{
+  "ready": true,
+  "issues": [],
+  "warnings": [],
+  "instructions": {...}
+}`
+      }
+    },
+    {
+      id: 'cleanup',
+      method: 'POST',
+      path: '/cleanup',
+      title: 'Cleanup Expired Requests',
+      description: 'Delete expired payment requests',
+      response: {
+        status: 200,
+        body: '{ success: boolean, deleted: number }'
+      },
+      example: {
+        request: `curl -X POST ${baseUrl}/cleanup`,
+        response: `{
+  "success": true,
+  "deleted": 5
+}`
       }
     },
     {
@@ -501,9 +684,48 @@ const API = () => {
       {/* Rate Limiting */}
       <div className="glass rounded-2xl p-6 border border-white/[0.08]">
         <h2 className="text-xl font-semibold mb-3 tracking-tight">Rate Limiting</h2>
-        <p className="text-white/80">
+        <p className="text-white/80 mb-4">
           API requests are rate-limited to ensure fair usage. Current limits: 100 requests per minute per IP address.
         </p>
+        <p className="text-white/60 text-sm">
+          Rate limit headers are included in responses: <code className="text-primary-400">X-RateLimit-Limit</code>, 
+          <code className="text-primary-400"> X-RateLimit-Remaining</code>, <code className="text-primary-400">X-RateLimit-Reset</code>
+        </p>
+      </div>
+
+      {/* Production Status */}
+      <div className="glass rounded-2xl p-6 border border-white/[0.08]">
+        <h2 className="text-xl font-semibold mb-3 tracking-tight">Production Status</h2>
+        <div className="space-y-3 text-white/80 text-sm">
+          <div className="flex items-start gap-3">
+            <span className="text-green-400">✓</span>
+            <div>
+              <strong>All endpoints are production-ready</strong>
+              <p className="text-white/60 text-xs mt-1">Deployed and accessible at https://blockpay.cloud/api</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-green-400">✓</span>
+            <div>
+              <strong>On-chain verification</strong>
+              <p className="text-white/60 text-xs mt-1">All payments verified directly on Solana mainnet</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-green-400">✓</span>
+            <div>
+              <strong>Error handling</strong>
+              <p className="text-white/60 text-xs mt-1">Comprehensive error responses with clear messages</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-green-400">✓</span>
+            <div>
+              <strong>Complete API coverage</strong>
+              <p className="text-white/60 text-xs mt-1">All site functionality accessible via API endpoints</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

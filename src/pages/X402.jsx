@@ -13,41 +13,39 @@ const X402 = () => {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  // Bash/Linux/Mac curl example
-  const curlDemo = `curl -H "X-Payment-Protocol: x402/1.0" \\
-  https://blockpay.cloud/api/x402/demo`
+  const baseUrl = 'https://blockpay.cloud/api'
 
-  // PowerShell example (Windows)
-  const powershellDemo = `Invoke-WebRequest -Uri "https://blockpay.cloud/api/x402/demo" \\
-  -Headers @{"X-Payment-Protocol"="x402/1.0"}`
-
-  // After sending payment, retry with X-PAYMENT header (Bash)
-  const curlWithPayment = `curl -H "X-Payment-Protocol: x402/1.0" \\
-  -H "X-Payment: <BASE64_PAYMENT_PAYLOAD>" \\
-  https://blockpay.cloud/api/x402/demo`
-
-  // After sending payment, retry with X-PAYMENT header (PowerShell)
-  const powershellWithPayment = `Invoke-WebRequest -Uri "https://blockpay.cloud/api/x402/demo" \\
-  -Headers @{
-    "X-Payment-Protocol"="x402/1.0";
-    "X-Payment"="<BASE64_PAYMENT_PAYLOAD>"
-  }`
-
-  const exampleResponse = `HTTP/1.1 402 Payment Required
-Content-Type: application/json
-X-Payment-Protocol: x402/1.0
-
-{
+  // API Endpoints
+  const endpoints = [
+    {
+      id: 'demo',
+      method: 'GET',
+      path: '/x402/demo',
+      title: 'x402 Demo Endpoint',
+      description: 'Test x402 protocol - returns 402 Payment Required with payment requirements',
+      request: {
+        headers: {
+          'X-Payment-Protocol': 'x402/1.0 (required)'
+        }
+      },
+      response: {
+        status: '402 Payment Required',
+        body: '{ x402Version: 1, accepts: [paymentRequirements], error: null }'
+      },
+      example: {
+        bash: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}`,
+        response: `{
   "x402Version": 1,
   "accepts": [
     {
       "scheme": "exact",
       "network": "solana-mainnet",
-      "maxAmountRequired": "1500000000",
-      "resource": "/api/requests/req_1234567890_abc123",
-      "description": "Payment for services",
+      "maxAmountRequired": "100000000",
+      "resource": "/api/x402/demo",
+      "description": "x402 Demo Payment - Send 0.1 SOL to test the protocol",
       "mimeType": "application/json",
-      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
+      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn",
       "maxTimeoutSeconds": 300,
       "asset": "So11111111111111111111111111111111111111112",
       "extra": {
@@ -58,135 +56,141 @@ X-Payment-Protocol: x402/1.0
   ],
   "error": null
 }`
-
-  const jsExample = `// Step 1: Request the demo endpoint (will return 402 Payment Required)
-const response = await fetch('https://blockpay.cloud/api/x402/demo', {
-  headers: {
-    'X-Payment-Protocol': 'x402/1.0'
-  }
-})
-
-// Step 2: Check if payment is required (status 402)
-if (response.status === 402) {
-  const paymentData = await response.json()
-  const paymentReq = paymentData.accepts[0] // Get first payment requirement
-  
-  // Step 3: Send Solana payment using your wallet
-  // You need to:
-  // - Connect to Solana (use @solana/web3.js)
-  // - Create a transfer transaction to paymentReq.payTo
-  // - Amount: parseFloat(paymentReq.maxAmountRequired) / 1e9 (convert lamports to SOL)
-  // - Sign and send the transaction
-  // - Get the transaction signature
-  
-  // Example transaction creation (you need wallet connection):
-  // const connection = new Connection('https://api.mainnet-beta.solana.com')
-  // const recipient = new PublicKey(paymentReq.payTo)
-  // const amountLamports = BigInt(paymentReq.maxAmountRequired)
-  // const transaction = new Transaction().add(
-  //   SystemProgram.transfer({
-  //     fromPubkey: wallet.publicKey,
-  //     toPubkey: recipient,
-  //     lamports: Number(amountLamports)
-  //   })
-  // )
-  // const signature = await wallet.sendTransaction(transaction, connection)
-  // await connection.confirmTransaction(signature)
-  
-  // Step 4: Create payment payload with transaction signature
-  // Replace 'YOUR_TX_SIGNATURE' with the actual signature from step 3
-  const paymentPayload = {
-    x402Version: 1,
-    scheme: paymentReq.scheme,
-    network: paymentReq.network,
-    payload: {
-      signature: 'YOUR_TX_SIGNATURE' // Replace with actual transaction signature
+      }
+    },
+    {
+      id: 'verify',
+      method: 'POST',
+      path: '/x402/verify',
+      title: 'Verify Payment',
+      description: 'Verify a payment payload with transaction signature',
+      request: {
+        body: {
+          x402Version: 'number (required) - Protocol version, use 1',
+          paymentHeader: 'string (required) - Base64 encoded payment payload',
+          paymentRequirements: 'object (required) - Payment requirements from 402 response'
+        },
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      response: {
+        status: '200 OK',
+        body: '{ isValid: boolean, invalidReason: string | null }'
+      },
+      example: {
+        bash: `curl -X POST ${baseUrl}/x402/verify \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "x402Version": 1,
+    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentRequirements": {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "100000000",
+      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
     }
-  }
-  
-  // Step 5: Encode payment payload as base64
-  const paymentHeader = btoa(JSON.stringify(paymentPayload))
-  
-  // Step 6: Retry request with X-PAYMENT header
-  const paidResponse = await fetch('https://blockpay.cloud/api/x402/demo', {
-    headers: {
-      'X-Payment-Protocol': 'x402/1.0',
-      'X-Payment': paymentHeader
+  }'`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST \\
+  -Headers @{"Content-Type"="application/json"} \\
+  -Body '{
+    "x402Version": 1,
+    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentRequirements": {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "100000000",
+      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
     }
-  })
-  
-  // Step 7: Get the resource (should be 200 OK now)
-  const resource = await paidResponse.json()
-  console.log('Payment verified!', resource)
+  }'`,
+        response: `{
+  "isValid": true,
+  "invalidReason": null
 }`
-
-  const solanaWeb3Example = `import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js'
-
-// Step 1: Get payment requirements from 402 response
-// First, call the demo endpoint to get payment requirements
-const response = await fetch('https://blockpay.cloud/api/x402/demo', {
-  headers: { 'X-Payment-Protocol': 'x402/1.0' }
-})
-const paymentData = await response.json()
-const paymentReq = paymentData.accepts[0] // Get first payment requirement
-
-// Step 2: Connect to Solana (you need to have wallet connected)
-// Make sure you have a wallet adapter or wallet object available
-const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed')
-
-// Step 3: Parse payment requirements
-const recipient = new PublicKey(paymentReq.payTo) // Address to send SOL to
-const amountLamports = BigInt(paymentReq.maxAmountRequired) // Amount in lamports
-// Convert to SOL: parseFloat(paymentReq.maxAmountRequired) / 1e9
-
-// Step 4: Create transfer transaction
-const transaction = new Transaction().add(
-  SystemProgram.transfer({
-    fromPubkey: wallet.publicKey, // Your wallet public key
-    toPubkey: recipient,
-    lamports: Number(amountLamports)
-  })
-)
-
-// Step 5: Get recent blockhash and set fee payer
-const { blockhash } = await connection.getLatestBlockhash()
-transaction.recentBlockhash = blockhash
-transaction.feePayer = wallet.publicKey
-
-// Step 6: Sign transaction with your wallet
-// This requires wallet connection (Phantom, Solflare, etc.)
-const signedTx = await wallet.signTransaction(transaction)
-
-// Step 7: Send transaction to Solana network
-const signature = await connection.sendRawTransaction(signedTx.serialize())
-
-// Step 8: Wait for confirmation (important!)
-await connection.confirmTransaction(signature, 'confirmed')
-
-// Step 9: Create x402 payment payload with the transaction signature
-const paymentPayload = {
-  x402Version: 1,
-  scheme: paymentReq.scheme,
-  network: paymentReq.network,
-  payload: {
-    signature: signature // Use the actual transaction signature from step 7
-  }
-}
-
-// Step 10: Encode payment payload as base64 for X-PAYMENT header
-const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64')
-
-// Step 11: Retry the request with X-PAYMENT header
-const paidResponse = await fetch('https://blockpay.cloud/api/x402/demo', {
-  headers: {
-    'X-Payment-Protocol': 'x402/1.0',
-    'X-Payment': paymentHeader
-  }
-})
-
-// Step 12: Get the verified resource
-const result = await paidResponse.json()
-console.log('Payment verified!', result)`
+      }
+    },
+    {
+      id: 'settle',
+      method: 'POST',
+      path: '/x402/settle',
+      title: 'Settle Payment',
+      description: 'Settle a payment - confirm transaction is finalized on-chain',
+      request: {
+        body: {
+          x402Version: 'number (required) - Protocol version, use 1',
+          paymentHeader: 'string (required) - Base64 encoded payment payload',
+          paymentRequirements: 'object (required) - Payment requirements from 402 response'
+        },
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      },
+      response: {
+        status: '200 OK',
+        body: '{ success: boolean, error: string | null, txHash: string | null, networkId: string | null }'
+      },
+      example: {
+        bash: `curl -X POST ${baseUrl}/x402/settle \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "x402Version": 1,
+    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentRequirements": {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "100000000",
+      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
+    }
+  }'`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST \\
+  -Headers @{"Content-Type"="application/json"} \\
+  -Body '{
+    "x402Version": 1,
+    "paymentHeader": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hLW1haW5uZXQiLCJwYXlsb2FkIjp7InNpZ25hdHVyZSI6InlvdXJfdHhfc2lnbmF0dXJlIn19",
+    "paymentRequirements": {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "100000000",
+      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
+    }
+  }'`,
+        response: `{
+  "success": true,
+  "error": null,
+  "txHash": "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosLDYvCmgdxo2BHpidWMuxRo5dhrsH4Xxj6M2mfDHP6u",
+  "networkId": "solana-mainnet"
+}`
+      }
+    },
+    {
+      id: 'supported',
+      method: 'GET',
+      path: '/x402/supported',
+      title: 'Get Supported Schemes',
+      description: 'Get list of supported payment schemes and networks',
+      request: {},
+      response: {
+        status: '200 OK',
+        body: '{ kinds: [{ scheme: string, network: string }] }'
+      },
+      example: {
+        bash: `curl ${baseUrl}/x402/supported`,
+        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/supported"`,
+        response: `{
+  "kinds": [
+    {
+      "scheme": "exact",
+      "network": "solana-mainnet"
+    },
+    {
+      "scheme": "exact",
+      "network": "solana"
+    }
+  ]
+}`
+      }
+    }
+  ]
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -213,303 +217,232 @@ console.log('Payment verified!', result)`
         </div>
       </motion.div>
 
-      {/* Quick Start - cURL Commands First */}
+      {/* Protocol Overview */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass rounded-3xl p-8 border border-white/[0.08]"
-      >
-        <h2 className="text-2xl font-semibold mb-6 tracking-tight">Try It Now - Working Examples</h2>
-        
-        <div className="mb-6 p-4 glass-strong rounded-xl border border-primary-500/20 bg-primary-500/5">
-          <p className="text-white/80 text-sm">
-            <strong className="text-primary-400">No setup needed!</strong> The demo endpoint works immediately. 
-            Just curl it to get a 402 response with payment requirements.
-          </p>
-        </div>
-        
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 1: Get Payment Requirements (402 Response)</h3>
-            <p className="text-white/60 text-sm mb-3">This will return HTTP 402 with payment requirements. No request creation needed!</p>
-            
-            <div className="mb-4">
-              <p className="text-white/60 text-xs mb-2">Bash/Linux/Mac (curl):</p>
-              <div className="relative">
-                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                  <code className="text-white/90">{curlDemo}</code>
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(curlDemo, 'curl-demo')}
-                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-                >
-                  {copiedCode === 'curl-demo' ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-white/60" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-white/60 text-xs mb-2">PowerShell (Windows):</p>
-              <div className="relative">
-                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                  <code className="text-white/90">{powershellDemo}</code>
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(powershellDemo, 'powershell-demo')}
-                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-                >
-                  {copiedCode === 'powershell-demo' ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-white/60" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <p className="text-white/40 text-xs mt-3">
-              This returns a 402 response with <code className="text-primary-400">accepts</code> array containing payment requirements.
-              You'll see the recipient address and amount needed.
-            </p>
-            <div className="mt-3 p-3 glass-strong rounded-lg border border-white/5">
-              <p className="text-white/60 text-xs mb-2 font-semibold">PowerShell Tip:</p>
-              <p className="text-white/40 text-xs mb-2">
-                The 402 status is expected! To see the JSON response body, use:
-              </p>
-              <code className="text-primary-400 text-xs block">
-                try {`{`} (Invoke-WebRequest -Uri "https://blockpay.cloud/api/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}).Content } catch {`{`} $_.Exception.Response.GetResponseStream() | ForEach-Object {`{`} $reader = New-Object System.IO.StreamReader($_); $reader.ReadToEnd() } }
-              </code>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 2: Send Payment & Retry with X-PAYMENT Header</h3>
-            <p className="text-white/60 text-sm mb-3">
-              After sending the Solana payment, create a payment payload and retry the request:
-            </p>
-            
-            <div className="mb-4">
-              <p className="text-white/60 text-xs mb-2">Bash/Linux/Mac (curl):</p>
-              <div className="relative">
-                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                  <code className="text-white/90">{curlWithPayment}</code>
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(curlWithPayment, 'curl-payment')}
-                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-                >
-                  {copiedCode === 'curl-payment' ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-white/60" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-white/60 text-xs mb-2">PowerShell (Windows):</p>
-              <div className="relative">
-                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                  <code className="text-white/90">{powershellWithPayment}</code>
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(powershellWithPayment, 'powershell-payment')}
-                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-                >
-                  {copiedCode === 'powershell-payment' ? (
-                    <Check className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-white/60" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <p className="text-white/40 text-xs mt-3">
-              Replace <code className="text-primary-400">&lt;BASE64_PAYMENT_PAYLOAD&gt;</code> with your actual payment payload.
-              See the JavaScript/Solana examples below to see how to create it from a transaction signature.
-            </p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* How It Works Explanation */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
         className="glass rounded-2xl p-8 border border-white/[0.08]"
       >
-        <h2 className="text-2xl font-semibold mb-4 tracking-tight">How It Works</h2>
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight">What is x402?</h2>
         <div className="space-y-4 text-white/80 text-sm">
-          <div>
-            <p className="mb-2">
-              <strong className="text-primary-400">1. Request the demo endpoint</strong> - You'll get a 402 Payment Required response with payment requirements.
-            </p>
-            <p className="text-white/60 text-xs ml-4">
-              The response includes: recipient address, amount (in lamports), network, and scheme.
-            </p>
-          </div>
-          <div>
-            <p className="mb-2">
-              <strong className="text-primary-400">2. Send Solana payment</strong> - Create a Solana transaction sending the required amount to the recipient address.
-            </p>
-            <p className="text-white/60 text-xs ml-4">
-              Use any Solana wallet (Phantom, Solflare, etc.) or @solana/web3.js to create and send the transaction.
-            </p>
-          </div>
-          <div>
-            <p className="mb-2">
-              <strong className="text-primary-400">3. Create payment payload</strong> - Build a JSON object with the transaction signature.
-            </p>
-            <p className="text-white/60 text-xs ml-4">
-              Format: <code className="text-primary-400">{"{ x402Version: 1, scheme: 'exact', network: 'solana-mainnet', payload: { signature: 'YOUR_TX_SIGNATURE' } }"}</code>
-            </p>
-          </div>
-          <div>
-            <p className="mb-2">
-              <strong className="text-primary-400">4. Encode and retry</strong> - Base64 encode the payload and include it in the X-PAYMENT header.
-            </p>
-            <p className="text-white/60 text-xs ml-4">
-              The server verifies the transaction on-chain and returns the resource if payment is valid.
-            </p>
-          </div>
+          <p>
+            x402 is a payment protocol built on HTTP 402 Payment Required status code. It allows servers to request blockchain payments 
+            before granting access to resources. The protocol is chain-agnostic and supports multiple payment schemes.
+          </p>
+          <p>
+            <strong className="text-primary-400">How it works:</strong>
+          </p>
+          <ol className="list-decimal list-inside space-y-2 ml-4">
+            <li>Client requests a resource with <code className="text-primary-400">X-Payment-Protocol: x402/1.0</code> header</li>
+            <li>Server responds with HTTP 402 and payment requirements (recipient, amount, network)</li>
+            <li>Client sends blockchain payment to the specified address</li>
+            <li>Client retries request with <code className="text-primary-400">X-PAYMENT</code> header containing transaction signature</li>
+            <li>Server verifies payment on-chain and grants access to resource</li>
+          </ol>
         </div>
       </motion.div>
 
-      {/* HTTP Response Format */}
+      {/* API Endpoints */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="glass rounded-2xl p-8 border border-white/[0.08]"
+        className="space-y-4"
       >
-        <h2 className="text-2xl font-semibold mb-4 tracking-tight">HTTP 402 Response Format</h2>
-        <p className="text-white/80 mb-4">
-          When payment is required, the server responds with HTTP 402 and includes Solana payment details:
-        </p>
-        <div className="relative">
-          <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-            <code className="text-white/90">{exampleResponse}</code>
-          </pre>
-          <button
-            onClick={() => copyToClipboard(exampleResponse, 'response')}
-            className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight">API Endpoints</h2>
+        {endpoints.map((endpoint) => (
+          <div
+            key={endpoint.id}
+            className="glass rounded-2xl border border-white/[0.08] overflow-hidden"
           >
-            {copiedCode === 'response' ? (
-              <Check className="w-4 h-4 text-green-400" />
-            ) : (
-              <Copy className="w-4 h-4 text-white/60" />
-            )}
-          </button>
-        </div>
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <span className={`px-3 py-1 rounded text-sm font-medium ${
+                  endpoint.method === 'GET' ? 'bg-blue-500/20 text-blue-400' :
+                  endpoint.method === 'POST' ? 'bg-green-500/20 text-green-400' :
+                  'bg-yellow-500/20 text-yellow-400'
+                }`}>
+                  {endpoint.method}
+                </span>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white tracking-tight">{endpoint.title}</h3>
+                  <p className="text-sm text-white/60 tracking-tight">{endpoint.description}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-medium text-white/60 mb-2 tracking-tight">Endpoint</h4>
+                  <code className="text-primary-400 font-mono text-sm">{endpoint.path}</code>
+                </div>
+
+                {endpoint.request && (
+                  <div>
+                    <h4 className="text-sm font-medium text-white/60 mb-3 tracking-tight">Request</h4>
+                    {endpoint.request.body && (
+                      <div className="mb-4">
+                        <p className="text-sm text-white/80 mb-2 tracking-tight">Body Parameters:</p>
+                        <div className="space-y-2">
+                          {Object.entries(endpoint.request.body).map(([key, value]) => (
+                            <div key={key} className="flex items-start gap-3 text-sm">
+                              <code className="text-primary-400 font-mono">{key}</code>
+                              <span className="text-white/60">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {endpoint.request.headers && (
+                      <div className="mb-4">
+                        <p className="text-sm text-white/80 mb-2 tracking-tight">Headers:</p>
+                        <div className="space-y-2">
+                          {Object.entries(endpoint.request.headers).map(([key, value]) => (
+                            <div key={key} className="flex items-start gap-3 text-sm">
+                              <code className="text-primary-400 font-mono">{key}</code>
+                              <span className="text-white/60">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <h4 className="text-sm font-medium text-white/60 mb-3 tracking-tight">Response</h4>
+                  <p className="text-sm text-white/80 mb-2 tracking-tight">Status: {endpoint.response.status}</p>
+                  <p className="text-sm text-white/60">{endpoint.response.body}</p>
+                </div>
+
+                {endpoint.example && (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (Bash)</h4>
+                        <button
+                          onClick={() => copyToClipboard(endpoint.example.bash, `${endpoint.id}-bash`)}
+                          className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                        >
+                          {copiedCode === `${endpoint.id}-bash` ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-white/60" />
+                          )}
+                        </button>
+                      </div>
+                      <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                        <code className="text-white/90">{endpoint.example.bash}</code>
+                      </pre>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Request (PowerShell)</h4>
+                        <button
+                          onClick={() => copyToClipboard(endpoint.example.powershell, `${endpoint.id}-powershell`)}
+                          className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                        >
+                          {copiedCode === `${endpoint.id}-powershell` ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-white/60" />
+                          )}
+                        </button>
+                      </div>
+                      <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                        <code className="text-white/90">{endpoint.example.powershell}</code>
+                      </pre>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-white/60 tracking-tight">Example Response</h4>
+                        <button
+                          onClick={() => copyToClipboard(endpoint.example.response, `${endpoint.id}-response`)}
+                          className="p-1 glass-strong rounded border border-white/10 hover:border-primary-500/30 transition-all"
+                        >
+                          {copiedCode === `${endpoint.id}-response` ? (
+                            <Check className="w-4 h-4 text-green-400" />
+                          ) : (
+                            <Copy className="w-4 h-4 text-white/60" />
+                          )}
+                        </button>
+                      </div>
+                      <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                        <code className="text-white/90">{endpoint.example.response}</code>
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
       </motion.div>
 
-      {/* Code Examples */}
+      {/* Payment Payload Format */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="space-y-6"
+        className="glass rounded-2xl p-8 border border-white/[0.08]"
       >
-        <div className="glass rounded-2xl p-8 border border-white/[0.08]">
-          <h2 className="text-2xl font-semibold mb-4 tracking-tight">JavaScript Example</h2>
-          <div className="relative">
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight">Payment Payload Format</h2>
+        <p className="text-white/80 mb-4 text-sm">
+          After sending a Solana transaction, create a payment payload and encode it as base64 for the X-PAYMENT header:
+        </p>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-white/60 mb-2">Payment Payload JSON:</h3>
             <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-              <code className="text-white/90">{jsExample}</code>
+              <code className="text-white/90">{`{
+  "x402Version": 1,
+  "scheme": "exact",
+  "network": "solana-mainnet",
+  "payload": {
+    "signature": "YOUR_TRANSACTION_SIGNATURE"
+  }
+}`}</code>
             </pre>
-            <button
-              onClick={() => copyToClipboard(jsExample, 'js')}
-              className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-            >
-              {copiedCode === 'js' ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4 text-white/60" />
-              )}
-            </button>
           </div>
-        </div>
-
-        <div className="glass rounded-2xl p-8 border border-white/[0.08]">
-          <h2 className="text-2xl font-semibold mb-4 tracking-tight">Solana Web3.js Example</h2>
-          <div className="relative">
-            <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-              <code className="text-white/90">{solanaWeb3Example}</code>
-            </pre>
-            <button
-              onClick={() => copyToClipboard(solanaWeb3Example, 'solana')}
-              className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-            >
-              {copiedCode === 'solana' ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4 text-white/60" />
-              )}
-            </button>
+          <div>
+            <h3 className="text-sm font-medium text-white/60 mb-2">Base64 Encode:</h3>
+            <p className="text-white/60 text-sm mb-2">
+              Encode the JSON payload as base64 and include in the <code className="text-primary-400">X-PAYMENT</code> header.
+            </p>
+            <p className="text-white/40 text-xs">
+              JavaScript: <code className="text-primary-400">btoa(JSON.stringify(payload))</code><br/>
+              Python: <code className="text-primary-400">base64.b64encode(json.dumps(payload).encode()).decode()</code><br/>
+              PowerShell: <code className="text-primary-400">[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))</code>
+            </p>
           </div>
         </div>
       </motion.div>
 
-      {/* Specification */}
+      {/* Production Notes */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
         className="glass rounded-2xl p-8 border border-white/[0.08]"
       >
-        <h2 className="text-2xl font-semibold mb-4 tracking-tight">x402 Protocol Flow</h2>
-        <div className="space-y-4">
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-primary-400 font-semibold">1. Request Resource</span>
-            </div>
-            <p className="text-white/60 text-sm">Client requests resource with X-Payment-Protocol header</p>
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight">Production Ready</h2>
+        <div className="space-y-3 text-white/80 text-sm">
+          <div>
+            <strong className="text-primary-400">✓ All endpoints are production-ready</strong>
+            <p className="text-white/60 text-xs mt-1">Endpoints are deployed and accessible at https://blockpay.cloud/api</p>
           </div>
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-primary-400 font-semibold">2. 402 Response</span>
-            </div>
-            <p className="text-white/60 text-sm">Server responds with HTTP 402 and payment requirements</p>
+          <div>
+            <strong className="text-primary-400">✓ On-chain verification</strong>
+            <p className="text-white/60 text-xs mt-1">All payments are verified directly on Solana mainnet</p>
           </div>
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-primary-400 font-semibold">3. Send Payment</span>
-            </div>
-            <p className="text-white/60 text-sm">Client creates Solana transaction and sends to recipient</p>
+          <div>
+            <strong className="text-primary-400">✓ Error handling</strong>
+            <p className="text-white/60 text-xs mt-1">Comprehensive error responses with clear messages</p>
           </div>
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-primary-400 font-semibold">4. Verify & Settle</span>
-            </div>
-            <p className="text-white/60 text-sm">Client includes X-PAYMENT header with transaction signature</p>
-          </div>
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-primary-400 font-semibold">5. Access Resource</span>
-            </div>
-            <p className="text-white/60 text-sm">Server verifies payment and returns requested resource</p>
-          </div>
-        </div>
-
-        <h2 className="text-2xl font-semibold mb-4 tracking-tight mt-8">API Endpoints</h2>
-        <div className="space-y-4">
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <code className="text-primary-400 font-mono text-sm">POST /api/x402/verify</code>
-            <p className="text-white/60 text-sm mt-1">Verify a payment payload</p>
-          </div>
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <code className="text-primary-400 font-mono text-sm">POST /api/x402/settle</code>
-            <p className="text-white/60 text-sm mt-1">Settle a payment (confirm on-chain)</p>
-          </div>
-          <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <code className="text-primary-400 font-mono text-sm">GET /api/x402/supported</code>
-            <p className="text-white/60 text-sm mt-1">Get supported payment schemes and networks</p>
+          <div>
+            <strong className="text-primary-400">✓ Rate limiting</strong>
+            <p className="text-white/60 text-xs mt-1">API requests are rate-limited to ensure fair usage</p>
           </div>
         </div>
       </motion.div>
