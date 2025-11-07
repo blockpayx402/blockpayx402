@@ -352,7 +352,11 @@ const Swapper = () => {
 
   const jupiterLink = useMemo(() => {
     if (!isMaybeMint(fromMint) || !isMaybeMint(toMint)) return '#'
-    return `https://jup.ag/swap/${fromMint}-${toMint}`
+    const params = new URLSearchParams({
+      sell: fromMint,
+      buy: toMint,
+    })
+    return `https://jup.ag/swap?${params.toString()}`
   }, [fromMint, toMint])
 
   const estimatedOutput = useMemo(() => {
