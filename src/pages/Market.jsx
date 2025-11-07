@@ -40,10 +40,15 @@ const Market = () => {
       )
       
       if (!response.ok) {
-        throw new Error('Failed to fetch market data')
+        throw new Error(response.status === 429 ? 'Rate limited by CoinGecko. Please wait a moment and try again.' : 'Failed to fetch market data')
       }
       
       const data = await response.json()
+      if (!Array.isArray(data)) {
+        throw new Error('Unexpected response format from CoinGecko')
+      }
+
+      // Filter out duplicates if API returns overlapping results
       setHasMore(Array.isArray(data) && data.length === PER_PAGE)
       setLastUpdated(new Date().toISOString())
 
@@ -57,7 +62,7 @@ const Market = () => {
         const merged = [...prevCoins]
 
         data.forEach(coin => {
-          if (!existingIds.has(coin.id)) {
+          if (coin?.id && !existingIds.has(coin.id)) {
             merged.push(coin)
           }
         })
