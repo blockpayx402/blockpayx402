@@ -41,7 +41,7 @@ Visit [https://blockpay.cloud](https://blockpay.cloud) to access:
 
 ### Core Features
 - ✅ **Multi-Chain Support** - Ethereum, BNB Chain, Polygon, Solana
-- ✅ **Cross-Chain Swaps** - Automatic token conversion
+- ✅ **Sol Chain Swaps** - Automatic token conversion
 - ✅ **Real-Time Verification** - Blockchain transaction monitoring
 - ✅ **QR Code Generation** - Easy mobile payments
 - ✅ **Payment Requests** - Create and share payment links
