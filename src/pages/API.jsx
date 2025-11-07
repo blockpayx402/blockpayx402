@@ -426,6 +426,48 @@ const API = () => {
   ]
 }`
       }
+    },
+    {
+      id: 'x402-demo',
+      method: 'GET',
+      path: '/x402/demo',
+      title: 'x402: Demo Endpoint',
+      description: 'Test x402 protocol - returns 402 Payment Required. No setup needed, works immediately.',
+      request: {
+        headers: {
+          'X-Payment-Protocol': 'x402/1.0 (required)',
+          'X-Payment': 'base64 encoded payment payload (optional - for paid requests)'
+        }
+      },
+      response: {
+        status: '402 Payment Required (without payment) or 200 OK (with valid payment)',
+        body: 'x402 payment requirements OR success response'
+      },
+      example: {
+        request: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo`,
+        response: `HTTP/1.1 402 Payment Required
+{
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "100000000",
+      "resource": "/api/x402/demo",
+      "description": "x402 Demo Payment - Send 0.1 SOL to test the protocol",
+      "mimeType": "application/json",
+      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn",
+      "maxTimeoutSeconds": 300,
+      "asset": "So11111111111111111111111111111111111111112",
+      "extra": {
+        "name": "Solana",
+        "version": "1.0"
+      }
+    }
+  ],
+  "error": null
+}`
+      }
     }
   ]
 
@@ -649,6 +691,9 @@ const API = () => {
           BlockPay implements the <a href="https://github.com/coinbase/x402" target="_blank" rel="noopener noreferrer" className="text-primary-400 hover:text-primary-300 underline">Coinbase x402</a> payment protocol for Solana payments. 
           This allows for HTTP 402 Payment Required responses with blockchain payment requirements.
         </p>
+        <p className="text-white/60 text-sm mb-4">
+          All site functionality is accessible via API. The x402 protocol enables programmatic payment flows where servers can request blockchain payments before granting access to resources.
+        </p>
         <div className="space-y-2 text-sm">
           <div className="flex items-start gap-3">
             <span className="text-primary-400 font-semibold">1.</span>
@@ -656,27 +701,33 @@ const API = () => {
           </div>
           <div className="flex items-start gap-3">
             <span className="text-primary-400 font-semibold">2.</span>
-            <span className="text-white/60">Receive HTTP 402 with payment requirements</span>
+            <span className="text-white/60">Receive HTTP 402 with payment requirements (recipient, amount, network)</span>
           </div>
           <div className="flex items-start gap-3">
             <span className="text-primary-400 font-semibold">3.</span>
-            <span className="text-white/60">Create and send Solana transaction</span>
+            <span className="text-white/60">Send Solana payment to specified address</span>
           </div>
           <div className="flex items-start gap-3">
             <span className="text-primary-400 font-semibold">4.</span>
-            <span className="text-white/60">Retry request with <code className="px-1 py-0.5 glass-strong rounded text-primary-400 text-xs">X-PAYMENT</code> header containing transaction signature</span>
+            <span className="text-white/60">Retry request with <code className="px-1 py-0.5 glass-strong rounded text-primary-400 text-xs">X-PAYMENT</code> header containing base64-encoded payment payload</span>
           </div>
           <div className="flex items-start gap-3">
             <span className="text-primary-400 font-semibold">5.</span>
-            <span className="text-white/60">Server verifies payment and returns resource</span>
+            <span className="text-white/60">Server verifies payment on-chain and returns resource</span>
           </div>
+        </div>
+        <div className="mt-4 p-3 glass-strong rounded-lg border border-primary-500/20">
+          <p className="text-white/80 text-sm">
+            <strong className="text-primary-400">Production Ready:</strong> All x402 endpoints are live and verified on Solana mainnet. 
+            Payments are verified on-chain in real-time.
+          </p>
         </div>
         <div className="mt-4">
           <a 
             href="/x402" 
             className="text-primary-400 hover:text-primary-300 underline text-sm"
           >
-            View full x402 documentation →
+            View full x402 API documentation →
           </a>
         </div>
       </div>
