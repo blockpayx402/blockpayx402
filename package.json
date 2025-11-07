@@ -20,6 +20,7 @@
     "@netlify/functions": "^2.8.2",
     "@relayprotocol/relay-sdk": "^3.1.0",
     "@solana/web3.js": "^1.87.6",
+    "@solana/spl-token": "^0.4.0",
     "axios": "^1.6.2",
     "buffer": "^6.0.3",
     "clsx": "^2.0.0",

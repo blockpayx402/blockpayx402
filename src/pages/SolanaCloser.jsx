@@ -1,16 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Wallet, X, Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { toast } from 'react-hot-toast'
+import { Connection, PublicKey, Transaction, clusterApiUrl } from '@solana/web3.js'
+import { TOKEN_PROGRAM_ID, createCloseAccountInstruction } from '@solana/spl-token'
 
 const SolanaCloser = () => {
   const { wallet, connectWallet } = useApp()
   const [accounts, setAccounts] = useState([])
-  const [loading, setLoading] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [closing, setClosing] = useState(false)
   const [totalReclaimable, setTotalReclaimable] = useState(0)
+
+  const connection = useMemo(() => {
+    const endpoint = clusterApiUrl('mainnet-beta')
+    return new Connection(endpoint, 'confirmed')
+  }, [])
 
   useEffect(() => {
     if (wallet?.chain === 'solana' && wallet?.connected) {
@@ -26,90 +32,39 @@ const SolanaCloser = () => {
 
     setScanning(true)
     try {
-      // Fetch token accounts from Solana RPC
-      const rpcUrl = 'https://api.mainnet-beta.solana.com'
-      
-      const response = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getTokenAccountsByOwner',
-          params: [
-            wallet.address,
-            { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-            { encoding: 'jsonParsed' }
-          ]
-        })
+      const owner = new PublicKey(wallet.address)
+      const parsedAccounts = await connection.getParsedTokenAccountsByOwner(owner, {
+        programId: TOKEN_PROGRAM_ID
       })
 
-      const data = await response.json()
-      
-      if (data.result && data.result.value) {
-        const tokenAccounts = data.result.value
-        const emptyAccounts = []
+      const emptyAccounts = parsedAccounts.value
+        .map(({ pubkey, account }) => {
+          const info = account.data.parsed.info
+          const lamports = account.lamports || 0
+          const amountRaw = info.tokenAmount.amount
+          const decimals = info.tokenAmount.decimals
+          const uiAmount = Number(info.tokenAmount.uiAmountString || info.tokenAmount.uiAmount || 0)
 
-        // Check each account for zero balance
-        for (const account of tokenAccounts) {
-          const accountData = account.account.data.parsed.info
-          const balance = accountData.tokenAmount.uiAmount
-          
-          if (balance === 0) {
-            // Get account rent
-            const rentResponse = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'getAccountInfo',
-                params: [
-                  account.pubkey,
-                  { encoding: 'base64' }
-                ]
-              })
-            })
-
-            const rentData = await rentResponse.json()
-            const rentExemptAmount = rentData.result?.value?.lamports || 0
-            const rentInSol = rentExemptAmount / 1e9
-
-            emptyAccounts.push({
-              address: account.pubkey,
-              mint: accountData.mint,
-              rent: rentInSol,
-              rentLamports: rentExemptAmount
-            })
+          return {
+            address: pubkey.toBase58(),
+            mint: info.mint,
+            rentLamports: lamports,
+            rent: lamports / 1e9,
+            amountRaw,
+            decimals,
+            uiAmount
           }
-        }
+        })
+        .filter(acc => acc.amountRaw === '0' || acc.uiAmount === 0)
 
-        setAccounts(emptyAccounts)
-        const total = emptyAccounts.reduce((sum, acc) => sum + acc.rent, 0)
-        setTotalReclaimable(total)
-      } else {
-        setAccounts([])
-        setTotalReclaimable(0)
-      }
+      setAccounts(emptyAccounts)
+      const total = emptyAccounts.reduce((sum, acc) => sum + acc.rent, 0)
+      setTotalReclaimable(total)
     } catch (error) {
       console.error('Error scanning accounts:', error)
       toast.error('Failed to scan accounts')
-      // For demo, show mock data
-      setAccounts([
-        {
-          address: 'DemoTokenAccount1...',
-          mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-          rent: 0.00203928,
-          rentLamports: 2039280
-        },
-        {
-          address: 'DemoTokenAccount2...',
-          mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-          rent: 0.00203928,
-          rentLamports: 2039280
-        }
-      ])
-      setTotalReclaimable(0.00407856)
+      setAccounts([])
+      setTotalReclaimable(0)
     } finally {
       setScanning(false)
     }
@@ -123,28 +78,37 @@ const SolanaCloser = () => {
 
     setClosing(true)
     try {
-      // In production, this would use @solana/web3.js to create and send close account transaction
-      // For demo, we'll simulate it
-      
-      if (window.solana && window.solana.isConnected) {
-        // This is a simplified example - actual implementation would:
-        // 1. Create close account instruction
-        // 2. Build transaction
-        // 3. Sign with wallet
-        // 4. Send to network
-        
-        toast.success('Account closure transaction sent')
-        
-        // Remove from list after successful closure
-        setAccounts(prev => prev.filter(acc => acc.address !== accountAddress))
-        
-        // Update total
-        const account = accounts.find(acc => acc.address === accountAddress)
-        if (account) {
-          setTotalReclaimable(prev => prev - account.rent)
-        }
-      } else {
+      const provider = window.solana
+      if (!provider || !provider.isConnected) {
         toast.error('Wallet not connected')
+        setClosing(false)
+        return
+      }
+
+      const owner = new PublicKey(wallet.address)
+      const accountPubkey = new PublicKey(accountAddress)
+
+      const transaction = new Transaction()
+      transaction.add(createCloseAccountInstruction(
+        accountPubkey,
+        owner,
+        owner
+      ))
+
+      transaction.feePayer = owner
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
+      transaction.recentBlockhash = blockhash
+
+      const signedTx = await provider.signTransaction(transaction)
+      const signature = await connection.sendRawTransaction(signedTx.serialize())
+      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed')
+
+      toast.success(`Closed account ${accountAddress.slice(0, 4)}...${accountAddress.slice(-4)}`)
+
+      setAccounts(prev => prev.filter(acc => acc.address !== accountAddress))
+      const closedAccount = accounts.find(acc => acc.address === accountAddress)
+      if (closedAccount) {
+        setTotalReclaimable(prev => Math.max(0, prev - closedAccount.rent))
       }
     } catch (error) {
       console.error('Error closing account:', error)
