@@ -312,6 +312,16 @@ const X402 = () => {
                   <h4 className="text-sm font-medium text-white/60 mb-3 tracking-tight">Response</h4>
                   <p className="text-sm text-white/80 mb-2 tracking-tight">Status: {endpoint.response.status}</p>
                   <p className="text-sm text-white/60">{endpoint.response.body}</p>
+                  {endpoint.id === 'demo' && (
+                    <div className="mt-3 p-3 glass-strong rounded-lg border border-primary-500/20">
+                      <p className="text-white/60 text-xs mb-1 font-semibold">⚠️ Note for PowerShell users:</p>
+                      <p className="text-white/40 text-xs">
+                        The 402 status is <strong>expected</strong> - it means the endpoint is working correctly! 
+                        PowerShell throws an error for 402, but the JSON response body is in the error. 
+                        The PowerShell command above automatically extracts and displays it.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {endpoint.example && (
