@@ -108,6 +108,21 @@ const fetchTokenMetadataFromJupiter = async (mint) => {
   return null
 }
 
+const buildFallbackToken = (mint) => {
+  const safeMint = (mint || '').trim()
+  if (!safeMint) return null
+
+  const short = `${safeMint.slice(0,4)}...${safeMint.slice(-4)}`
+
+  return {
+    address: safeMint,
+    symbol: short,
+    name: safeMint,
+    decimals: 9,
+    isFallback: true,
+  }
+}
+
 const isMaybeMint = (value) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test((value || '').trim())
 
 const formatNumber = (value, decimals = 6) => {
@@ -142,16 +157,21 @@ const TokenSelector = ({ label, tokens, value, onChange, onResolveMint }) => {
 
     try {
       setResolvingMint(true)
-      await onResolveMint?.(mint)
+      onChange(mint)
+      const resolved = await onResolveMint?.(mint)
 
-      const matchingToken = tokens.find(token => token.address?.toLowerCase() === mint.toLowerCase())
-      onChange(matchingToken ? matchingToken.address : mint)
-      setQuery('')
+      if (resolved?.address) {
+        onChange(resolved.address)
+      } else {
+        onChange(mint)
+      }
     } catch (error) {
-      const message = error?.message || 'Unable to load token metadata'
+      const message = error?.message || 'Unable to load token metadata. Using fallback info.'
       toast.error(message)
+      onChange(mint)
     } finally {
       setResolvingMint(false)
+      setQuery('')
     }
   }
 
@@ -178,7 +198,7 @@ const TokenSelector = ({ label, tokens, value, onChange, onResolveMint }) => {
             disabled={resolvingMint}
             className="px-3 py-1 text-xs bg-primary-500/20 border border-primary-500/40 text-primary-100 rounded-lg hover:bg-primary-500/30 disabled:opacity-50"
           >
-            {resolvingMint ? 'Loading…' : 'Use Mint'}
+            {resolvingMint ? 'Loading...' : 'Use Mint'}
           </button>
         </div>
       </div>
@@ -224,23 +244,44 @@ const Swapper = () => {
 
   const ensureTokenMetadata = useCallback(async (mint) => {
     const normalizedMint = (mint || '').trim()
-    if (!normalizedMint) return
+    if (!normalizedMint) return null
 
     const lowerMint = normalizedMint.toLowerCase()
-    if (tokens.some(token => token.address?.toLowerCase() === lowerMint)) {
-      return
-    }
 
-    const tokenMetadata = await fetchTokenMetadataFromJupiter(normalizedMint)
-    if (!tokenMetadata) {
-      throw new Error('Token not found on Jupiter lists')
-    }
-
+    let existingToken = null
     setTokens(prevTokens => {
-      const filtered = prevTokens.filter(token => token.address?.toLowerCase() !== lowerMint)
-      return [tokenMetadata, ...filtered]
+      const withoutMint = prevTokens.filter(token => token.address?.toLowerCase() !== lowerMint)
+      existingToken = prevTokens.find(token => token.address?.toLowerCase() === lowerMint)
+
+      if (existingToken) {
+        return [existingToken, ...withoutMint]
+      }
+
+      const fallbackToken = buildFallbackToken(normalizedMint)
+      existingToken = fallbackToken
+      return fallbackToken ? [fallbackToken, ...withoutMint] : withoutMint
     })
-  }, [tokens])
+
+    if (existingToken && !existingToken.isFallback) {
+      // Already have metadata, no need to fetch again
+      return existingToken
+    }
+
+    try {
+      const tokenMetadata = await fetchTokenMetadataFromJupiter(normalizedMint)
+      if (tokenMetadata) {
+        setTokens(prevTokens => {
+          const withoutMint = prevTokens.filter(token => token.address?.toLowerCase() !== lowerMint)
+          return [tokenMetadata, ...withoutMint]
+        })
+        return tokenMetadata
+      }
+    } catch (error) {
+      // Ignore fetch errors, fallback already applied
+    }
+
+    return existingToken || buildFallbackToken(normalizedMint)
+  }, [])
 
   useEffect(() => {
     const loadTokens = async () => {
