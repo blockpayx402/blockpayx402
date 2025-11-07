@@ -165,6 +165,19 @@ const Market = () => {
       .join(' ')
   }
 
+  const formatPrice = (price) => {
+    if (price < 0.01) return `$${price.toFixed(6)}`
+    if (price < 1) return `$${price.toFixed(4)}`
+    return `$${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  }
+
+  const formatMarketCap = (cap) => {
+    if (cap >= 1e12) return `$${(cap / 1e12).toFixed(2)}T`
+    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`
+    if (cap >= 1e6) return `$${(cap / 1e6).toFixed(2)}M`
+    return `$${cap.toLocaleString()}`
+  }
+
   const getPlatformContracts = (platforms) => {
     if (!platforms || typeof platforms !== 'object') return []
     return Object.entries(platforms)
@@ -243,19 +256,6 @@ const Market = () => {
       },
     }
   }, [coinDetails])
-
-  const formatPrice = (price) => {
-    if (price < 0.01) return `$${price.toFixed(6)}`
-    if (price < 1) return `$${price.toFixed(4)}`
-    return `$${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-  }
-
-  const formatMarketCap = (cap) => {
-    if (cap >= 1e12) return `$${(cap / 1e12).toFixed(2)}T`
-    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`
-    if (cap >= 1e6) return `$${(cap / 1e6).toFixed(2)}M`
-    return `$${cap.toLocaleString()}`
-  }
 
   if (loading && coins.length === 0) {
     return (
