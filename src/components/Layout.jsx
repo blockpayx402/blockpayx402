@@ -11,11 +11,10 @@ import {
   Zap,
   TrendingUp,
   BarChart3,
-  Briefcase,
   Gauge,
-  LineChart,
   FileText,
-  Code
+  Code,
+  Trash2
 } from 'lucide-react'
 
 const Layout = ({ children }) => {
@@ -27,11 +26,10 @@ const Layout = ({ children }) => {
     { path: '/request', icon: PlusCircle, label: 'Create Request' },
     { path: '/swap', icon: Zap, label: 'Swapper' },
     { path: '/market', icon: BarChart3, label: 'Market' },
-    { path: '/portfolio', icon: Briefcase, label: 'Portfolio' },
     { path: '/gas', icon: Gauge, label: 'Gas Tracker' },
-    { path: '/analytics', icon: LineChart, label: 'Token Analytics' },
     { path: '/x402', icon: FileText, label: 'BlockX402' },
     { path: '/api', icon: Code, label: 'API Docs' },
+    { path: '/solana-closer', icon: Trash2, label: 'Solana Closer' },
     { path: '/transactions', icon: History, label: 'Transactions' },
     { path: '/staking', icon: TrendingUp, label: 'Staking' },
   ]
