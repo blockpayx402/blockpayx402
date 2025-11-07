@@ -469,9 +469,9 @@ const Swapper = () => {
 
     setLoading(true)
     try {
-      // Get quote from backend (includes transaction data if available)
-      const orderData = await ordersAPI.create({
-        requestId: null, // No payment request, direct swap
+      // Pure Relay wrapper - get quote/transaction from Relay
+      const relayResponse = await ordersAPI.create({
+        requestId: null, // Direct swap
         fromChain,
         fromAsset,
         toChain,
@@ -479,19 +479,24 @@ const Swapper = () => {
         amount: parseFloat(fromAmount),
         recipientAddress: finalRecipientAddress,
         refundAddress: refundAddress || wallet?.address || null,
-        userAddress: wallet?.address || null // User's wallet for transaction signing
+        userAddress: wallet?.address || null
       })
 
-      // Check if this is a direct execution swap (has transaction data)
-      if (orderData.isDirectExecution && orderData.transactionData) {
-        // Execute transaction directly with wallet (like Relay does)
-        await executeRelayTransaction(orderData, wallet)
-      } else {
-        // Fallback to deposit address flow
-        setOrder(orderData)
+      // Relay returns either:
+      // 1. Transaction data for direct execution (isDirectExecution: true)
+      // 2. Deposit address for cross-chain swaps
+      
+      if (relayResponse.isDirectExecution && relayResponse.transactionData) {
+        // Execute directly with wallet - pure Relay flow
+        await executeRelayTransaction(relayResponse, wallet)
+      } else if (relayResponse.depositAddress) {
+        // Deposit address flow - Relay handles the rest
+        setOrder(relayResponse)
         setOrderStatus('awaiting_deposit')
         setStatusPolling(true)
-        toast.success('Swap order created! Send funds to the deposit address.')
+        toast.success('Swap quote created! Send funds to the deposit address.')
+      } else {
+        throw new Error('Invalid response from Relay')
       }
     } catch (error) {
       console.error('Error creating swap:', error)
