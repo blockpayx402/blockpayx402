@@ -13,15 +13,25 @@ const X402 = () => {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  // Working example - no request needed, just curl the demo endpoint
+  // Bash/Linux/Mac curl example
   const curlDemo = `curl -H "X-Payment-Protocol: x402/1.0" \\
   https://blockpay.cloud/api/x402/demo`
 
-  // After sending payment, retry with X-PAYMENT header
-  // Replace <BASE64_PAYMENT_PAYLOAD> with your actual payment payload (see JavaScript example below)
+  // PowerShell example (Windows)
+  const powershellDemo = `Invoke-WebRequest -Uri "https://blockpay.cloud/api/x402/demo" \\
+  -Headers @{"X-Payment-Protocol"="x402/1.0"}`
+
+  // After sending payment, retry with X-PAYMENT header (Bash)
   const curlWithPayment = `curl -H "X-Payment-Protocol: x402/1.0" \\
   -H "X-Payment: <BASE64_PAYMENT_PAYLOAD>" \\
   https://blockpay.cloud/api/x402/demo`
+
+  // After sending payment, retry with X-PAYMENT header (PowerShell)
+  const powershellWithPayment = `Invoke-WebRequest -Uri "https://blockpay.cloud/api/x402/demo" \\
+  -Headers @{
+    "X-Payment-Protocol"="x402/1.0";
+    "X-Payment"="<BASE64_PAYMENT_PAYLOAD>"
+  }`
 
   const exampleResponse = `HTTP/1.1 402 Payment Required
 Content-Type: application/json
@@ -222,24 +232,48 @@ console.log('Payment verified!', result)`
           <div>
             <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Step 1: Get Payment Requirements (402 Response)</h3>
             <p className="text-white/60 text-sm mb-3">This will return HTTP 402 with payment requirements. No request creation needed!</p>
-            <div className="relative">
-              <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                <code className="text-white/90">{curlDemo}</code>
-              </pre>
-              <button
-                onClick={() => copyToClipboard(curlDemo, 'curl-demo')}
-                className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-              >
-                {copiedCode === 'curl-demo' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-white/60" />
-                )}
-              </button>
+            
+            <div className="mb-4">
+              <p className="text-white/60 text-xs mb-2">Bash/Linux/Mac (curl):</p>
+              <div className="relative">
+                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                  <code className="text-white/90">{curlDemo}</code>
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(curlDemo, 'curl-demo')}
+                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+                >
+                  {copiedCode === 'curl-demo' ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-white/60" />
+                  )}
+                </button>
+              </div>
             </div>
-            <p className="text-white/40 text-xs mt-2">
+
+            <div>
+              <p className="text-white/60 text-xs mb-2">PowerShell (Windows):</p>
+              <div className="relative">
+                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                  <code className="text-white/90">{powershellDemo}</code>
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(powershellDemo, 'powershell-demo')}
+                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+                >
+                  {copiedCode === 'powershell-demo' ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-white/60" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-white/40 text-xs mt-3">
               This returns a 402 response with <code className="text-primary-400">accepts</code> array containing payment requirements.
-              You'll see the recipient address and amount needed.
+              You'll see the recipient address and amount needed. To see the JSON response in PowerShell, use: <code className="text-primary-400">(Invoke-WebRequest ...).Content</code>
             </p>
           </div>
 
@@ -248,22 +282,46 @@ console.log('Payment verified!', result)`
             <p className="text-white/60 text-sm mb-3">
               After sending the Solana payment, create a payment payload and retry the request:
             </p>
-            <div className="relative">
-              <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                <code className="text-white/90">{curlWithPayment}</code>
-              </pre>
-              <button
-                onClick={() => copyToClipboard(curlWithPayment, 'curl-payment')}
-                className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-              >
-                {copiedCode === 'curl-payment' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-white/60" />
-                )}
-              </button>
+            
+            <div className="mb-4">
+              <p className="text-white/60 text-xs mb-2">Bash/Linux/Mac (curl):</p>
+              <div className="relative">
+                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                  <code className="text-white/90">{curlWithPayment}</code>
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(curlWithPayment, 'curl-payment')}
+                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+                >
+                  {copiedCode === 'curl-payment' ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-white/60" />
+                  )}
+                </button>
+              </div>
             </div>
-            <p className="text-white/40 text-xs mt-2">
+
+            <div>
+              <p className="text-white/60 text-xs mb-2">PowerShell (Windows):</p>
+              <div className="relative">
+                <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                  <code className="text-white/90">{powershellWithPayment}</code>
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(powershellWithPayment, 'powershell-payment')}
+                  className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+                >
+                  {copiedCode === 'powershell-payment' ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-white/60" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-white/40 text-xs mt-3">
               Replace <code className="text-primary-400">&lt;BASE64_PAYMENT_PAYLOAD&gt;</code> with your actual payment payload.
               See the JavaScript/Solana examples below to see how to create it from a transaction signature.
             </p>
