@@ -1019,32 +1019,28 @@ const Swapper = () => {
               </div>
             </div>
 
-            {/* Recipient Address */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-white/80 tracking-tight">
-                  Recipient Address
-                </label>
-                {wallet?.connected && (
-                  <button
-                    onClick={() => setRecipientAddress(wallet.address)}
-                    className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                  >
-                    Use Wallet
-                  </button>
-                )}
+            {/* Recipient Address - Hidden if wallet connected (like Relay) */}
+            {!wallet?.connected && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">Recipient Address</label>
+                <input
+                  type="text"
+                  placeholder={toChainConfig && toChainConfig.chainId === 792703809 ? 'Enter Solana address...' : '0x...'}
+                  value={recipientAddress}
+                  onChange={(e) => setRecipientAddress(e.target.value)}
+                  className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
+                />
+                <p className="text-xs text-white/50 mt-2 tracking-tight">
+                  Address where you want to receive {toAsset || 'tokens'} on {toChainConfig?.label || 'destination chain'}
+                </p>
               </div>
-              <input
-                type="text"
-                value={recipientAddress}
-                onChange={(e) => setRecipientAddress(e.target.value)}
-                placeholder={toChainConfig && toChainConfig.chainId === 792703809 ? 'Enter Solana address...' : '0x...'}
-                className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
-              />
-              <p className="text-xs text-white/50 mt-2 tracking-tight">
-                Address where you want to receive {toAsset || 'tokens'} on {toChainConfig?.label || 'destination chain'}
-              </p>
-            </div>
+            )}
+            {wallet?.connected && (
+              <div className="glass-strong rounded-xl p-4 border border-green-500/30 bg-green-500/10">
+                <p className="text-sm text-green-400 mb-1">✓ Wallet Connected</p>
+                <p className="text-xs text-white/70">Tokens will be sent to your connected wallet: {wallet.address?.substring(0, 8)}...{wallet.address?.substring(wallet.address.length - 6)}</p>
+              </div>
+            )}
 
             {/* Refund Address (Optional) */}
             {showRefund && (
