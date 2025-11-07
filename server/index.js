@@ -299,7 +299,12 @@ app.post('/api/create-order', async (req, res) => {
       platformFee: fee,
       estimatedAmount: depositInfo.estimatedAmount,
       exchangeRate: depositInfo.exchangeRate,
-      validUntil: depositInfo.validUntil
+      validUntil: depositInfo.validUntil,
+      // Include Relay direct execution fields
+      isDirectExecution: depositInfo.isDirectExecution || false,
+      transactionData: depositInfo.transactionData || null,
+      approvalTransaction: depositInfo.approvalTransaction || null,
+      needsApproval: depositInfo.needsApproval || false,
     })
   } catch (error) {
     console.error('[Create Order Error]', error)

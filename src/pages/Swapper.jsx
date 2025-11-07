@@ -496,7 +496,14 @@ const Swapper = () => {
         setStatusPolling(true)
         toast.success('Swap quote created! Send funds to the deposit address.')
       } else {
-        throw new Error('Invalid response from Relay')
+        // Log the actual response for debugging
+        console.error('Invalid Relay response:', {
+          hasDirectExecution: !!relayResponse.isDirectExecution,
+          hasTransactionData: !!relayResponse.transactionData,
+          hasDepositAddress: !!relayResponse.depositAddress,
+          response: relayResponse
+        })
+        throw new Error('Invalid response from Relay: Missing deposit address or transaction data. Please try again or contact support.')
       }
     } catch (error) {
       console.error('Error creating swap:', error)

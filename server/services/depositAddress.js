@@ -195,6 +195,11 @@ export const generateDepositAddress = async (orderData) => {
       validUntil: exchangeData.validUntil,
       platformFee: safeFee,
       amountAfterFee,
+      // Include Relay direct execution fields
+      isDirectExecution: exchangeData.isDirectExecution || false,
+      transactionData: exchangeData.transactionData || null,
+      approvalTransaction: exchangeData.approvalTransaction || null,
+      needsApproval: exchangeData.needsApproval || false,
     }
   } catch (error) {
     console.error('Error generating deposit address:', error)
