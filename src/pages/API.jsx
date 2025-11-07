@@ -110,7 +110,7 @@ Invoke-WebRequest -Uri "${baseUrl}/requests" -Method POST -Headers @{"Content-Ty
       "resource": "/api/requests/<YOUR_REQUEST_ID>",
       "description": "Payment for services",
       "mimeType": "application/json",
-      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>",
       "maxTimeoutSeconds": 300,
       "asset": "So11111111111111111111111111111111111111112",
       "extra": {
@@ -382,7 +382,7 @@ Invoke-WebRequest -Uri "${baseUrl}/sync" -Method POST -Headers @{"Content-Type"=
       "scheme": "exact",
       "network": "solana-mainnet",
       "maxAmountRequired": "500000000",
-      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
   }'`,
         powershell: `$body = @{
@@ -392,7 +392,7 @@ Invoke-WebRequest -Uri "${baseUrl}/sync" -Method POST -Headers @{"Content-Type"=
         scheme = "exact"
         network = "solana-mainnet"
         maxAmountRequired = "500000000"
-        payTo = "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+        payTo = "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
 } | ConvertTo-Json -Depth 10
 
@@ -433,7 +433,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST -Headers @{"Content
       "scheme": "exact",
       "network": "solana-mainnet",
       "maxAmountRequired": "500000000",
-      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
   }'`,
         powershell: `$body = @{
@@ -443,7 +443,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST -Headers @{"Content
         scheme = "exact"
         network = "solana-mainnet"
         maxAmountRequired = "500000000"
-        payTo = "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta"
+        payTo = "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
 } | ConvertTo-Json -Depth 10
 
@@ -514,7 +514,7 @@ Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content
       "resource": "/api/x402/demo",
       "description": "x402 Demo Payment - Send 0.1 SOL to test the protocol",
       "mimeType": "application/json",
-      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn",
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>",
       "maxTimeoutSeconds": 300,
       "asset": "So11111111111111111111111111111111111111112",
       "extra": {

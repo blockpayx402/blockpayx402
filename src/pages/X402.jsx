@@ -88,21 +88,21 @@ const X402 = () => {
       "scheme": "exact",
       "network": "solana-mainnet",
       "maxAmountRequired": "100000000",
-      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
   }'`,
-        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST \\
-  -Headers @{"Content-Type"="application/json"} \\
-  -Body '{
-    "x402Version": 1,
-    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
-    "paymentRequirements": {
-      "scheme": "exact",
-      "network": "solana-mainnet",
-      "maxAmountRequired": "100000000",
-      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
+        powershell: `$body = @{
+    x402Version = 1
+    paymentHeader = "<YOUR_BASE64_PAYMENT_PAYLOAD>"
+    paymentRequirements = @{
+        scheme = "exact"
+        network = "solana-mainnet"
+        maxAmountRequired = "100000000"
+        payTo = "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
-  }'`,
+} | ConvertTo-Json -Depth 10
+
+Invoke-WebRequest -Uri "${baseUrl}/x402/verify" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "isValid": true,
   "invalidReason": null
@@ -139,21 +139,21 @@ const X402 = () => {
       "scheme": "exact",
       "network": "solana-mainnet",
       "maxAmountRequired": "100000000",
-      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
+      "payTo": "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
   }'`,
-        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST \\
-  -Headers @{"Content-Type"="application/json"} \\
-  -Body '{
-    "x402Version": 1,
-    "paymentHeader": "<YOUR_BASE64_PAYMENT_PAYLOAD>",
-    "paymentRequirements": {
-      "scheme": "exact",
-      "network": "solana-mainnet",
-      "maxAmountRequired": "100000000",
-      "payTo": "7FSRx9hk9GHcqJNRsG8B9oTLSZSohNB7TZc9pPio45Gn"
+        powershell: `$body = @{
+    x402Version = 1
+    paymentHeader = "<YOUR_BASE64_PAYMENT_PAYLOAD>"
+    paymentRequirements = @{
+        scheme = "exact"
+        network = "solana-mainnet"
+        maxAmountRequired = "100000000"
+        payTo = "<YOUR_PAYMENT_RECIPIENT_ADDRESS>"
     }
-  }'`,
+} | ConvertTo-Json -Depth 10
+
+Invoke-WebRequest -Uri "${baseUrl}/x402/settle" -Method POST -Headers @{"Content-Type"="application/json"} -Body $body`,
         response: `{
   "success": true,
   "error": null,
