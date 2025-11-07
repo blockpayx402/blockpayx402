@@ -115,6 +115,16 @@ export const syncAPI = {
 
 // Orders API - For cross-chain swap orders
 export const ordersAPI = {
+  getStatus: async (orderId) => {
+    try {
+      const response = await api.get(`/status/${orderId}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching order status:', error)
+      throw error
+    }
+  },
+
   create: async (orderData) => {
     try {
       // Support both payment request flow and direct swap flow

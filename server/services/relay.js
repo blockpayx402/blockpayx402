@@ -265,12 +265,17 @@ export const getRelayStatus = async (exchangeId) => {
   try {
     const client = await getRelayClient()
     
-    // Use SDK's getStatus method
-    const status = await client.getStatus(exchangeId)
+    // Use SDK's getStatus method (under client.actions)
+    // Based on Relay SDK docs, status is checked via client.actions.getStatus
+    const status = await client.actions.getStatus(exchangeId)
     
-    // Map Relay status to our status
+    console.log('[Relay SDK] Status response:', status)
+    
+    // Map Relay status to our status format
+    // Relay status values: 'pending', 'confirming', 'processing', 'completed', 'failed', 'refunded'
     const statusMap = {
       'pending': 'awaiting_deposit',
+      'awaiting_deposit': 'awaiting_deposit',
       'confirming': 'processing',
       'processing': 'processing',
       'completed': 'completed',
@@ -279,12 +284,23 @@ export const getRelayStatus = async (exchangeId) => {
     }
     
     return {
-      status: statusMap[status.status] || status.status,
-      exchangeId: status.id || exchangeId,
+      status: statusMap[status.status] || status.status || 'awaiting_deposit',
+      exchangeId: status.id || status.exchangeId || exchangeId,
+      amount: status.amount || status.originAmount || null,
+      destinationAmount: status.destinationAmount || status.toAmount || null,
+      txHash: status.originTxHash || status.txHash || null,
+      destinationTxHash: status.destinationTxHash || status.toTxHash || null,
+      depositAddress: status.depositAddress || null,
+      recipientAddress: status.recipientAddress || null,
       ...status,
     }
   } catch (error) {
     console.error('[Relay SDK] Error getting status:', error)
+    console.error('[Relay SDK] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      exchangeId
+    })
     throw error
   }
 }

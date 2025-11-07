@@ -28,6 +28,8 @@ const Swapper = () => {
   const [loading, setLoading] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [order, setOrder] = useState(null)
+  const [orderStatus, setOrderStatus] = useState(null)
+  const [statusPolling, setStatusPolling] = useState(false)
   const debounceTimer = useRef(null)
 
   // Dynamic chains and tokens from Relay
@@ -606,10 +608,37 @@ const Swapper = () => {
             </div>
           </div>
 
-          {!isDirectSwap && (
-            <div className="flex items-center gap-2 text-xs text-white/50 mb-4 mt-4">
-              <CheckCircle2 className="w-4 h-4 text-green-400" />
-              <span>Auto-swap enabled • Direct to recipient</span>
+          {!isDirectSwap && orderStatus && (
+            <div className="glass-strong rounded-xl p-4 border border-white/[0.12] mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-white/60">Status</span>
+                <span className={`text-sm font-medium ${
+                  orderStatus === 'completed' ? 'text-green-400' :
+                  orderStatus === 'processing' ? 'text-yellow-400' :
+                  orderStatus === 'failed' ? 'text-red-400' :
+                  'text-white/70'
+                }`}>
+                  {orderStatus === 'awaiting_deposit' && '⏳ Awaiting Deposit'}
+                  {orderStatus === 'processing' && '🔄 Processing Swap'}
+                  {orderStatus === 'completed' && '✅ Completed'}
+                  {orderStatus === 'failed' && '❌ Failed'}
+                </span>
+              </div>
+              {orderStatus === 'awaiting_deposit' && (
+                <p className="text-xs text-white/60 mt-2">
+                  Send {fromAmount} {fromAsset} to the deposit address above. Relay will automatically swap and send tokens to the recipient.
+                </p>
+              )}
+              {orderStatus === 'processing' && (
+                <p className="text-xs text-white/60 mt-2">
+                  Deposit received! Relay is processing your swap. This may take a few minutes.
+                </p>
+              )}
+              {orderStatus === 'completed' && (
+                <p className="text-xs text-green-400 mt-2">
+                  ✅ Swap completed! Tokens have been sent to the recipient address.
+                </p>
+              )}
             </div>
           )}
 
@@ -619,7 +648,7 @@ const Swapper = () => {
               className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl font-medium text-white hover:from-primary-600 hover:to-primary-700 transition-all flex items-center justify-center gap-2"
             >
               <ExternalLink className="w-4 h-4" />
-              Track Swap Status
+              View Full Status
             </button>
           )}
           

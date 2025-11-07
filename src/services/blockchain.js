@@ -438,75 +438,75 @@ export const verifySolanaTransaction = async (recipientAddress, amount, currency
         }
 
         const connection = new solana.Connection(rpcUrl, {
-          commitment: 'confirmed',
-          confirmTransaction: 5,
-        })
+      commitment: 'confirmed',
+      confirmTransaction: 5,
+    })
     
-        const publicKey = new solana.PublicKey(recipientAddress)
-        const requiredAmount = parseFloat(amount) || 0
-        const tolerance = 0.0001
+    const publicKey = new solana.PublicKey(recipientAddress)
+    const requiredAmount = parseFloat(amount) || 0
+    const tolerance = 0.0001
 
-        if (currency === 'native' || !currency || currency === 'SOL') {
-          // Get recent signatures for this address (last 1000 transactions)
+    if (currency === 'native' || !currency || currency === 'SOL') {
+      // Get recent signatures for this address (last 1000 transactions)
+      try {
+        const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 1000 })
+        
+        for (const sigInfo of signatures) {
+          // Check if transaction occurred after request creation
+          if (sinceTimestamp && sigInfo.blockTime && sigInfo.blockTime * 1000 < sinceTimestamp) {
+            break // Stop checking older transactions
+          }
+
           try {
-            const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 1000 })
-            
-            for (const sigInfo of signatures) {
-              // Check if transaction occurred after request creation
-              if (sinceTimestamp && sigInfo.blockTime && sigInfo.blockTime * 1000 < sinceTimestamp) {
-                break // Stop checking older transactions
-              }
+            // Get transaction details
+            const tx = await connection.getTransaction(sigInfo.signature, {
+              commitment: 'confirmed',
+              maxSupportedTransactionVersion: 0
+            })
 
-              try {
-                // Get transaction details
-                const tx = await connection.getTransaction(sigInfo.signature, {
-                  commitment: 'confirmed',
-                  maxSupportedTransactionVersion: 0
-                })
+            if (!tx || !tx.meta || tx.meta.err) continue // Skip failed transactions
 
-                if (!tx || !tx.meta || tx.meta.err) continue // Skip failed transactions
-
-                // Check if this transaction credited our address
+            // Check if this transaction credited our address
                 const accountIndex = tx.transaction.message.accountKeys.findIndex(k => k.equals(publicKey))
                 if (accountIndex === -1) continue
                 
                 const preBalance = tx.meta.preBalances?.[accountIndex] || 0
                 const postBalance = tx.meta.postBalances?.[accountIndex] || 0
-                const balanceChange = (postBalance - preBalance) / Math.pow(10, 9) // Convert to SOL
+            const balanceChange = (postBalance - preBalance) / Math.pow(10, 9) // Convert to SOL
 
-                // Check if amount matches (within tolerance)
-                if (balanceChange >= requiredAmount - tolerance) {
-                  return {
-                    verified: true,
-                    txHash: sigInfo.signature,
-                    amount: balanceChange,
-                    from: tx.transaction.message.accountKeys.find(k => !k.equals(publicKey))?.toString() || 'Unknown',
-                    to: recipientAddress,
-                    blockTime: sigInfo.blockTime ? sigInfo.blockTime * 1000 : Date.now(),
-                    chain: 'Solana'
-                  }
-                }
-              } catch (txError) {
-                // Skip transactions that fail to fetch
-                continue
+            // Check if amount matches (within tolerance)
+            if (balanceChange >= requiredAmount - tolerance) {
+              return {
+                verified: true,
+                txHash: sigInfo.signature,
+                amount: balanceChange,
+                from: tx.transaction.message.accountKeys.find(k => !k.equals(publicKey))?.toString() || 'Unknown',
+                to: recipientAddress,
+                blockTime: sigInfo.blockTime ? sigInfo.blockTime * 1000 : Date.now(),
+                chain: 'Solana'
               }
             }
+          } catch (txError) {
+            // Skip transactions that fail to fetch
+            continue
+          }
+        }
             
             // If we got here, signatures were fetched successfully but no match found
             return { verified: false, reason: 'No matching transaction found' }
-          } catch (error) {
+      } catch (error) {
             // If this endpoint fails, try the next one
             console.error(`Error fetching Solana signatures from ${rpcUrl}:`, error)
             lastError = error
             continue // Try next RPC endpoint
-          }
-        } else {
-          // For SPL tokens, check token account transfers
-          // This requires more complex implementation
-          return {
-            verified: false,
-            error: 'SPL token verification not yet implemented'
-          }
+      }
+    } else {
+      // For SPL tokens, check token account transfers
+      // This requires more complex implementation
+      return {
+        verified: false,
+        error: 'SPL token verification not yet implemented'
+      }
         }
       } catch (error) {
         // Connection error, try next endpoint
