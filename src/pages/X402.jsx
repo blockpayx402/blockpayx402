@@ -13,81 +13,120 @@ const X402 = () => {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  const curlCreateRequest = `curl -X POST https://api.blockpay.cloud/api/requests \\
-  -H "Content-Type: application/json" \\
-  -H "X-Payment-Protocol: blockx402/1.0" \\
-  -d '{
-    "amount": "1.5",
-    "currency": "SOL",
-    "chain": "solana",
-    "recipient": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
-    "description": "Payment for services"
-  }'`
+  const curlGetRequest = `curl -H "X-Payment-Protocol: x402/1.0" \\
+  https://blockpay.cloud/api/requests/req_1234567890_abc123`
 
-  const curlGetRequest = `curl https://api.blockpay.cloud/api/requests/req_1234567890_abc123`
-
-  const curlCheckStatus = `curl https://api.blockpay.cloud/api/requests/req_1234567890_abc123`
+  const curlWithPayment = `curl -H "X-Payment-Protocol: x402/1.0" \\
+  -H "X-Payment: <base64_encoded_payment_payload>" \\
+  https://blockpay.cloud/api/requests/req_1234567890_abc123`
 
   const exampleResponse = `HTTP/1.1 402 Payment Required
 Content-Type: application/json
-X-Payment-Protocol: blockx402/1.0
-X-Payment-Request-ID: req_1234567890_abc123
+X-Payment-Protocol: x402/1.0
 
 {
-  "payment_required": true,
-  "protocol": "blockx402",
-  "version": "1.0",
-  "request_id": "req_1234567890_abc123",
-  "amount": "1.5",
-  "currency": "SOL",
-  "chain": "solana",
-  "recipient": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
-  "description": "Payment for services",
-  "expires_at": "2024-01-01T12:00:00Z",
-  "payment_url": "https://blockpay.cloud/pay/req_1234567890_abc123"
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "1500000000",
+      "resource": "/api/requests/req_1234567890_abc123",
+      "description": "Payment for services",
+      "mimeType": "application/json",
+      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
+      "maxTimeoutSeconds": 300,
+      "asset": "So11111111111111111111111111111111111111112",
+      "extra": {
+        "name": "Solana",
+        "version": "1.0"
+      }
+    }
+  ],
+  "error": null
 }`
 
-  const jsExample = `// Create Solana payment request
-const response = await fetch('https://api.blockpay.cloud/api/requests', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-Payment-Protocol': 'blockx402/1.0'
-  },
-  body: JSON.stringify({
-    amount: '1.5',
-    currency: 'SOL',
-    chain: 'solana',
-    recipient: '44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta',
-    description: 'Payment for services'
-  })
-})
+  const jsExample = `// Fetch resource with x402 protocol
+import { fetchWithX402, getPaymentRequirements } from './services/x402'
 
-const request = await response.json()
-console.log('Payment URL:', request.payment_url)`
+// Step 1: Request resource (will get 402 if payment required)
+const result = await fetchWithX402('/api/requests/req_1234567890_abc123')
+
+if (result.paymentRequired) {
+  // Step 2: Get payment requirements
+  const { accepts } = result.paymentData
+  const paymentReq = accepts[0] // Select first payment option
+  
+  // Step 3: Create and send Solana transaction
+  const signature = await sendSolanaPayment(paymentReq)
+  
+  // Step 4: Create payment payload
+  const paymentPayload = {
+    x402Version: 1,
+    scheme: paymentReq.scheme,
+    network: paymentReq.network,
+    payload: { signature }
+  }
+  
+  // Step 5: Retry request with X-PAYMENT header
+  const paymentHeader = btoa(JSON.stringify(paymentPayload))
+  const paidResponse = await fetch('/api/requests/req_1234567890_abc123', {
+    headers: {
+      'X-Payment': paymentHeader,
+      'X-Payment-Protocol': 'x402/1.0'
+    }
+  })
+  
+  const resource = await paidResponse.json()
+}`
 
   const solanaWeb3Example = `import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js'
-import { WalletAdapter } from '@solana/wallet-adapter-base'
+
+// Payment requirements from 402 response
+const paymentReq = {
+  scheme: 'exact',
+  network: 'solana-mainnet',
+  maxAmountRequired: '1500000000', // lamports (1.5 SOL)
+  payTo: '44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta'
+}
 
 // Connect to Solana
 const connection = new Connection('https://api.mainnet-beta.solana.com')
 
-// Payment details from 402 response
-const recipient = new PublicKey('44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta')
-const amount = 1.5 // SOL
-
 // Create transfer transaction
+const recipient = new PublicKey(paymentReq.payTo)
+const amountLamports = BigInt(paymentReq.maxAmountRequired)
+
 const transaction = new Transaction().add(
   SystemProgram.transfer({
     fromPubkey: wallet.publicKey,
     toPubkey: recipient,
-    lamports: amount * 1e9 // Convert SOL to lamports
+    lamports: Number(amountLamports)
   })
 )
 
+// Get recent blockhash
+const { blockhash } = await connection.getLatestBlockhash()
+transaction.recentBlockhash = blockhash
+transaction.feePayer = wallet.publicKey
+
 // Sign and send
-const signature = await wallet.sendTransaction(transaction, connection)
-await connection.confirmTransaction(signature)`
+const signedTx = await wallet.signTransaction(transaction)
+const signature = await connection.sendRawTransaction(signedTx.serialize())
+
+// Wait for confirmation
+await connection.confirmTransaction(signature, 'confirmed')
+
+// Create x402 payment payload
+const paymentPayload = {
+  x402Version: 1,
+  scheme: paymentReq.scheme,
+  network: paymentReq.network,
+  payload: { signature }
+}
+
+// Encode as base64 for X-PAYMENT header
+const paymentHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64')`
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -97,10 +136,21 @@ await connection.confirmTransaction(signature)`
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">BlockX402 Protocol</h1>
+        <h1 className="text-4xl font-semibold mb-2 gradient-text tracking-tight">x402 Payment Protocol</h1>
         <p className="text-white/60 text-lg tracking-tight">
-          HTTP 402 Payment Required implementation for Solana payments
+          Coinbase x402 protocol implementation for Solana. Built on HTTP 402 Payment Required.
         </p>
+        <div className="mt-4 flex items-center gap-2 text-sm text-white/40">
+          <span>Based on</span>
+          <a 
+            href="https://github.com/coinbase/x402" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-primary-400 hover:text-primary-300 underline"
+          >
+            coinbase/x402
+          </a>
+        </div>
       </motion.div>
 
       {/* Quick Start - cURL Commands First */}
@@ -113,26 +163,7 @@ await connection.confirmTransaction(signature)`
         
         <div className="space-y-6">
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Create Payment Request</h3>
-            <div className="relative">
-              <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
-                <code className="text-white/90">{curlCreateRequest}</code>
-              </pre>
-              <button
-                onClick={() => copyToClipboard(curlCreateRequest, 'curl-create')}
-                className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
-              >
-                {copiedCode === 'curl-create' ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-white/60" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Get Payment Request Status</h3>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Get Payment Request (402 Response)</h3>
             <div className="relative">
               <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
                 <code className="text-white/90">{curlGetRequest}</code>
@@ -142,6 +173,25 @@ await connection.confirmTransaction(signature)`
                 className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
               >
                 {copiedCode === 'curl-get' ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-white/60" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-3 text-white tracking-tight">Access Resource with Payment</h3>
+            <div className="relative">
+              <pre className="p-4 glass-strong rounded-xl border border-white/10 overflow-x-auto text-sm">
+                <code className="text-white/90">{curlWithPayment}</code>
+              </pre>
+              <button
+                onClick={() => copyToClipboard(curlWithPayment, 'curl-payment')}
+                className="absolute top-2 right-2 p-2 glass-strong rounded-lg border border-white/10 hover:border-primary-500/30 transition-all"
+              >
+                {copiedCode === 'curl-payment' ? (
                   <Check className="w-4 h-4 text-green-400" />
                 ) : (
                   <Copy className="w-4 h-4 text-white/60" />
@@ -233,19 +283,53 @@ await connection.confirmTransaction(signature)`
         transition={{ delay: 0.3 }}
         className="glass rounded-2xl p-8 border border-white/[0.08]"
       >
-        <h2 className="text-2xl font-semibold mb-4 tracking-tight">Solana-Specific Fields</h2>
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight">x402 Protocol Flow</h2>
         <div className="space-y-4">
           <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <code className="text-primary-400 font-mono text-sm">chain</code>
-            <p className="text-white/60 text-sm mt-1">Must be "solana" for Solana payments</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-primary-400 font-semibold">1. Request Resource</span>
+            </div>
+            <p className="text-white/60 text-sm">Client requests resource with X-Payment-Protocol header</p>
           </div>
           <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <code className="text-primary-400 font-mono text-sm">currency</code>
-            <p className="text-white/60 text-sm mt-1">Must be "SOL" for Solana native token</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-primary-400 font-semibold">2. 402 Response</span>
+            </div>
+            <p className="text-white/60 text-sm">Server responds with HTTP 402 and payment requirements</p>
           </div>
           <div className="p-4 glass-strong rounded-xl border border-white/10">
-            <code className="text-primary-400 font-mono text-sm">recipient</code>
-            <p className="text-white/60 text-sm mt-1">Solana wallet address (base58 encoded, 32-44 characters)</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-primary-400 font-semibold">3. Send Payment</span>
+            </div>
+            <p className="text-white/60 text-sm">Client creates Solana transaction and sends to recipient</p>
+          </div>
+          <div className="p-4 glass-strong rounded-xl border border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-primary-400 font-semibold">4. Verify & Settle</span>
+            </div>
+            <p className="text-white/60 text-sm">Client includes X-PAYMENT header with transaction signature</p>
+          </div>
+          <div className="p-4 glass-strong rounded-xl border border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-primary-400 font-semibold">5. Access Resource</span>
+            </div>
+            <p className="text-white/60 text-sm">Server verifies payment and returns requested resource</p>
+          </div>
+        </div>
+
+        <h2 className="text-2xl font-semibold mb-4 tracking-tight mt-8">API Endpoints</h2>
+        <div className="space-y-4">
+          <div className="p-4 glass-strong rounded-xl border border-white/10">
+            <code className="text-primary-400 font-mono text-sm">POST /api/x402/verify</code>
+            <p className="text-white/60 text-sm mt-1">Verify a payment payload</p>
+          </div>
+          <div className="p-4 glass-strong rounded-xl border border-white/10">
+            <code className="text-primary-400 font-mono text-sm">POST /api/x402/settle</code>
+            <p className="text-white/60 text-sm mt-1">Settle a payment (confirm on-chain)</p>
+          </div>
+          <div className="p-4 glass-strong rounded-xl border border-white/10">
+            <code className="text-primary-400 font-mono text-sm">GET /api/x402/supported</code>
+            <p className="text-white/60 text-sm mt-1">Get supported payment schemes and networks</p>
           </div>
         </div>
       </motion.div>

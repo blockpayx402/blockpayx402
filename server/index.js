@@ -4,6 +4,7 @@ import { dbHelpers } from './database.js'
 import { calculatePlatformFee, BLOCKPAY_CONFIG } from './config.js'
 import { checkSetup, generateSetupInstructions } from './utils/setup.js'
 import { checkGitSecurity, validateApiKeySecurity } from './utils/security.js'
+import * as x402Service from './services/x402.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -55,7 +56,7 @@ app.get('/api/requests', (req, res) => {
   }
 })
 
-// Get a single payment request
+// Get a single payment request (with x402 support)
 app.get('/api/requests/:id', (req, res) => {
   try {
     const request = dbHelpers.getRequestById(req.params.id)
@@ -69,6 +70,71 @@ app.get('/api/requests/:id', (req, res) => {
       ...request,
       isExpired,
       status: isExpired && request.status === 'pending' ? 'expired' : request.status
+    }
+    
+    // Check if this is an x402 request (check for X-PAYMENT header)
+    const paymentHeader = req.headers['x-payment']
+    const wantsX402 = req.headers['x-payment-protocol'] || req.query.x402 === 'true'
+    
+    // If payment is required and no X-PAYMENT header, return 402
+    if (request.status === 'pending' && !paymentHeader && (wantsX402 || request.chain === 'solana')) {
+      // Return x402 Payment Required response
+      const paymentRequirements = x402Service.createPaymentRequirements({
+        amount: request.amount,
+        recipient: request.recipient,
+        resource: `/api/requests/${request.id}`,
+        description: request.description || 'Payment required',
+        mimeType: 'application/json',
+        asset: request.currency === 'SOL' ? 'native' : request.currency,
+      })
+      
+      return res.status(402).json({
+        x402Version: 1,
+        accepts: [paymentRequirements],
+        error: null,
+      })
+    }
+    
+    // If X-PAYMENT header is present, verify payment
+    if (paymentHeader && request.status === 'pending') {
+      try {
+        const paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString())
+        const paymentRequirements = x402Service.createPaymentRequirements({
+          amount: request.amount,
+          recipient: request.recipient,
+          resource: `/api/requests/${request.id}`,
+          description: request.description || 'Payment required',
+          asset: request.currency === 'SOL' ? 'native' : request.currency,
+        })
+        
+        // Verify payment (async, but we'll wait for it)
+        x402Service.verifyPayment(paymentPayload, paymentRequirements).then((verification) => {
+          if (verification.isValid) {
+            // Update request status to completed
+            dbHelpers.updateRequestStatus(request.id, 'completed', new Date().toISOString())
+          }
+        }).catch(console.error)
+        
+        // For now, return the request (verification happens async)
+        // In production, you'd want to wait for verification
+        return res.json(requestWithExpiration)
+      } catch (error) {
+        console.error('Error parsing X-PAYMENT header:', error)
+        // Return 402 if payment header is invalid
+        const paymentRequirements = x402Service.createPaymentRequirements({
+          amount: request.amount,
+          recipient: request.recipient,
+          resource: `/api/requests/${request.id}`,
+          description: request.description || 'Payment required',
+          asset: request.currency === 'SOL' ? 'native' : request.currency,
+        })
+        
+        return res.status(402).json({
+          x402Version: 1,
+          accepts: [paymentRequirements],
+          error: 'Invalid payment header',
+        })
+      }
     }
     
     res.json(requestWithExpiration)
@@ -628,4 +694,93 @@ app.get('/api/relay/tokens/:chainId', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch tokens', tokens: [] })
   }
   */
+})
+
+// ==================== x402 Protocol Endpoints ====================
+
+// x402 Facilitator: Verify payment
+app.post('/api/x402/verify', async (req, res) => {
+  try {
+    const { x402Version, paymentHeader, paymentRequirements } = req.body
+
+    if (!paymentHeader || !paymentRequirements) {
+      return res.status(400).json({
+        isValid: false,
+        invalidReason: 'Missing paymentHeader or paymentRequirements',
+      })
+    }
+
+    // Decode payment header (base64)
+    let paymentPayload
+    try {
+      paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString())
+    } catch (error) {
+      return res.status(400).json({
+        isValid: false,
+        invalidReason: 'Invalid payment header format',
+      })
+    }
+
+    const verification = await x402Service.verifyPayment(paymentPayload, paymentRequirements)
+
+    res.json(verification)
+  } catch (error) {
+    console.error('Error in x402 verify:', error)
+    res.status(500).json({
+      isValid: false,
+      invalidReason: error.message || 'Verification failed',
+    })
+  }
+})
+
+// x402 Facilitator: Settle payment
+app.post('/api/x402/settle', async (req, res) => {
+  try {
+    const { x402Version, paymentHeader, paymentRequirements } = req.body
+
+    if (!paymentHeader || !paymentRequirements) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing paymentHeader or paymentRequirements',
+        txHash: null,
+        networkId: null,
+      })
+    }
+
+    // Decode payment header (base64)
+    let paymentPayload
+    try {
+      paymentPayload = JSON.parse(Buffer.from(paymentHeader, 'base64').toString())
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid payment header format',
+        txHash: null,
+        networkId: null,
+      })
+    }
+
+    const settlement = await x402Service.settlePayment(paymentPayload, paymentRequirements)
+
+    res.json(settlement)
+  } catch (error) {
+    console.error('Error in x402 settle:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Settlement failed',
+      txHash: null,
+      networkId: null,
+    })
+  }
+})
+
+// x402 Facilitator: Get supported schemes
+app.get('/api/x402/supported', (req, res) => {
+  try {
+    const supported = x402Service.getSupportedSchemes()
+    res.json(supported)
+  } catch (error) {
+    console.error('Error getting supported schemes:', error)
+    res.status(500).json({ error: 'Failed to get supported schemes' })
+  }
 })

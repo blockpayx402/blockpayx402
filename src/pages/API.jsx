@@ -37,7 +37,7 @@ const API = () => {
         },
         headers: {
           'Content-Type': 'application/json',
-          'X-Payment-Protocol': 'blockx402/1.0 (optional)'
+          'X-Payment-Protocol': 'x402/1.0 (optional)'
         }
       },
       response: {
@@ -73,29 +73,43 @@ const API = () => {
       method: 'GET',
       path: '/requests/:id',
       title: 'Get Payment Request',
-      description: 'Retrieve the status of a payment request by ID',
+      description: 'Retrieve the status of a payment request by ID. Returns 402 Payment Required if payment is pending and x402 protocol is requested.',
       request: {
         params: {
           id: 'string (required)'
+        },
+        headers: {
+          'X-Payment-Protocol': 'x402/1.0 (optional - enables x402 protocol)',
+          'X-Payment': 'base64 encoded payment payload (optional - for paid requests)'
         }
       },
       response: {
-        status: 200,
-        body: '{ id, amount, currency, chain, recipient, description, status, createdAt, expiresAt, payment_url }'
+        status: '200 (success) or 402 (payment required)',
+        body: 'Payment request object OR x402 payment requirements'
       },
       example: {
-        request: `curl ${baseUrl}/requests/req_1234567890_abc123`,
-        response: `{
-  "id": "req_1234567890_abc123",
-  "amount": "0.5",
-  "currency": "ETH",
-  "chain": "ethereum",
-  "recipient": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-  "description": "Payment for services",
-  "status": "completed",
-  "createdAt": "2024-01-01T10:00:00Z",
-  "expiresAt": "2024-01-01T11:00:00Z",
-  "payment_url": "https://blockpay.cloud/pay/req_1234567890_abc123"
+        request: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/requests/req_1234567890_abc123`,
+        response: `HTTP/1.1 402 Payment Required
+{
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "solana-mainnet",
+      "maxAmountRequired": "500000000",
+      "resource": "/api/requests/req_1234567890_abc123",
+      "description": "Payment for services",
+      "mimeType": "application/json",
+      "payTo": "44kiGWWsSgdqPMvmqYgTS78Mx2BKCWzduATkfY4fnUta",
+      "maxTimeoutSeconds": 300,
+      "asset": "So11111111111111111111111111111111111111112",
+      "extra": {
+        "name": "Solana",
+        "version": "1.0"
+      }
+    }
+  ],
+  "error": null
 }`
       }
     },
@@ -149,9 +163,9 @@ const API = () => {
       <div className="glass rounded-2xl p-6 border border-white/[0.08]">
         <h2 className="text-xl font-semibold mb-3 tracking-tight">Authentication</h2>
         <p className="text-white/80 mb-4">
-          Most endpoints do not require authentication. For payment requests, include the 
-          <code className="px-2 py-1 glass-strong rounded text-primary-400 text-sm mx-1">X-Payment-Protocol: blockx402/1.0</code>
-          header to indicate protocol support.
+          Most endpoints do not require authentication. For x402 payment protocol support, include the 
+          <code className="px-2 py-1 glass-strong rounded text-primary-400 text-sm mx-1">X-Payment-Protocol: x402/1.0</code>
+          header to indicate protocol support. When accessing a payment request, you may receive a 402 Payment Required response with payment requirements.
         </p>
       </div>
 
@@ -328,9 +342,52 @@ const API = () => {
             <span className="text-white/60">Not Found - Resource does not exist</span>
           </div>
           <div className="flex items-start gap-3">
+            <code className="text-yellow-400 font-mono">402</code>
+            <span className="text-white/60">Payment Required - x402 protocol payment required</span>
+          </div>
+          <div className="flex items-start gap-3">
             <code className="text-red-400 font-mono">500</code>
             <span className="text-white/60">Internal Server Error - Server error occurred</span>
           </div>
+        </div>
+      </div>
+
+      {/* x402 Protocol */}
+      <div className="glass rounded-2xl p-6 border border-white/[0.08]">
+        <h2 className="text-xl font-semibold mb-3 tracking-tight">x402 Payment Protocol</h2>
+        <p className="text-white/80 mb-4">
+          BlockPay implements the <a href="https://github.com/coinbase/x402" target="_blank" rel="noopener noreferrer" className="text-primary-400 hover:text-primary-300 underline">Coinbase x402</a> payment protocol for Solana payments. 
+          This allows for HTTP 402 Payment Required responses with blockchain payment requirements.
+        </p>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-start gap-3">
+            <span className="text-primary-400 font-semibold">1.</span>
+            <span className="text-white/60">Request resource with <code className="px-1 py-0.5 glass-strong rounded text-primary-400 text-xs">X-Payment-Protocol: x402/1.0</code> header</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-primary-400 font-semibold">2.</span>
+            <span className="text-white/60">Receive HTTP 402 with payment requirements</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-primary-400 font-semibold">3.</span>
+            <span className="text-white/60">Create and send Solana transaction</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-primary-400 font-semibold">4.</span>
+            <span className="text-white/60">Retry request with <code className="px-1 py-0.5 glass-strong rounded text-primary-400 text-xs">X-PAYMENT</code> header containing transaction signature</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-primary-400 font-semibold">5.</span>
+            <span className="text-white/60">Server verifies payment and returns resource</span>
+          </div>
+        </div>
+        <div className="mt-4">
+          <a 
+            href="/x402" 
+            className="text-primary-400 hover:text-primary-300 underline text-sm"
+          >
+            View full x402 documentation →
+          </a>
         </div>
       </div>
 
