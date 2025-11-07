@@ -8,6 +8,12 @@ import PaymentPage from './pages/PaymentPage'
 import Staking from './pages/Staking'
 import OrderStatus from './pages/OrderStatus'
 import Swapper from './pages/Swapper'
+import Market from './pages/Market'
+import Portfolio from './pages/Portfolio'
+import GasTracker from './pages/GasTracker'
+import TokenAnalytics from './pages/TokenAnalytics'
+import X402 from './pages/X402'
+import API from './pages/API'
 import Layout from './components/Layout'
 
 function App() {
@@ -21,6 +27,12 @@ function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/staking" element={<Staking />} />
             <Route path="/swap" element={<Swapper />} />
+            <Route path="/market" element={<Market />} />
+            <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/gas" element={<GasTracker />} />
+            <Route path="/analytics" element={<TokenAnalytics />} />
+            <Route path="/x402" element={<X402 />} />
+            <Route path="/api" element={<API />} />
             <Route path="/pay/:requestId" element={<PaymentPage />} />
             <Route path="/status/:orderId" element={<OrderStatus />} />
           </Routes>

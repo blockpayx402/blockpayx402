@@ -196,42 +196,10 @@ export const createRelayTransaction = async (orderData) => {
     // Just like relay.link/bridge does
     return quote
   } catch (error) {
-    console.error('[Relay SDK] Error creating transaction:', error)
-    console.error('[Relay SDK] Error details:', {
-      message: error.message,
-      stack: error.stack,
-      fromChain,
-      fromAsset,
-      toChain,
-      toAsset,
-      amount
-    })
-    
-    // Log the full error object for debugging
-    if (error.response) {
-      console.error('[Relay SDK] Error response:', error.response)
-    }
-    if (error.data) {
-      console.error('[Relay SDK] Error data:', error.data)
-    }
-    
-    // Provide helpful error messages
-    const errorMsg = error.message || String(error)
-    const errorStr = errorMsg.toLowerCase()
-    
-    // Only throw "not supported" if it's explicitly stated or a 404/400 with specific messages
-    if (errorStr.includes('pair') && (errorStr.includes('not found') || errorStr.includes('not supported') || errorStr.includes('not available'))) {
-      throw new Error(`Relay does not support this pair: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
-    } else if (errorStr.includes('invalid address')) {
-      throw new Error(`Invalid address format for ${toChain}. Please check your recipient address.`)
-    } else if (errorStr.includes('could not execute') || errorStr.includes('cannot execute')) {
-      throw new Error(`Relay cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be available.`)
-    } else if (errorStr.includes('tradeType') || errorStr.includes('trade type')) {
-      throw new Error(`Relay SDK configuration error. Please contact support.`)
-    }
-    
-    // For other errors, throw the original error with more context
-    throw new Error(`Relay SDK error: ${errorMsg}. Please try again or contact support if the issue persists.`)
+    // Pure wrapper - just pass through Relay's error exactly as-is
+    // Log for debugging but don't transform the error
+    console.error('[Relay SDK] Error:', error.message)
+    throw error
   }
 }
 

@@ -159,22 +159,13 @@ export const generateDepositAddress = async (orderData) => {
         userAddress: userAddress || recipientAddress,
       })
     } catch (err) {
-      const msg = String(err?.message || '')
-      
-      // Provide helpful error messages
-      if (msg.includes('not found') || msg.includes('not supported')) {
-        throw new Error(`Relay Link does not support this pair: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try a different currency pair.`)
-      } else if (msg.includes('Could not execute')) {
-        throw new Error(`Relay Link cannot execute this swap: ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). This pair may not be available.`)
-      } else if (msg.includes('Invalid address')) {
-        throw new Error(`Invalid address format for ${toChain}. Please check your recipient address.`)
-      }
-      
+      // Pure wrapper - just pass through Relay's error exactly as-is
       throw err
     }
 
     if (!exchangeData) {
-      throw new Error(`Failed to generate deposit address for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain}). Please try again.`)
+      // This shouldn't happen if Relay returns properly, but just in case
+      throw new Error(`No response from Relay for ${fromAsset}(${fromChain}) -> ${toAsset}(${toChain})`)
     }
 
     // Pure wrapper - return Relay's response exactly as-is
