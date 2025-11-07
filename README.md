@@ -159,7 +159,7 @@ if (response.status === 402) {
 
 ## 📖 API Documentation
 
-BlockPay X402 provides a comprehensive RESTful API for creating payment requests, managing transactions, and implementing the X402 protocol. All endpoints are available at `https://blockpay.cloud/api`.
+BlockPay X402 provides a comprehensive RESTful API for creating payment requests, managing transactions, and implementing the X402 protocol. All API endpoints use the base URL `https://blockpay.cloud/api`.
 
 ### Payment Requests
 
@@ -379,7 +379,7 @@ Most endpoints do not require authentication. For X402 payment protocol support,
 - Swap endpoints: 20 requests/minute
 - X402 endpoints: 50 requests/minute
 
-Full interactive API documentation available at: [https://blockpay.cloud/api](https://blockpay.cloud/api)
+For interactive API documentation and testing, visit the [BlockPay Cloud website](https://blockpay.cloud) and navigate to the API Docs section.
 
 ---
 
@@ -425,5 +425,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🌐 Links
 
 - **Live Site**: [https://blockpay.cloud](https://blockpay.cloud)
-- **API Documentation**: [https://blockpay.cloud/api](https://blockpay.cloud/api)
+- **API Base URL**: `https://blockpay.cloud/api`
 - **GitHub Repository**: [https://github.com/blockpayx402/blockpayx402](https://github.com/blockpayx402/blockpayx402)
