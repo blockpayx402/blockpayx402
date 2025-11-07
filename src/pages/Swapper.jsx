@@ -89,9 +89,10 @@ const Swapper = () => {
           console.log('[Swapper] Formatted tokens:', formattedTokens.length)
           setFromChainTokens(formattedTokens)
           
-          // Set default token if available
+          // Set default token if available - use first available token (no hardcoded preferences)
           if (formattedTokens.length > 0 && !fromAsset) {
-            const defaultToken = formattedTokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.symbol === 'BNB' || t.isNative) || formattedTokens[0]
+            // Prefer native token, otherwise use first token
+            const defaultToken = formattedTokens.find(t => t.isNative) || formattedTokens[0]
             setFromAsset(defaultToken.symbol)
             console.log('[Swapper] Set default token:', defaultToken.symbol)
           }
@@ -121,9 +122,10 @@ const Swapper = () => {
           console.log('[Swapper] Received toChain tokens:', tokens.length)
           setToChainTokens(tokens)
           
-          // Set default token if available
+          // Set default token if available - use first available token (no hardcoded preferences)
           if (tokens.length > 0 && !toAsset) {
-            const defaultToken = tokens.find(t => t.symbol === 'USDT' || t.symbol === 'ETH' || t.symbol === 'BNB' || t.isNative) || tokens[0]
+            // Prefer native token, otherwise use first token
+            const defaultToken = tokens.find(t => t.isNative) || tokens[0]
             setToAsset(defaultToken.symbol)
           }
         } else {
@@ -140,14 +142,8 @@ const Swapper = () => {
   const fromChainConfig = availableChains.find(c => c.value === fromChain)
   const toChainConfig = availableChains.find(c => c.value === toChain)
 
-  // Map EVM chain IDs to our chain names
-  const chainIdMap = {
-    '0x1': 'ethereum',
-    '0x38': 'bnb',
-    '0x89': 'polygon',
-    '0xa': 'optimism',
-    '0xa4b1': 'arbitrum',
-  }
+  // Dynamic chain detection - no hardcoded mappings
+  // Match wallet chain ID to available chains from Relay
 
   // Auto-detect chain from wallet when connected
   useEffect(() => {
@@ -445,9 +441,13 @@ const Swapper = () => {
       return
     }
 
-    // Validate recipient address for destination chain
-    const isEVM = toChainConfig && toChainConfig.chainId !== 792703809
-    const isSolana = toChainConfig && toChainConfig.chainId === 792703809
+    // Validate recipient address for destination chain - detect dynamically
+    const isSolana = toChainConfig && (
+      (toChainConfig.name || '').toLowerCase().includes('solana') ||
+      (toChainConfig.symbol || '').toUpperCase() === 'SOL' ||
+      (toChainConfig.nativeCurrency?.symbol || '').toUpperCase() === 'SOL'
+    )
+    const isEVM = toChainConfig && !isSolana
     
     if (isEVM && !finalRecipientAddress.startsWith('0x')) {
       toast.error('Invalid EVM address. Must start with 0x')

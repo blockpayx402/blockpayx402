@@ -317,52 +317,33 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     // Get chains directly from API instead of SDK to ensure we have all chains
     const chains = await getAllRelayChains()
     
-    // Map common chain names to IDs
-    const chainNameMap = {
-      'ethereum': '1',
-      'eth': '1',
-      'bsc': '56',
-      'bnb': '56',
-      'binance': '56',
-      'polygon': '137',
-      'matic': '137',
-      'arbitrum': '42161',
-      'arbitrum-one': '42161',
-      'optimism': '10',
-      'op': '10',
-      'op-mainnet': '10',
-      'base': '8453',
-      'solana': '792703809',
-      'sol': '792703809',
-    }
-    
     // Normalize chain input - could be name, ID, or value from frontend
+    // No hardcoded mappings - find chain dynamically from Relay API
     const fromChainLower = fromChain.toLowerCase()
     const toChainLower = toChain.toLowerCase()
     
-    const fromChainId = chainNameMap[fromChainLower] || fromChain
-    const toChainId = chainNameMap[toChainLower] || toChain
-    
-    console.log('[Relay] Looking for chains:', { fromChain, fromChainId, toChain, toChainId })
+    console.log('[Relay] Looking for chains:', { fromChain, toChain })
     console.log('[Relay] Available chains:', chains.map(c => ({
       id: c.chainId || c.id || c.chain_id,
       name: c.name || c.displayName || c.label,
       symbol: c.symbol
     })).slice(0, 10))
     
+    // Dynamic chain lookup - no hardcoded mappings
     const originChain = chains.find(c => {
       const cId = c.chainId || c.id || c.chain_id
       const cName = (c.name || c.displayName || c.label || '').toLowerCase().replace(/\s+/g, '-')
       const cSymbol = (c.symbol || '').toLowerCase()
       const cValue = cName.replace(/\s+/g, '-') // Match frontend value format
       
-      return cId?.toString() === fromChainId.toString() || 
-             cId?.toString() === fromChain.toString() ||
+      // Try multiple matching strategies
+      return cId?.toString() === fromChain.toString() ||
+             cId?.toString() === fromChainLower ||
              cName === fromChainLower ||
-             cName === fromChainId.toString() ||
              cValue === fromChainLower ||
              cSymbol === fromChainLower ||
-             cId?.toString() === fromChainLower
+             cName.includes(fromChainLower) ||
+             fromChainLower.includes(cName)
     })
     
     const destinationChain = chains.find(c => {
@@ -371,13 +352,14 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
       const cSymbol = (c.symbol || '').toLowerCase()
       const cValue = cName.replace(/\s+/g, '-') // Match frontend value format
       
-      return cId?.toString() === toChainId.toString() || 
-             cId?.toString() === toChain.toString() ||
+      // Try multiple matching strategies
+      return cId?.toString() === toChain.toString() ||
+             cId?.toString() === toChainLower ||
              cName === toChainLower ||
-             cName === toChainId.toString() ||
              cValue === toChainLower ||
              cSymbol === toChainLower ||
-             cId?.toString() === toChainLower
+             cName.includes(toChainLower) ||
+             toChainLower.includes(cName)
     })
     
     if (!originChain) {
