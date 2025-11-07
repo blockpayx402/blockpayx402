@@ -442,9 +442,9 @@ const Market = () => {
 
       {selectedCoinId && (
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
+          transition={{ delay: 0.2 }}
           className="glass rounded-3xl border border-white/[0.08] p-6 space-y-6"
         >
           {detailsLoading && (
@@ -460,190 +460,9 @@ const Market = () => {
             </div>
           )}
 
-          {coinDetails && !detailsLoading && !detailsError && (
+          {formattedCoinDetails && !detailsLoading && !detailsError && (
             <div className="space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <img
-                    src={coinDetails.details.image?.large || coinDetails.details.image?.small || coinDetails.details.image?.thumb}
-                    alt={coinDetails.details.name}
-                    className="w-16 h-16 rounded-full"
-                    onError={(event) => {
-                      event.currentTarget.style.display = 'none'
-                    }}
-                  />
-                  <div>
-                    <h2 className="text-3xl font-semibold text-white tracking-tight flex items-center gap-3">
-                      {coinDetails.details.name}
-                      <span className="text-sm uppercase text-white/40">{coinDetails.details.symbol}</span>
-                    </h2>
-                    <p className="text-white/50 text-sm tracking-tight">
-                      Market Cap Rank: #{coinDetails.details.market_cap_rank ?? '—'}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right space-y-1">
-                  <div className="text-white text-2xl font-semibold tracking-tight">
-                    {formatPrice(coinDetails.details.market_data?.current_price?.usd ?? 0)}
-                  </div>
-                  <div className="text-white/40 text-xs tracking-tight">
-                    24h high: {formatPrice(coinDetails.details.market_data?.high_24h?.usd ?? 0)} • 24h low: {formatPrice(coinDetails.details.market_data?.low_24h?.usd ?? 0)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-2">
-                  <p className="text-white/40 text-xs uppercase tracking-[0.2em]">ATH</p>
-                  <p className="text-white text-lg font-semibold tracking-tight">
-                    {formatPrice(coinDetails.details.market_data?.ath?.usd ?? 0)}
-                  </p>
-                  <p className="text-white/30 text-xs tracking-tight">
-                    {coinDetails.details.market_data?.ath_date?.usd ? new Date(coinDetails.details.market_data.ath_date.usd).toLocaleDateString() : '—'}
-                  </p>
-                </div>
-                <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-2">
-                  <p className="text-white/40 text-xs uppercase tracking-[0.2em]">ATL</p>
-                  <p className="text-white text-lg font-semibold tracking-tight">
-                    {formatPrice(coinDetails.details.market_data?.atl?.usd ?? 0)}
-                  </p>
-                  <p className="text-white/30 text-xs tracking-tight">
-                    {coinDetails.details.market_data?.atl_date?.usd ? new Date(coinDetails.details.market_data.atl_date.usd).toLocaleDateString() : '—'}
-                  </p>
-                </div>
-                <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-2">
-                  <p className="text-white/40 text-xs uppercase tracking-[0.2em]">Market Cap</p>
-                  <p className="text-white text-lg font-semibold tracking-tight">
-                    {formatMarketCap(coinDetails.details.market_data?.market_cap?.usd ?? 0)}
-                  </p>
-                </div>
-                <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-2">
-                  <p className="text-white/40 text-xs uppercase tracking-[0.2em]">Twitter</p>
-                  <p className="text-white text-lg font-semibold tracking-tight">
-                    {coinDetails.details.community_data?.twitter_followers?.toLocaleString() ?? '—'}
-                  </p>
-                  <p className="text-white/30 text-xs tracking-tight">Followers</p>
-                </div>
-              </div>
-
-              <div className="glass-strong rounded-2xl border border-white/10 p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">7D Price</p>
-                <svg width="100%" height="60" viewBox="0 0 200 60" preserveAspectRatio="none" className="w-full">
-                  <polyline
-                    fill="none"
-                    stroke="rgba(56,189,248,0.85)"
-                    strokeWidth="2"
-                    points={normalizeSparkline(coinDetails.chart)}
-                  />
-                </svg>
-              </div>
-
-              <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-3">
-                <p className="text-white/40 text-xs uppercase tracking-[0.2em]">Contracts</p>
-                <div className="grid md:grid-cols-2 gap-3">
-                  {getPlatformContracts(coinDetails.details.platforms).length === 0 && (
-                    <p className="text-white/50 text-sm">No contract addresses available.</p>
-                  )}
-                  {getPlatformContracts(coinDetails.details.platforms).map(platform => (
-                    <div
-                      key={`${platform.chain}-${platform.address}`}
-                      className="glass rounded-xl border border-white/10 p-3 text-sm text-white/70 break-all"
-                    >
-                      <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-1">{platform.chain}</p>
-                      <p>{platform.address}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="glass-strong rounded-2xl border border-white/10 p-4">
-                <p className="text-white/40 text-xs uppercase tracking-[0.2em] mb-3">Links</p>
-                <div className="flex flex-wrap gap-3 text-sm">
-                  {coinDetails.details.links?.homepage?.[0] && (
-                    <a
-                      href={coinDetails.details.links.homepage[0]}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-primary-200 hover:text-primary-100"
-                    >
-                      <Globe className="w-4 h-4" /> Website
-                    </a>
-                  )}
-                  {coinDetails.details.links?.twitter_screen_name && (
-                    <a
-                      href={`https://twitter.com/${coinDetails.details.links.twitter_screen_name}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-sky-300 hover:text-sky-200"
-                    >
-                      <Twitter className="w-4 h-4" /> @{coinDetails.details.links.twitter_screen_name}
-                    </a>
-                  )}
-                  {coinDetails.details.links?.subreddit_url && (
-                    <a
-                      href={coinDetails.details.links.subreddit_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-orange-200 hover:text-orange-100"
-                    >
-                      <MessageCircle className="w-4 h-4" /> Reddit
-                    </a>
-                  )}
-                  {coinDetails.details.links?.repos_url?.github?.[0] && (
-                    <a
-                      href={coinDetails.details.links.repos_url.github[0]}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-white/80 hover:text-white"
-                    >
-                      <Github className="w-4 h-4" /> GitHub
-                    </a>
-                  )}
-                  {coinDetails.details.links?.youtube_channel_ids?.[0] && (
-                    <a
-                      href={`https://www.youtube.com/${coinDetails.details.links.youtube_channel_ids[0]}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-red-300 hover:text-red-200"
-                    >
-                      <Youtube className="w-4 h-4" /> YouTube
-                    </a>
-                  )}
-                  {coinDetails.details.links?.announcement_url?.[0] && (
-                    <a
-                      href={coinDetails.details.links.announcement_url[0]}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-white/70 hover:text-white"
-                    >
-                      <ExternalLink className="w-4 h-4" /> Announcements
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {coinDetails.details.description?.en && (
-                <div className="glass rounded-2xl border border-white/10 p-4 space-y-2">
-                  <p className="text-white/40 text-xs uppercase tracking-[0.2em]">About</p>
-                  <p
-                    className="text-white/60 text-sm leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: coinDetails.details.description.en.split('.').slice(0, 3).join('.') }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      {selectedCoinId && formattedCoinDetails && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="glass rounded-3xl border border-white/[0.08] p-6 space-y-6"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="flex items-center gap-4">
               <img
                 src={formattedCoinDetails.details.image?.large || formattedCoinDetails.details.image?.thumb}
@@ -817,6 +636,8 @@ const Market = () => {
             <div className="glass-strong rounded-2xl border border-white/10 p-4 space-y-3">
               <h3 className="text-white/70 font-semibold tracking-tight">About {formattedCoinDetails.details.name}</h3>
               <p className="text-white/60 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: formattedCoinDetails.description }} />
+            </div>
+          )}
             </div>
           )}
         </motion.div>
