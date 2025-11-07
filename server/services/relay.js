@@ -322,7 +322,7 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
     const fromChainLower = fromChain.toLowerCase()
     const toChainLower = toChain.toLowerCase()
     
-    console.log('[Relay] Looking for chains:', { fromChain, toChain })
+    console.log('[Relay] Looking for chains:', { fromChain, toChain, fromChainLower, toChainLower })
     console.log('[Relay] Available chains:', chains.map(c => ({
       id: c.chainId || c.id || c.chain_id,
       name: c.name || c.displayName || c.label,
@@ -397,8 +397,14 @@ export const getRelayExchangeRate = async (fromAsset, toAsset, fromChain, toChai
       destinationToken: destinationToken.address
     })
     
-    // Use Relay API directly for quote (more reliable than SDK)
-    const placeholderAddress = (originChainId === 792703809 || originChainId === '792703809')
+    // Use chain-appropriate placeholder addresses - detect dynamically
+    // Check if chain is Solana by looking at chain data
+    const isSolanaChain = originChain && (
+      (originChain.name || '').toLowerCase().includes('solana') ||
+      (originChain.symbol || '').toUpperCase() === 'SOL' ||
+      (originChain.nativeCurrency?.symbol || '').toUpperCase() === 'SOL'
+    )
+    const placeholderAddress = isSolanaChain
       ? '11111111111111111111111111111111' // Solana placeholder
       : '0x0000000000000000000000000000000000000000' // EVM placeholder
     

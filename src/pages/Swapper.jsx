@@ -151,13 +151,12 @@ const Swapper = () => {
       const detectChain = async () => {
         try {
           const chainId = await window.ethereum.request({ method: 'eth_chainId' })
-          const detectedChain = chainIdMap[chainId] || 'ethereum'
+          const chainIdNum = parseInt(chainId, 16).toString()
           
-          // Auto-set from chain if wallet is on a supported chain
+          // Auto-set from chain if wallet is on a supported chain - match dynamically
           const matchingChain = availableChains.find(c => 
-            c.value === detectedChain || 
-            c.chainId?.toString() === chainId ||
-            c.chainId?.toString() === parseInt(chainId, 16).toString()
+            c.chainId?.toString() === chainIdNum ||
+            c.chainId?.toString() === chainId
           )
           
           if (matchingChain) {
@@ -169,8 +168,12 @@ const Swapper = () => {
       }
       detectChain()
     } else if (wallet?.connected && wallet?.chain === 'solana') {
-      // Auto-set to Solana if Solana wallet connected
-      const solanaChain = availableChains.find(c => c.value === 'solana' || c.symbol === 'SOL')
+      // Auto-set to Solana if Solana wallet connected - find dynamically
+      const solanaChain = availableChains.find(c => 
+        (c.name || '').toLowerCase().includes('solana') ||
+        (c.symbol || '').toUpperCase() === 'SOL' ||
+        (c.nativeCurrency?.symbol || '').toUpperCase() === 'SOL'
+      )
       if (solanaChain) {
         setFromChain(solanaChain.value)
       }
@@ -198,16 +201,16 @@ const Swapper = () => {
         return
       }
 
-      // Check if wallet chain matches from chain
-      const chainMap = {
-        'ethereum': 'evm',
-        'bnb': 'evm',
-        'polygon': 'evm',
-        'solana': 'solana'
-      }
-      
+      // Check if wallet chain matches from chain - detect dynamically
       const walletChainType = wallet.chain || (wallet.provider === 'phantom' || wallet.provider === 'solflare' ? 'solana' : 'evm')
-      const selectedChainType = chainMap[fromChain] || 'evm'
+      
+      // Detect selected chain type from chain data
+      const fromChainData = availableChains.find(c => c.value === fromChain)
+      const isSelectedChainSolana = fromChainData && (
+        (fromChainData.name || '').toLowerCase().includes('solana') ||
+        (fromChainData.symbol || '').toUpperCase() === 'SOL'
+      )
+      const selectedChainType = isSelectedChainSolana ? 'solana' : 'evm'
       
       // Only fetch balance if chains match and currency is selected
       if (walletChainType !== selectedChainType || !fromChain || !fromAsset) {
@@ -420,8 +423,13 @@ const Swapper = () => {
 
   const handleMaxAmount = () => {
     if (walletBalance && parseFloat(walletBalance) > 0) {
-      // Reserve small amount for gas (0.01 for EVM, 0.001 for Solana)
-      const reserve = fromChain === 'solana' ? 0.001 : 0.01
+      // Reserve small amount for gas - detect chain type dynamically
+      const fromChainData = availableChains.find(c => c.value === fromChain)
+      const isSolana = fromChainData && (
+        (fromChainData.name || '').toLowerCase().includes('solana') ||
+        (fromChainData.symbol || '').toUpperCase() === 'SOL'
+      )
+      const reserve = isSolana ? 0.001 : 0.01
       const maxAmount = Math.max(0, parseFloat(walletBalance) - reserve)
       setFromAmount(maxAmount.toFixed(6))
     }
@@ -1025,7 +1033,7 @@ const Swapper = () => {
                 <label className="block text-sm font-medium mb-2 text-white/80 tracking-tight">Recipient Address</label>
                 <input
                   type="text"
-                  placeholder={toChainConfig && toChainConfig.chainId === 792703809 ? 'Enter Solana address...' : '0x...'}
+                  placeholder={toChainConfig && (toChainConfig.name || '').toLowerCase().includes('solana') ? 'Enter Solana address...' : '0x...'}
                   value={recipientAddress}
                   onChange={(e) => setRecipientAddress(e.target.value)}
                   className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
@@ -1062,7 +1070,7 @@ const Swapper = () => {
                   type="text"
                   value={refundAddress}
                   onChange={(e) => setRefundAddress(e.target.value)}
-                  placeholder={fromChainConfig && fromChainConfig.chainId === 792703809 ? 'Your refund address...' : '0x...'}
+                  placeholder={fromChainConfig && (fromChainConfig.name || '').toLowerCase().includes('solana') ? 'Your refund address...' : '0x...'}
                   className="w-full px-4 py-3 glass-strong rounded-xl border border-white/10 focus:border-purple-500/50 focus:outline-none transition-all bg-white/[0.04] text-white placeholder:text-white/30 font-mono text-sm"
                 />
                 <p className="text-xs text-white/50 mt-2 tracking-tight">
