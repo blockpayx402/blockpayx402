@@ -34,7 +34,7 @@ const X402 = () => {
       },
       example: {
         bash: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo`,
-        powershell: `Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}`,
+        powershell: `try { $response = Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}; $response.Content } catch { $stream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($stream); $reader.ReadToEnd() }`,
         response: `{
   "x402Version": 1,
   "accepts": [

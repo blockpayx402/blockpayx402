@@ -444,7 +444,11 @@ const API = () => {
         body: 'x402 payment requirements OR success response'
       },
       example: {
-        request: `curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo`,
+        request: `# Bash/Linux/Mac
+curl -H "X-Payment-Protocol: x402/1.0" ${baseUrl}/x402/demo
+
+# PowerShell (Windows) - Shows JSON response
+try { $response = Invoke-WebRequest -Uri "${baseUrl}/x402/demo" -Headers @{"X-Payment-Protocol"="x402/1.0"}; $response.Content } catch { $stream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($stream); $reader.ReadToEnd() }`,
         response: `HTTP/1.1 402 Payment Required
 {
   "x402Version": 1,
