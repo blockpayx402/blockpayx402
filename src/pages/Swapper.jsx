@@ -1,373 +1,129 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
-import {
-  ArrowLeftRight,
-  RefreshCw,
-  Loader2,
-  Wallet,
-  AlertTriangle,
-  Copy,
-  ExternalLink
-} from 'lucide-react'
-import { relayAPI, ordersAPI } from '../services/api'
+import { Loader2, ArrowLeftRight, ExternalLink, Search } from 'lucide-react'
 
-const NUMBER_FORMATTER = new Intl.NumberFormat(undefined, {
-  maximumFractionDigits: 6,
-  minimumFractionDigits: 0,
-})
+const isMaybeMint = (s) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s || '')
 
-const formatAmount = (value) => {
-  const numeric = Number(value)
-  if (!Number.isFinite(numeric)) {
-    return value ?? '—'
-  }
+const TokenSelector = ({ label, tokens, value, onChange }) => {
+  const [query, setQuery] = useState('')
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return tokens.slice(0, 250)
+    return tokens.filter(t => (
+      t.symbol?.toLowerCase().includes(q) ||
+      t.name?.toLowerCase().includes(q) ||
+      t.address?.toLowerCase() === q
+    )).slice(0, 250)
+  }, [query, tokens])
 
-  if (numeric === 0) {
-    return '0'
-  }
-
-  if (numeric >= 1) {
-    return NUMBER_FORMATTER.format(numeric)
-  }
-
-  return numeric.toPrecision(4)
-}
-
-const getChainKey = (chain) => {
-  if (!chain) return ''
-  return (chain.chainId ?? chain.value ?? '').toString()
-}
-
-const pickDefaultToken = (tokens) => {
-  if (!tokens || tokens.length === 0) return ''
-  const preferred = tokens.find((token) => token.isNative)
-  return (preferred ?? tokens[0]).symbol ?? ''
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm text-white/50 tracking-tight">{label}</label>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+        <input
+          value={query}
+          onChange={(e)=>setQuery(e.target.value)}
+          placeholder="Search by symbol, name, or paste mint address"
+          className="w-full pl-10 pr-28 py-3 glass-strong rounded-xl border border-white/10 focus:border-primary-500/50 bg-white/[0.04] text-white placeholder:text-white/30"
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2">
+          <button onClick={()=>setQuery('')} className="px-3 py-1 text-xs glass-strong rounded-lg border border-white/10 text-white/60 hover:text-white">Clear</button>
+          <button onClick={()=>{
+            const q = query.trim()
+            if (!isMaybeMint(q)) { toast.error('Enter a valid token mint'); return }
+            onChange(q)
+          }} className="px-3 py-1 text-xs bg-primary-500/20 border border-primary-500/40 text-primary-100 rounded-lg hover:bg-primary-500/30">Use Mint</button>
+        </div>
+      </div>
+      <div className="max-h-56 overflow-auto glass rounded-xl border border-white/10">
+        {filtered.map(tok => (
+          <button key={tok.address} onClick={()=>onChange(tok.address)} className={`w-full text-left px-4 py-2 border-b border-white/5 hover:bg-white/[0.04] ${value===tok.address?'bg-primary-500/10':''}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-white tracking-tight font-medium">{tok.symbol} <span className="text-white/40 font-normal">— {tok.name}</span></div>
+                <div className="text-xs text-white/40 font-mono">{tok.address}</div>
+              </div>
+              <div className="text-xs text-white/40">decimals: {tok.decimals ?? '—'}</div>
+            </div>
+          </button>
+        ))}
+        {filtered.length===0 && <div className="px-4 py-6 text-sm text-white/40">No results. Paste a mint and click Use Mint.</div>}
+      </div>
+    </div>
+  )
 }
 
 const Swapper = () => {
-  const [chains, setChains] = useState([])
-  const [chainsLoading, setChainsLoading] = useState(true)
-  const [tokenCache, setTokenCache] = useState({})
-
-  const [fromChainValue, setFromChainValue] = useState('')
-  const [toChainValue, setToChainValue] = useState('')
-
-  const [fromTokens, setFromTokens] = useState([])
-  const [toTokens, setToTokens] = useState([])
-  const [fromTokensLoading, setFromTokensLoading] = useState(false)
-  const [toTokensLoading, setToTokensLoading] = useState(false)
-
-  const [fromTokenSymbol, setFromTokenSymbol] = useState('')
-  const [toTokenSymbol, setToTokenSymbol] = useState('')
-
-  const [amount, setAmount] = useState('')
-  const [recipientAddress, setRecipientAddress] = useState('')
-  const [refundAddress, setRefundAddress] = useState('')
-
+  const [tokens, setTokens] = useState([])
+  const [loadingTokens, setLoadingTokens] = useState(true)
+  const [fromMint, setFromMint] = useState('')
+  const [toMint, setToMint] = useState('')
+  const [amount, setAmount] = useState('1')
   const [quote, setQuote] = useState(null)
-  const [quoteError, setQuoteError] = useState(null)
   const [quoting, setQuoting] = useState(false)
-
-  const [orderResponse, setOrderResponse] = useState(null)
-  const [orderLoading, setOrderLoading] = useState(false)
-
-  const fromChain = useMemo(
-    () => chains.find((chain) => chain.value?.toString() === fromChainValue.toString()) ?? null,
-    [chains, fromChainValue]
-  )
-
-  const toChain = useMemo(
-    () => chains.find((chain) => chain.value?.toString() === toChainValue.toString()) ?? null,
-    [chains, toChainValue]
-  )
-
-  const fromToken = useMemo(
-    () => fromTokens.find((token) => token.symbol === fromTokenSymbol) ?? null,
-    [fromTokens, fromTokenSymbol]
-  )
-
-  const toToken = useMemo(
-    () => toTokens.find((token) => token.symbol === toTokenSymbol) ?? null,
-    [toTokens, toTokenSymbol]
-  )
-
-  const parsedAmount = useMemo(() => {
-    const value = parseFloat(amount)
-    return Number.isFinite(value) && value > 0 ? value : null
-  }, [amount])
-
-  const canQuote = Boolean(fromChain && toChain && fromToken && toToken && parsedAmount)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    let mounted = true
-
-    const fetchChains = async () => {
-      setChainsLoading(true)
+    const load = async () => {
+      setLoadingTokens(true)
       try {
-        const fetchedChains = await relayAPI.getChains()
-        if (!mounted) return
-
-        const usableChains = (fetchedChains || [])
-          .filter((chain) => chain?.value && chain?.label)
-          .sort((a, b) => a.label.localeCompare(b.label))
-
-        setChains(usableChains)
-
-        if (usableChains.length > 0) {
-          const defaultFrom = usableChains.find((chain) => (chain.symbol ?? '').toUpperCase() === 'ETH') ?? usableChains[0]
-          const defaultTo = usableChains.find((chain) => chain.value !== defaultFrom.value) ?? usableChains[usableChains.length > 1 ? 1 : 0]
-
-          setFromChainValue(defaultFrom.value.toString())
-          setToChainValue(defaultTo?.value?.toString() ?? defaultFrom.value.toString())
-        }
-      } catch (error) {
-        if (mounted) {
-          console.error('Failed to load chains', error)
-          toast.error('Failed to load chains from Relay. Please try again later.')
-          setChains([])
-        }
-      } finally {
-        if (mounted) {
-          setChainsLoading(false)
-        }
-      }
+        const res = await fetch('https://tokens.jup.ag/tokens?tags=verified,community,strict')
+        const data = await res.json()
+        setTokens(Array.isArray(data)?data:[])
+        const usdc = data.find(t=>t.symbol==='USDC')
+        const sol = data.find(t=>t.symbol==='SOL')
+        setFromMint(usdc?.address || data[0]?.address || '')
+        setToMint(sol?.address || data[1]?.address || '')
+      } catch(e) {
+        toast.error('Unable to load token list. Paste a mint to proceed.')
+        setTokens([])
+      } finally { setLoadingTokens(false) }
     }
-
-    fetchChains()
-
-    return () => {
-      mounted = false
-    }
+    load()
   }, [])
 
-  useEffect(() => {
-    let active = true
+  const fromToken = useMemo(()=>tokens.find(t=>t.address===fromMint),[tokens,fromMint])
+  const toToken = useMemo(()=>tokens.find(t=>t.address===toMint),[tokens,toMint])
+  const amountInBaseUnits = useMemo(()=>{
+    const dec = fromToken?.decimals ?? 9
+    const num = Number(amount)
+    if (!Number.isFinite(num) || num<=0) return null
+    return Math.floor(num * Math.pow(10, dec))
+  },[amount, fromToken])
 
-    const loadTokens = async (selectedChain, setTokens, setTokenSymbol) => {
-      if (!selectedChain) {
-        setTokens([])
-        setTokenSymbol('')
-        return
-      }
-
-      const chainKey = getChainKey(selectedChain)
-      if (!chainKey) {
-        setTokens([])
-        setTokenSymbol('')
-        return
-      }
-
-      const cachedTokens = tokenCache[chainKey]
-      if (cachedTokens) {
-        setTokens(cachedTokens)
-        setTokenSymbol((current) => {
-          if (current && cachedTokens.some((token) => token.symbol === current)) {
-            return current
-          }
-          return pickDefaultToken(cachedTokens)
-        })
-        return
-      }
-
-      const setLoading = selectedChain === fromChain ? setFromTokensLoading : setToTokensLoading
-      setLoading(true)
-
-      try {
-        const fetchedTokens = await relayAPI.getTokens(chainKey)
-        if (!active) return
-
-        const filteredTokens = (fetchedTokens || [])
-          .filter((token) => token?.symbol)
-          .sort((a, b) => a.symbol.localeCompare(b.symbol))
-
-        setTokenCache((prev) => ({
-          ...prev,
-          [chainKey]: filteredTokens,
-        }))
-
-        setTokens(filteredTokens)
-        setTokenSymbol((current) => {
-          if (current && filteredTokens.some((token) => token.symbol === current)) {
-            return current
-          }
-          return pickDefaultToken(filteredTokens)
-        })
-      } catch (error) {
-        if (!active) return
-        console.error('Failed to load tokens', error)
-        toast.error(`Failed to load tokens for ${selectedChain.label}.`)
-        setTokens([])
-        setTokenSymbol('')
-      } finally {
-        if (active) {
-          const updateLoading = selectedChain === fromChain ? setFromTokensLoading : setToTokensLoading
-          updateLoading(false)
-        }
-      }
-    }
-
-    loadTokens(fromChain, setFromTokens, setFromTokenSymbol)
-    loadTokens(toChain, setToTokens, setToTokenSymbol)
-
-    return () => {
-      active = false
-    }
-  }, [fromChain, toChain, tokenCache])
-
-  const fetchQuote = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!fromChain || !toChain || !fromToken || !toToken) {
-        setQuote(null)
-        setQuoteError(null)
-        return
-      }
-
-      const amountValue = parseFloat(amount)
-      if (!Number.isFinite(amountValue) || amountValue <= 0) {
-        setQuote(null)
-        setQuoteError(null)
-        return
-      }
-
-      setQuoting(true)
-      setQuoteError(null)
-
-      try {
-        const response = await ordersAPI.getExchangeRate({
-          fromChain: getChainKey(fromChain),
-          fromAsset: fromToken.symbol,
-          toChain: getChainKey(toChain),
-          toAsset: toToken.symbol,
-          amount: amountValue,
-          direction: 'forward',
-        })
-
-        setQuote({
-          ...response,
-          fetchedAt: Date.now(),
-        })
-      } catch (error) {
-        const message = error.message || 'Failed to fetch quote'
-        setQuote(null)
-        setQuoteError(message)
-        if (!silent) {
-          toast.error(message)
-        }
-      } finally {
-        setQuoting(false)
-      }
-    },
-    [amount, fromChain, fromToken, toChain, toToken]
-  )
-
-  useEffect(() => {
-    if (!canQuote) {
-      setQuote(null)
-      setQuoteError(null)
-      return
-    }
-
-    const debounce = setTimeout(() => {
-      fetchQuote({ silent: true })
-    }, 700)
-
-    return () => clearTimeout(debounce)
-  }, [canQuote, fetchQuote])
-
-  const handleSwapDirection = () => {
-    if (!fromChain || !toChain) return
-
-    setFromChainValue(toChain.value.toString())
-    setToChainValue(fromChain.value.toString())
-    setFromTokenSymbol(toTokenSymbol)
-    setToTokenSymbol(fromTokenSymbol)
+  const fetchQuote = async () => {
+    setError(null)
     setQuote(null)
-    setQuoteError(null)
-    setOrderResponse(null)
-  }
-
-  const handleCreateOrder = async () => {
-    if (!fromChain || !toChain || !fromToken || !toToken) {
-      toast.error('Select both chains and tokens before creating a swap.')
-      return
-    }
-
-    const amountValue = parseFloat(amount)
-    if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      toast.error('Enter a valid amount to swap.')
-      return
-    }
-
-    if (!recipientAddress.trim()) {
-      toast.error('Recipient address is required to receive the swapped funds.')
-      return
-    }
-
-    setOrderLoading(true)
-
+    if (!isMaybeMint(fromMint) || !isMaybeMint(toMint)) { setError('Select valid token mints'); return }
+    if (!amountInBaseUnits) { setError('Enter a valid amount'); return }
+    setQuoting(true)
     try {
-      const payload = {
-        fromChain: getChainKey(fromChain),
-        fromAsset: fromToken.symbol,
-        toChain: getChainKey(toChain),
-        toAsset: toToken.symbol,
-        amount: amountValue,
-        recipientAddress: recipientAddress.trim(),
-        refundAddress: refundAddress.trim() || null,
-        requestId: null,
-      }
-
-      const response = await ordersAPI.create(payload)
-      setOrderResponse(response)
-      toast.success('Swap order created. Follow the instructions below to complete it.')
-    } catch (error) {
-      console.error('Failed to create order', error)
-      toast.error(error.message || 'Failed to create swap order')
-    } finally {
-      setOrderLoading(false)
-    }
+      const params = new URLSearchParams({ inputMint: fromMint, outputMint: toMint, amount: String(amountInBaseUnits), slippageBps: '50' })
+      const res = await fetch(`https://quote-api.jup.ag/v6/quote?${params}`)
+      if (!res.ok) throw new Error('Quote failed')
+      const data = await res.json()
+      setQuote(data?.data?.[0] || data)
+    } catch(e) {
+      setError('Unable to fetch quote for this pair')
+    } finally { setQuoting(false) }
   }
 
-  const handleCopy = async (value, label = 'Value') => {
-    if (!value) return
-
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success(`${label} copied to clipboard`)
-    } catch (error) {
-      toast.error('Failed to copy to clipboard')
-    }
-  }
-
-  const computedRate = useMemo(() => {
-    if (!quote || !quote.estimatedToAmount || !quote.fromAmount) return null
-    const output = Number(quote.estimatedToAmount)
-    const input = Number(quote.fromAmount)
-    if (!Number.isFinite(output) || !Number.isFinite(input) || input === 0) return null
-    return output / input
-  }, [quote])
+  const jupiterLink = useMemo(()=>{
+    if (!isMaybeMint(fromMint) || !isMaybeMint(toMint)) return '#'
+    return `https://jup.ag/swap/${fromMint}-${toMint}`
+  },[fromMint,toMint])
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
-      >
+    <div className="max-w-6xl mx-auto space-y-6">
+      <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-semibold gradient-text tracking-tight">Cross-Chain Swapper</h1>
-          <p className="text-white/60 text-base tracking-tight">
-            Live quotes powered by Relay. Pick a pair, enter an amount, and get a real swap quote instantly.
-          </p>
+          <h1 className="text-4xl font-semibold gradient-text tracking-tight">Swap Assets</h1>
+          <p className="text-white/60 text-sm tracking-tight">Live quotes powered by Jupiter Aggregator</p>
         </div>
-        <button
-          onClick={() => fetchQuote()}
-          disabled={!canQuote || quoting}
-          className="inline-flex items-center gap-2 px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/40 transition-all disabled:opacity-50"
-        >
-          {quoting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Refresh Price
+        <button onClick={fetchQuote} disabled={quoting} className="px-4 py-2 glass-strong rounded-xl border border-white/10 hover:border-primary-500/40 transition disabled:opacity-50">
+          {quoting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Get Quote'}
         </button>
       </motion.div>
 
