@@ -101,8 +101,12 @@ The X402 Payment Protocol allows content creators, developers, and service provi
 **Complete Flow Example:**
 
 ```javascript
-// Step 1: Client requests protected content
-const response = await fetch('/api/protected-content');
+// Step 1: Client requests protected content with protocol header
+const response = await fetch('/api/protected-content', {
+  headers: {
+    'X-Payment-Protocol': 'x402/1.0'
+  }
+});
 
 // Step 2: Server responds with 402 Payment Required
 if (response.status === 402) {
@@ -132,7 +136,8 @@ if (response.status === 402) {
   // Step 4: Client retries request with payment proof
   const paidResponse = await fetch('/api/protected-content', {
     headers: {
-      'X-PAYMENT': transaction.signature,  // Transaction signature
+      'X-Payment-Protocol': 'x402/1.0',     // Protocol header
+      'X-PAYMENT': transaction.signature,   // Transaction signature
       'X-PAYMENT-ASSET': 'SOL',              // Asset used
       'X-PAYMENT-AMOUNT': '0.1'              // Amount paid
     }
@@ -203,6 +208,7 @@ GET /api/requests/:id
 ```http
 GET /api/requests/:id
 Headers:
+  X-Payment-Protocol: x402/1.0
   X-PAYMENT: <transaction_signature>
   X-PAYMENT-ASSET: SOL
   X-PAYMENT-AMOUNT: 0.1
@@ -267,6 +273,8 @@ Implement paywalled content using the X402 Payment Protocol.
 **Request Protected Resource (Without Payment)**
 ```http
 GET /api/protected-content
+Headers:
+  X-Payment-Protocol: x402/1.0
 ```
 
 **Response (402 Payment Required):**
@@ -294,6 +302,7 @@ Content-Type: application/json
 ```http
 GET /api/protected-content
 Headers:
+  X-Payment-Protocol: x402/1.0
   X-PAYMENT: <transaction_signature>
   X-PAYMENT-ASSET: SOL
   X-PAYMENT-AMOUNT: 0.1
@@ -362,7 +371,7 @@ All endpoints return standard HTTP status codes with error details:
 
 ### Authentication
 
-Currently, the API is publicly accessible. Rate limiting and authentication may be added in future versions.
+Most endpoints do not require authentication. For X402 payment protocol support, include the `X-Payment-Protocol: x402/1.0` header to indicate protocol support. When accessing a payment request, you may receive a `402 Payment Required` response with payment requirements.
 
 ### Rate Limits
 
