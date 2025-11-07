@@ -187,6 +187,7 @@ export const generateDepositAddress = async (orderData) => {
         recipientAddress,
         refundAddress,
         orderId,
+        userAddress: userAddress || recipientAddress, // Use user's wallet for transaction signing
       })
     } catch (err) {
       const msg = String(err?.message || '')

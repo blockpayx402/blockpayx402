@@ -179,6 +179,8 @@ export const createRelayTransaction = async (orderData) => {
     // Based on Relay SDK docs: https://docs.relay.link/references/api/overview
     // getQuote is under client.actions, not client directly
     // tradeType is required: 'EXACT_INPUT' or 'EXACT_OUTPUT'
+    // user: wallet address that will sign the transaction (like Relay)
+    const userWalletAddress = userAddress || recipientAddress.trim()
     const quote = await client.actions.getQuote({
       chainId: originChain.chainId || originChain.id,
       toChainId: destinationChain.chainId || destinationChain.id,
@@ -186,8 +188,8 @@ export const createRelayTransaction = async (orderData) => {
       toCurrency: destinationToken.address,
       amount: amount.toString(),
       tradeType: 'EXACT_INPUT', // Required parameter
-      user: recipientAddress.trim(),
-      recipient: recipientAddress.trim(),
+      user: userWalletAddress, // User's wallet that will sign transaction
+      recipient: recipientAddress.trim(), // Where tokens will be sent
       ...(refundAddress && {
         refundTo: refundAddress.trim()
       }),

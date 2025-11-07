@@ -437,8 +437,11 @@ const Swapper = () => {
       return
     }
 
-    if (!recipientAddress || recipientAddress.trim() === '') {
-      toast.error('Please enter recipient address')
+    // Use connected wallet address as recipient (like Relay does)
+    const finalRecipientAddress = recipientAddress.trim() || wallet?.address || ''
+    
+    if (!finalRecipientAddress) {
+      toast.error('Please connect your wallet or enter a recipient address')
       return
     }
 
@@ -446,19 +449,19 @@ const Swapper = () => {
     const isEVM = toChainConfig && toChainConfig.chainId !== 792703809
     const isSolana = toChainConfig && toChainConfig.chainId === 792703809
     
-    if (isEVM && !recipientAddress.startsWith('0x')) {
+    if (isEVM && !finalRecipientAddress.startsWith('0x')) {
       toast.error('Invalid EVM address. Must start with 0x')
       return
     }
     
-    if (isSolana && recipientAddress.length < 32) {
+    if (isSolana && finalRecipientAddress.length < 32) {
       toast.error('Invalid Solana address')
       return
     }
 
     setLoading(true)
     try {
-      // Direct swap - no payment request needed
+      // Get quote from backend (includes transaction data if available)
       const orderData = await ordersAPI.create({
         requestId: null, // No payment request, direct swap
         fromChain,
@@ -466,20 +469,117 @@ const Swapper = () => {
         toChain,
         toAsset,
         amount: parseFloat(fromAmount),
-        recipientAddress: recipientAddress.trim(),
-        refundAddress: refundAddress || null
+        recipientAddress: finalRecipientAddress,
+        refundAddress: refundAddress || wallet?.address || null,
+        userAddress: wallet?.address || null // User's wallet for transaction signing
       })
 
-      setOrder(orderData)
-      setOrderStatus('awaiting_deposit')
-      setStatusPolling(true)
-      toast.success('Swap order created! Send funds to the deposit address.')
+      // Check if this is a direct execution swap (has transaction data)
+      if (orderData.isDirectExecution && orderData.transactionData) {
+        // Execute transaction directly with wallet (like Relay does)
+        await executeRelayTransaction(orderData, wallet)
+      } else {
+        // Fallback to deposit address flow
+        setOrder(orderData)
+        setOrderStatus('awaiting_deposit')
+        setStatusPolling(true)
+        toast.success('Swap order created! Send funds to the deposit address.')
+      }
     } catch (error) {
       console.error('Error creating swap:', error)
       const errorMessage = error.response?.data?.error || error.message || 'Failed to create swap order'
       toast.error(errorMessage, { duration: 5000 })
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Execute Relay transaction directly with wallet (like Relay does)
+  const executeRelayTransaction = async (orderData, wallet) => {
+    setExecuting(true)
+    try {
+      if (!wallet || !wallet.connected) {
+        toast.error('Please connect your wallet to execute the swap')
+        return
+      }
+
+      const { transactionData, approvalTransaction, fromChain, fromAsset } = orderData
+      
+      if (!transactionData) {
+        throw new Error('No transaction data available. Please use deposit address method.')
+      }
+      
+      // For EVM chains
+      if (wallet.chain === 'evm' && window.ethereum) {
+        const { ethers } = await import('ethers')
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
+
+        // Step 1: Approve token if needed (for ERC20)
+        if (approvalTransaction && fromAsset !== 'ETH' && fromAsset !== 'BNB' && fromAsset !== 'MATIC') {
+          toast.loading('Approving token...', { id: 'approval' })
+          try {
+            const approvalTx = await signer.sendTransaction(approvalTransaction)
+            await approvalTx.wait()
+            toast.success('Token approved!', { id: 'approval' })
+          } catch (error) {
+            toast.error('Token approval failed', { id: 'approval' })
+            throw error
+          }
+        }
+
+        // Step 2: Execute swap transaction
+        toast.loading('Executing swap...', { id: 'swap' })
+        try {
+          const swapTx = await signer.sendTransaction(transactionData)
+          toast.loading('Waiting for confirmation...', { id: 'swap' })
+          
+          const receipt = await swapTx.wait()
+          toast.success('Swap transaction submitted!', { id: 'swap' })
+          
+          // Start polling for status
+          setOrder({
+            ...orderData,
+            depositTxHash: receipt.hash
+          })
+          setOrderStatus('processing')
+          setStatusPolling(true)
+        } catch (error) {
+          toast.error('Swap transaction failed', { id: 'swap' })
+          throw error
+        }
+      }
+      // For Solana
+      else if (wallet.chain === 'solana' && (window.solana || window.solflare)) {
+        const solanaProvider = window.solana || window.solflare
+        toast.loading('Signing transaction...', { id: 'swap' })
+        
+        try {
+          // Solana transaction signing
+          const transaction = transactionData
+          const signed = await solanaProvider.signTransaction(transaction)
+          const signature = await solanaProvider.sendTransaction(signed, 'confirmed')
+          
+          toast.success('Swap transaction submitted!', { id: 'swap' })
+          
+          setOrder({
+            ...orderData,
+            depositTxHash: signature
+          })
+          setOrderStatus('processing')
+          setStatusPolling(true)
+        } catch (error) {
+          toast.error('Transaction failed', { id: 'swap' })
+          throw error
+        }
+      } else {
+        throw new Error('Wallet not connected or unsupported chain')
+      }
+    } catch (error) {
+      console.error('Error executing Relay transaction:', error)
+      toast.error(error.message || 'Failed to execute swap')
+    } finally {
+      setExecuting(false)
     }
   }
 

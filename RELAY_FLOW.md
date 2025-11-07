@@ -1,67 +1,92 @@
 # Relay Link Flow - How It Actually Works
 
-## Flowchart: Relay Cross-Chain Swap Process
+## Flowchart: Relay Direct Wallet Execution (Like Relay Website)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    USER INITIATES SWAP                          │
-│  User selects: fromChain, fromAsset, toChain, toAsset, amount   │
+│              STEP 1: USER CONNECTS WALLET                       │
+│  User connects MetaMask/Phantom/Solflare wallet                 │
+│  Wallet address is used as both sender and recipient            │
 └────────────────────────────┬────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    STEP 1: GET QUOTE                            │
-│  Call: client.actions.getQuote({                                │
+│          STEP 2: USER SELECTS SWAP DETAILS                      │
+│  User chooses:                                                  │
+│  - From: Chain + Token (e.g., BSC + USDT)                      │
+│  - To: Chain + Token (e.g., Ethereum + USDT)                  │
+│  - Amount: How much to send                                     │
+└────────────────────────────┬────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              STEP 3: GET QUOTE FROM RELAY                       │
+│  Call: client.actions.getQuote({                               │
 │    chainId, toChainId, currency, toCurrency, amount,            │
-│    tradeType: 'EXACT_INPUT', user, recipient                   │
+│    tradeType: 'EXACT_INPUT',                                    │
+│    user: walletAddress,                                         │
+│    recipient: walletAddress                                     │
 │  })                                                             │
 │                                                                 │
 │  Response includes:                                             │
-│  - depositAddress (temporary address for user to send funds)   │
-│  - destinationAmount (how much user will receive)               │
-│  - quoteId (to track the swap)                                  │
-│  - validUntil (quote expiration time)                          │
+│  - transaction: Smart contract transaction data                 │
+│  - approvalTransaction: ERC20 approval tx (if needed)          │
+│  - destinationAmount: How much user will receive                │
+│  - quoteId: To track the swap                                  │
+│  - validUntil: Quote expiration time                           │
 └────────────────────────────┬────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              STEP 2: USER SENDS FUNDS                            │
-│  User sends fromAsset to depositAddress on fromChain            │
-│  - For ERC20: User approves token, then transfers to address    │
-│  - For Native: User sends native token directly to address      │
+│        STEP 4: USER SEES QUOTE & CLICKS SWAP                    │
+│  UI shows:                                                      │
+│  - "You send: 100 USDT"                                        │
+│  - "You get: ~98.5 USDT" (on different chain)                  │
+│  - Estimated time and fees                                      │
+│  User clicks "Swap" button                                      │
+└────────────────────────────┬────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│        STEP 5: USER SIGNS TRANSACTION                            │
+│  If ERC20 token:                                                │
+│  1. User signs approvalTransaction (approve Relay to spend)     │
+│  2. User signs transaction (execute swap)                      │
 │                                                                 │
-│  ⚠️ IMPORTANT: User must send EXACT amount from quote           │
-│  ⚠️ IMPORTANT: User must send within validUntil time            │
+│  If Native token:                                               │
+│  1. User signs transaction (execute swap)                      │
+│                                                                 │
+│  Transaction is sent to blockchain                              │
 └────────────────────────────┬────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│            STEP 3: RELAY DETECTS DEPOSIT                        │
-│  Relay monitors depositAddress for incoming funds               │
-│  Once detected, Relay automatically:                            │
-│  1. Swaps fromAsset → Native currency on origin chain           │
-│  2. Bridges native currency to destination chain                 │
-│  3. Swaps native currency → toAsset on destination chain        │
-│  4. Sends toAsset to recipientAddress                           │
+│        STEP 6: RELAY EXECUTES SWAP                               │
+│  Once transaction is confirmed:                                 │
+│  1. Relay detects transaction on origin chain                   │
+│  2. Relay swaps fromAsset → Native currency                     │
+│  3. Relay bridges native currency to destination chain          │
+│  4. Relay swaps native currency → toAsset                       │
+│  5. Relay sends toAsset to user's wallet                       │
 └────────────────────────────┬────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              STEP 4: CHECK STATUS                                │
+│        STEP 7: CHECK STATUS & COMPLETION                         │
 │  Poll: client.actions.getStatus(quoteId)                        │
 │                                                                 │
-│  Status values:                                                 │
-│  - 'awaiting_deposit': Waiting for user to send funds           │
-│  - 'pending': Deposit received, processing swap                │
-│  - 'completed': Swap successful, tokens sent to recipient      │
+│  Status flow:                                                    │
+│  - 'pending': Transaction submitted, waiting confirmation       │
+│  - 'processing': Relay is executing swap                        │
+│  - 'completed': Tokens received in user's wallet ✅             │
 │  - 'failed': Swap failed (user can get refund)                 │
 └────────────────────────────┬────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    STEP 5: COMPLETION                            │
-│  User receives toAsset at recipientAddress on toChain           │
-│  Transaction complete! ✅                                         │
+│                    STEP 8: DONE! ✅                              │
+│  User receives toAsset in their connected wallet                │
+│  Transaction complete! No deposit addresses needed!             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

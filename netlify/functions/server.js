@@ -338,6 +338,7 @@ app.post('/api/create-order', async (req, res) => {
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
     // Generate deposit address via Relay Link
+    // If userAddress is provided, use it for direct execution (like Relay)
     const depositInfo = await generateDepositAddress({
       fromChain,
       fromAsset,
@@ -346,7 +347,8 @@ app.post('/api/create-order', async (req, res) => {
       amount: amountNum,
       recipientAddress,
       refundAddress,
-      orderId
+      orderId,
+      userAddress: userAddress || recipientAddress, // Use user's wallet for transaction signing
     })
 
     // Create order in database
