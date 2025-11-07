@@ -471,7 +471,9 @@ const Swapper = () => {
       })
 
       setOrder(orderData)
-      toast.success('Swap order created!')
+      setOrderStatus('awaiting_deposit')
+      setStatusPolling(true)
+      toast.success('Swap order created! Send funds to the deposit address.')
     } catch (error) {
       console.error('Error creating swap:', error)
       const errorMessage = error.response?.data?.error || error.message || 'Failed to create swap order'
@@ -500,6 +502,40 @@ const Swapper = () => {
     navigator.clipboard.writeText(text)
     toast.success('Copied to clipboard!')
   }
+
+  // Poll order status if order exists and has exchangeId (like Relay does)
+  useEffect(() => {
+    if (!order || !order.exchangeId || statusPolling === false || orderStatus === 'completed' || orderStatus === 'failed') {
+      return
+    }
+
+    const pollStatus = async () => {
+      try {
+        const response = await ordersAPI.getStatus(order.id)
+        const newStatus = response.status || 'awaiting_deposit'
+        setOrderStatus(newStatus)
+
+        // Stop polling if completed or failed
+        if (newStatus === 'completed' || newStatus === 'failed') {
+          setStatusPolling(false)
+          if (newStatus === 'completed') {
+            toast.success('Swap completed! Tokens have been sent to your recipient address.')
+          } else if (newStatus === 'failed') {
+            toast.error('Swap failed. Please check the status or contact support.')
+          }
+        }
+      } catch (error) {
+        console.error('Error polling order status:', error)
+        // Continue polling on error (might be transient)
+      }
+    }
+
+    // Poll immediately, then every 10 seconds (like Relay)
+    pollStatus()
+    const interval = setInterval(pollStatus, 10000)
+
+    return () => clearInterval(interval)
+  }, [order, orderStatus, statusPolling])
 
   if (order) {
     // Check if this is a direct swap (no deposit address)
