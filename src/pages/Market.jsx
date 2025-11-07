@@ -79,7 +79,7 @@ const Market = () => {
   }
 
   const handleLoadMore = () => {
-    if (loadingMore || !hasMore) return
+    if (loadingMore || !hasMore || error) return
     fetchMarketData({ page: page + 1, append: true })
   }
 
@@ -348,7 +348,7 @@ const Market = () => {
         >
           <button
             onClick={handleLoadMore}
-            disabled={loadingMore}
+            disabled={loadingMore || error}
             className="px-5 py-3 glass-strong rounded-xl border border-white/10 hover:border-primary-500/40 transition disabled:opacity-50 flex items-center gap-2"
           >
             {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
