@@ -555,6 +555,7 @@ const Swapper = () => {
                   </div>
                   <p className="font-mono text-sm break-all text-white/90 tracking-tight">{order.depositAddress}</p>
                 </div>
+              </div>
             </>
           )}
           
