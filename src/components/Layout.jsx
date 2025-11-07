@@ -43,13 +43,15 @@ const Layout = ({ children }) => {
         transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
         className="hidden lg:flex flex-col w-80 glass-light border-r border-white/[0.06] p-8"
       >
-        <Link to="/" className="flex items-center gap-4 mb-16 group">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-soft-lg shadow-primary-500/20 transition-transform duration-300 group-hover:scale-105">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold gradient-text tracking-tight">Block Payment</h1>
-            <p className="text-xs text-white/40 mt-0.5 tracking-wide">Non-Custodial</p>
+        <Link to="/" className="flex flex-col items-center gap-3 mb-16 group">
+          <img 
+            src="/logo.jpg" 
+            alt="BLOCKPAY-X402" 
+            className="w-32 h-auto transition-transform duration-300 group-hover:scale-105"
+          />
+          <div className="text-center">
+            <h1 className="text-xl font-semibold gradient-text tracking-tight">BLOCKPAY-X402</h1>
+            <p className="text-xs text-white/40 mt-0.5 tracking-wide">SECURE CRYPTO PAYMENTS</p>
           </div>
         </Link>
 
@@ -107,13 +109,15 @@ const Layout = ({ children }) => {
             >
               <X className="w-6 h-6" />
             </button>
-            <Link to="/" className="flex items-center gap-4 mb-16 group" onClick={() => setSidebarOpen(false)}>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-soft-lg shadow-primary-500/20 transition-transform duration-300 group-hover:scale-105">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold gradient-text tracking-tight">Block Payment</h1>
-                <p className="text-xs text-white/40 mt-0.5 tracking-wide">Non-Custodial</p>
+            <Link to="/" className="flex flex-col items-center gap-3 mb-16 group" onClick={() => setSidebarOpen(false)}>
+              <img 
+                src="/logo.jpg" 
+                alt="BLOCKPAY-X402" 
+                className="w-32 h-auto transition-transform duration-300 group-hover:scale-105"
+              />
+              <div className="text-center">
+                <h1 className="text-xl font-semibold gradient-text tracking-tight">BLOCKPAY-X402</h1>
+                <p className="text-xs text-white/40 mt-0.5 tracking-wide">SECURE CRYPTO PAYMENTS</p>
               </div>
             </Link>
             <nav className="space-y-1.5">
