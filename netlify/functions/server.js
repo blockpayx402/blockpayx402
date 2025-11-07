@@ -331,6 +331,9 @@ app.post('/api/create-order', async (req, res) => {
       }
     }
 
+    // Extract userAddress from request body (optional - used for direct execution)
+    const userAddress = req.body.userAddress || null
+
     // Pure Relay wrapper - no fee calculation for swaps
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(7)}`
 

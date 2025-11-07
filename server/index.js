@@ -250,6 +250,9 @@ app.post('/api/create-order', async (req, res) => {
       }
     }
 
+    // Extract userAddress from request body (optional - used for direct execution)
+    const userAddress = req.body.userAddress || null
+
     // Calculate platform fee (with chain-specific recipient)
     const fee = calculatePlatformFee(amountNum, fromAsset, fromChain)
 
